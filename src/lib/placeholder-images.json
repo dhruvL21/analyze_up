@@ -1,0 +1,64 @@
+{
+  "placeholderImages": [
+    {
+      "id": "PROD001",
+      "description": "A classic crewneck t-shirt in white.",
+      "imageUrl": "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHx3aGl0ZSUyMHRzaGlydHxlbnwwfHx8fDE3NjQ1MTEzODV8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "white t-shirt"
+    },
+    {
+      "id": "PROD002",
+      "description": "High-fidelity wireless over-ear headphones.",
+      "imageUrl": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxoZWFkcGhvbmVzfGVufDB8fHx8MTc2NDUxMTM4Nnww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "headphones electronics"
+    },
+    {
+      "id": "PROD003",
+      "description": "A 1kg bag of artisanal whole coffee beans.",
+      "imageUrl": "https://images.unsplash.com/photo-1511920183353-3c9c6b738e38?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxjb2ZmZWUlMjBiZWFuc3xlbnwwfHx8fDE3NjQ1MTEzODd8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "coffee beans"
+    },
+    {
+      "id": "PROD004",
+      "description": "A slim, minimalist leather wallet with RFID blocking.",
+      "imageUrl": "https://images.unsplash.com/photo-1613165341933-d995641702de?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxsZWF0aGVyJTIwd2FsbGV0fGVufDB8fHx8MTc2NDUxMTM4OHww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "leather wallet"
+    },
+    {
+      "id": "PROD005",
+      "description": "A sleek smartwatch with fitness tracking capabilities.",
+      "imageUrl": "https://images.unsplash.com/photo-1546868871-7041f2a55e12?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxzbWFydHdhdGNofGVufDB8fHx8MTc2NDUxMTM4OXww&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "smartwatch technology"
+    },
+    {
+      "id": "PROD006",
+      "description": "A durable, waterproof backpack for daily commute.",
+      "imageUrl": "https://images.unsplash.com/photo-1553062407-98eeb68c6a62?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxiYWNrcGFja3xlbnwwfHx8fDE3NjQ1MTEzOTB8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "backpack travel"
+    },
+    {
+      "id": "PROD007",
+      "description": "A pair of classic blue denim jeans.",
+      "imageUrl": "https://images.unsplash.com/photo-1602293589922-253499d39c2b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxibHVlJTIwamVhbnN8ZW58MHx8fHwxNzY0NTExMzkxfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "blue jeans"
+    },
+    {
+      "id": "PROD008",
+      "description": "A stainless steel insulated water bottle.",
+      "imageUrl": "https://images.unsplash.com/photo-1602143407151-247e961d21a8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHx3YXRlciUyMGJvdHRsZXxlbnwwfHx8fDE3NjQ1MTEzOTJ8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "water bottle"
+    },
+    {
+      "id": "PROD009",
+      "description": "A set of three succulent plants in ceramic pots.",
+      "imageUrl": "https://images.unsplash.com/photo-1592235368426-3c5306350284?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxzdWNjdWxlbnQlMjBwbGFudHN8ZW58MHx8fHwxNzY0NTExMzkzfDA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "succulent plants"
+    },
+    {
+      "id": "PROD010",
+      "description": "A high-performance gaming mouse with RGB lighting.",
+      "imageUrl": "https://images.unsplash.com/photo-1578939655728-399a1733678c?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3NDE5ODJ8MHwxfHNlYXJjaHwxfHxnYW1pbmclMjBtb3VzZXxlbnwwfHx8fDE3NjQ1MTEzOTR8MA&ixlib=rb-4.1.0&q=80&w=1080",
+      "imageHint": "gaming mouse"
+    }
+  ]
+}
