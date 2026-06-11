@@ -1,5 +1,7 @@
+import { FirestorePermissionError } from './errors';
+
 type Events = {
-  'permission-error': (error: Error) => void;
+  'permission-error': (error: FirestorePermissionError) => void;
 };
 
 class TypedEventEmitter {
@@ -20,9 +22,9 @@ class TypedEventEmitter {
     }
   }
 
-  emit<K extends keyof Events>(event: K, ...args: Parameters<Events[K]>): void {
+  emit<K extends keyof Events>(event: K, arg: Parameters<Events[K]>[0]): void {
     if (!this.listeners[event]) return;
-    this.listeners[event]!.forEach(listener => listener(...args));
+    this.listeners[event]!.forEach(listener => listener(arg));
   }
 }
 

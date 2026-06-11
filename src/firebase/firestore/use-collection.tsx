@@ -24,6 +24,8 @@ export function useCollection<T>(ref: Query | CollectionReference | null) {
     loading: true,
   });
 
+  const path = ref && 'path' in ref ? (ref as CollectionReference).path : undefined;
+
   useEffect(() => {
     if (!ref) {
         setState({ data: [], loading: false });
@@ -42,7 +44,7 @@ export function useCollection<T>(ref: Query | CollectionReference | null) {
       (serverError) => {
         console.error('Error listening to collection:', serverError);
         const permissionError = new FirestorePermissionError({
-            path: ref.path,
+            path: path || 'query',
             operation: 'list',
         });
         errorEmitter.emit('permission-error', permissionError);
@@ -50,7 +52,7 @@ export function useCollection<T>(ref: Query | CollectionReference | null) {
       }
     );
     return () => unsubscribe();
-  }, [ref?.path]);
+  }, [ref, path]);
 
   return state;
 }

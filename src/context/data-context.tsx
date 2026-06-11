@@ -42,6 +42,7 @@ interface DataContextProps {
   addTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt' | 'tenantId'>) => Promise<void>;
   recordSale: (productId: string, quantity: number) => Promise<void>;
   bulkAddProducts: (products: Omit<Product, 'id' | 'createdAt' | 'updatedAt' | 'userId'>[]) => Promise<void>;
+  bulkUpdateProducts: (updates: (Partial<Product> & { id: string })[]) => Promise<void>;
   bulkAddTransactions: (transactions: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt' | 'tenantId'>[]) => Promise<void>;
   clearAllData: () => Promise<void>;
   isLoading: boolean;

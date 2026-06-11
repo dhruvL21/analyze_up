@@ -16,10 +16,10 @@ export type BusinessStrategyInput = z.infer<typeof BusinessStrategyInputSchema>;
 /* -------------------- OUTPUT SCHEMA -------------------- */
 
 const BusinessStrategyOutputSchema = z.object({
-  strategySummary: z.string().describe('A concise summary of the proposed business growth strategy.'),
-  keyRecommendations: z.union([z.string(), z.array(z.string())]).describe('Clear, actionable recommendations for executing the strategy.'),
-  potentialRisks: z.union([z.string(), z.array(z.string())]).describe('Possible risks and challenges associated with the strategy.'),
-  expectedOutcomes: z.union([z.string(), z.array(z.any()), z.record(z.any())]).describe('Expected results and benefits from implementing the strategy.'),
+  strategySummary: z.any().describe('A concise summary of the proposed business growth strategy.'),
+  keyRecommendations: z.any().describe('Clear, actionable recommendations for executing the strategy.'),
+  potentialRisks: z.any().describe('Possible risks and challenges associated with the strategy.'),
+  expectedOutcomes: z.any().describe('Expected results and benefits from implementing the strategy.'),
 });
 
 export type BusinessStrategyOutput = {
@@ -92,8 +92,52 @@ Respond ONLY in valid JSON with these exact keys:
 
     // Sanitize the output to ensure everything is a string for the UI
     const formatValue = (val: any): string => {
-        if (Array.isArray(val)) return val.join('\n');
-        if (typeof val === 'object' && val !== null) return JSON.stringify(val, null, 2);
+        if (val === undefined || val === null) return '';
+
+        if (Array.isArray(val)) {
+            return val
+                .map((item) => {
+                    if (typeof item === 'object' && item !== null) {
+                        const keys = Object.keys(item);
+                        if (keys.length === 1) {
+                            const v = item[keys[0]];
+                            return `• ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`;
+                        }
+                        const entries = Object.entries(item)
+                            .map(([k, v]) => {
+                                const cleanedKey = k
+                                    .replace(/([A-Z])/g, ' $1')
+                                    .replace(/^./, (str) => str.toUpperCase())
+                                    .replace(/_/g, ' ');
+                                const valStr = typeof v === 'object' ? JSON.stringify(v) : String(v);
+                                return `${cleanedKey}: ${valStr}`;
+                            })
+                            .join('\n  ');
+                        return `• ${entries}`;
+                    }
+                    return `• ${String(item)}`;
+                })
+                .join('\n');
+        }
+
+        if (typeof val === 'object') {
+            const keys = Object.keys(val);
+            if (keys.length === 1) {
+                const v = val[keys[0]];
+                return typeof v === 'object' ? JSON.stringify(v) : String(v);
+            }
+            return Object.entries(val)
+                .map(([k, v]) => {
+                    const cleanedKey = k
+                        .replace(/([A-Z])/g, ' $1')
+                        .replace(/^./, (str) => str.toUpperCase())
+                        .replace(/_/g, ' ');
+                    const valStr = typeof v === 'object' ? JSON.stringify(v) : String(v);
+                    return `${cleanedKey}: ${valStr}`;
+                })
+                .join('\n');
+        }
+
         return String(val);
     };
 

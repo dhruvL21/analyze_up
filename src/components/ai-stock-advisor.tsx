@@ -134,18 +134,18 @@ export function AIStockAdvisor() {
             <CardContent>
                  {strategy ? (
                     <div className="space-y-4 pt-6">
-                        <h4 className="font-semibold">{strategy.strategySummary}</h4>
+                        <h4 className="font-semibold whitespace-pre-wrap">{strategy.strategySummary}</h4>
                         <div>
                             <p className='font-medium text-sm'>Key Recommendations:</p>
-                            <p className="text-sm text-muted-foreground">{strategy.keyRecommendations}</p>
+                            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{strategy.keyRecommendations}</p>
                         </div>
                          <div>
                             <p className='font-medium text-sm'>Expected Outcomes:</p>
-                            <p className="text-sm text-muted-foreground">{strategy.expectedOutcomes}</p>
+                            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{strategy.expectedOutcomes}</p>
                         </div>
                          <div>
                             <p className='font-medium text-sm'>Risk Factors:</p>
-                            <p className="text-sm text-muted-foreground">{strategy.potentialRisks}</p>
+                            <p className="text-sm text-muted-foreground whitespace-pre-wrap">{strategy.potentialRisks}</p>
                         </div>
                     </div>
                 ) : (
