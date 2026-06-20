@@ -18,6 +18,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   IndianRupee,
   PackageX,
@@ -26,6 +27,8 @@ import {
   ArrowDownRight,
   Shirt,
   ShoppingBag,
+  Check,
+  Loader2,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMemo, useEffect } from 'react';
@@ -188,7 +191,7 @@ function DashboardLoading() {
 }
 
 export default function DashboardPage() {
-  const { products, transactions, isLoading } = useData();
+  const { products, transactions, isLoading, activePlan, isProcessingPayment, handleUpgrade } = useData();
 
   useEffect(() => {
     if (isLoading) return;
@@ -514,6 +517,174 @@ export default function DashboardPage() {
                 </div>
               );
             })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Billing & Subscriptions Card */}
+      <Card className="scroll-reveal-item">
+        <CardHeader>
+          <CardTitle>Billing & Subscriptions</CardTitle>
+          <CardDescription>
+            Manage your workspace subscription plan. Current tier:{" "}
+            <span className="font-bold text-primary">{activePlan}</span>
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-3">
+            {/* Plan 1: Free Trial */}
+            <div
+              className={`flex flex-col justify-between p-5 rounded-2xl border ${
+                activePlan === "Free Trial"
+                  ? "border-primary bg-primary/5 shadow-md"
+                  : "border-border bg-card"
+              } transition-all duration-200`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bold text-base">Free Trial</span>
+                  {activePlan === "Free Trial" && (
+                    <Badge variant="secondary" className="bg-primary/20 text-primary">
+                      Active
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-3xl font-extrabold mb-4">
+                  ₹0{" "}
+                  <span className="text-xs font-normal text-muted-foreground">
+                    / month
+                  </span>
+                </div>
+                <ul className="space-y-2.5 mb-6 text-sm text-muted-foreground">
+                  <li className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-primary shrink-0" /> Up to 50 products
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-primary shrink-0" /> Basic inventory tracking
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-primary shrink-0" /> Manual reporting
+                  </li>
+                </ul>
+              </div>
+              <Button variant="outline" disabled={activePlan === "Free Trial"} className="w-full">
+                {activePlan === "Free Trial" ? "Current Plan" : "Downgrade"}
+              </Button>
+            </div>
+
+            {/* Plan 2: Starter Plan */}
+            <div
+              className={`flex flex-col justify-between p-5 rounded-2xl border ${
+                activePlan === "Starter Plan"
+                  ? "border-primary bg-primary/5 shadow-md"
+                  : "border-border bg-card"
+              } transition-all duration-200`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bold text-base">Starter Plan</span>
+                  {activePlan === "Starter Plan" && (
+                    <Badge variant="secondary" className="bg-primary/20 text-primary">
+                      Active
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-3xl font-extrabold mb-4">
+                  ₹499{" "}
+                  <span className="text-xs font-normal text-muted-foreground">
+                    / month
+                  </span>
+                </div>
+                <ul className="space-y-2.5 mb-6 text-sm text-muted-foreground">
+                  <li className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-primary shrink-0" /> Up to 500 products
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-primary shrink-0" /> AI reorder alerts
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-primary shrink-0" /> Dynamic CSV exports
+                  </li>
+                </ul>
+              </div>
+              <Button
+                onClick={() => handleUpgrade("starter_monthly", 499, "Starter Plan")}
+                disabled={activePlan === "Starter Plan" || isProcessingPayment !== null}
+                className={
+                  activePlan === "Starter Plan"
+                    ? "w-full"
+                    : "w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                }
+              >
+                {isProcessingPayment === "starter_monthly" ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Processing...
+                  </>
+                ) : activePlan === "Starter Plan" ? (
+                  "Current Plan"
+                ) : (
+                  "Upgrade to Starter"
+                )}
+              </Button>
+            </div>
+
+            {/* Plan 3: Pro Plan */}
+            <div
+              className={`flex flex-col justify-between p-5 rounded-2xl border ${
+                activePlan === "Pro Plan"
+                  ? "border-primary bg-primary/5 shadow-md"
+                  : "border-border bg-card"
+              } transition-all duration-200`}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-bold text-base">Pro Plan</span>
+                  {activePlan === "Pro Plan" && (
+                    <Badge variant="secondary" className="bg-primary/20 text-primary">
+                      Active
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-3xl font-extrabold mb-4">
+                  ₹999{" "}
+                  <span className="text-xs font-normal text-muted-foreground">
+                    / month
+                  </span>
+                </div>
+                <ul className="space-y-2.5 mb-6 text-sm text-muted-foreground">
+                  <li className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-primary shrink-0" /> Unlimited products
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-primary shrink-0" /> Advanced AI Advisor
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-primary shrink-0" /> Dynamic PDFs & analytics
+                  </li>
+                </ul>
+              </div>
+              <Button
+                onClick={() => handleUpgrade("pro_monthly", 999, "Pro Plan")}
+                disabled={activePlan === "Pro Plan" || isProcessingPayment !== null}
+                className={
+                  activePlan === "Pro Plan"
+                    ? "w-full"
+                    : "w-full bg-primary text-primary-foreground hover:bg-primary/90"
+                }
+              >
+                {isProcessingPayment === "pro_monthly" ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Processing...
+                  </>
+                ) : activePlan === "Pro Plan" ? (
+                  "Current Plan"
+                ) : (
+                  "Upgrade to Pro"
+                )}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

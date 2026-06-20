@@ -6,6 +6,9 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import Script from 'next/script';
+import SubscriptionModal from '@/components/subscription-modal';
+import { useData } from '@/context/data-context';
 
 function DashboardLoading() {
     return (
@@ -27,6 +30,7 @@ function DashboardLoading() {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useUser();
+  const { showSubscriptionModal, setShowSubscriptionModal, isLimitExceeded } = useData();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -46,6 +50,29 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [user, loading, router]);
 
+  // Check if user has just registered to prompt them with plans
+  useEffect(() => {
+    const justRegistered = localStorage.getItem("analyzeup_just_registered");
+    if (justRegistered === "true") {
+      setShowSubscriptionModal(true);
+      localStorage.removeItem("analyzeup_just_registered");
+    }
+  }, [setShowSubscriptionModal]);
+
+  // Auto-pop the subscription modal if limit is exceeded and visiting a feature page
+  useEffect(() => {
+    if (isLimitExceeded) {
+      const isFeatureRoute =
+        pathname.startsWith("/dashboard/inventory") ||
+        pathname.startsWith("/dashboard/orders") ||
+        pathname.startsWith("/dashboard/suppliers") ||
+        pathname.startsWith("/dashboard/reports");
+
+      if (isFeatureRoute) {
+        setShowSubscriptionModal(true);
+      }
+    }
+  }, [pathname, isLimitExceeded, setShowSubscriptionModal]);
 
   if (loading || !user) {
     return <DashboardLoading />;
@@ -54,6 +81,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex flex-col h-dvh overflow-hidden">
       <Header />
+      <SubscriptionModal />
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
       <main className="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto relative">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
@@ -62,7 +91,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
-            className="w-full h-full"
+            className={cn(
+              "w-full h-full transition-all duration-300",
+              showSubscriptionModal && "blur-sm pointer-events-none select-none"
+            )}
           >
             {children}
           </motion.div>

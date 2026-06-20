@@ -42,7 +42,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Download, ChartBar } from 'lucide-react';
+import { Download, ChartBar, Share2 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { useData } from '@/context/data-context';
@@ -80,7 +80,14 @@ export function DataVisualizer() {
   const [chartType, setChartType] = useState<ChartType>('bar');
   const [metric, setMetric] = useState<'sales' | 'expenses' | 'profit'>('sales');
   const chartRef = useRef<HTMLDivElement>(null);
-  const [isDownloading, setIsDownloading] = useState(false);
+  const [isExporting, setIsExporting] = useState<'downloading' | 'sharing' | null>(null);
+  const [canShare, setCanShare] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (navigator as any).share) {
+      setCanShare(true);
+    }
+  }, []);
 
   const data = useMemo(() => {
     if (isLoading) return [];
@@ -122,10 +129,10 @@ export function DataVisualizer() {
     return () => items.forEach(el => observer.unobserve(el));
   }, [data]); // Re-observe when data changes
 
-  const handleDownload = useCallback(async () => {
+  const handleExport = useCallback(async (action: 'download' | 'share') => {
     if (!chartRef.current || data.length === 0) return;
 
-    setIsDownloading(true);
+    setIsExporting(action === 'download' ? 'downloading' : 'sharing');
     try {
       // 1. Get AI Insights
       const insights = await generateReportInsights(
@@ -298,11 +305,30 @@ export function DataVisualizer() {
         { align: 'center' }
       );
 
-      pdf.save(`AnalyzeUp-${metric}-Report.pdf`);
+      if (action === 'share') {
+        const pdfBlob = pdf.output('blob');
+        const filename = `AnalyzeUp-${metric}-Report.pdf`;
+        const file = new File([pdfBlob], filename, { type: 'application/pdf' });
+        
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            files: [file],
+            title: 'AnalyzeUp Report',
+            text: `Here is the generated ${metric} report from AnalyzeUp.`,
+          });
+        } else {
+          await navigator.share({
+            title: 'AnalyzeUp Report',
+            text: `Here is the generated ${metric} report from AnalyzeUp.`,
+          });
+        }
+      } else {
+        pdf.save(`AnalyzeUp-${metric}-Report.pdf`);
+      }
     } catch (err) {
-      console.error('Failed to download PDF:', err);
+      console.error('Failed to export PDF:', err);
     } finally {
-      setIsDownloading(false);
+      setIsExporting(null);
     }
   }, [chartType, metric, data]);
   
@@ -474,10 +500,33 @@ export function DataVisualizer() {
               <SelectItem value="radialBar">Radial Bar Chart</SelectItem>
             </SelectContent>
           </Select>
-          <Button size="sm" onClick={handleDownload} disabled={isDownloading} className="w-full sm:w-auto">
-            <Download className="mr-2 h-4 w-4" />
-            <span className='whitespace-nowrap'>{isDownloading ? 'Downloading...' : 'Download as PDF'}</span>
-          </Button>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <Button
+              size="sm"
+              onClick={() => handleExport('download')}
+              disabled={isExporting !== null}
+              className="flex-1 sm:flex-initial"
+            >
+              <Download className="mr-2 h-4 w-4" />
+              <span className='whitespace-nowrap'>
+                {isExporting === 'downloading' ? 'Processing...' : 'Download PDF'}
+              </span>
+            </Button>
+            {canShare && (
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => handleExport('share')}
+                disabled={isExporting !== null}
+                className="flex-1 sm:flex-initial"
+              >
+                <Share2 className="mr-2 h-4 w-4" />
+                <span className='whitespace-nowrap'>
+                  {isExporting === 'sharing' ? 'Sharing...' : 'Share PDF'}
+                </span>
+              </Button>
+            )}
+          </div>
         </div>
       </div>
       <Card className="scroll-reveal-item">

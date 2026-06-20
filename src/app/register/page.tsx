@@ -37,6 +37,7 @@ export default function RegisterPage() {
 
     try {
       await signUp(auth, email, password, displayName);
+      localStorage.setItem("analyzeup_just_registered", "true");
       toast({
         title: 'Registration Successful',
         description: 'Your account has been created.',

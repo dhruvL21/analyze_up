@@ -1,4 +1,3 @@
-
 "use client";
 
 import { usePathname } from "next/navigation";
@@ -15,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { AnalyzeUpIcon } from "./analyze-up-icon";
 import { motion } from "framer-motion";
 import { SheetClose } from "@/components/ui/sheet";
+import { useData } from "@/context/data-context";
 
 const navItems = [
   {
@@ -51,6 +51,14 @@ const navItems = [
 
 export default function Nav({ isMobile = false }: { isMobile?: boolean }) {
   const pathname = usePathname();
+  const { isLimitExceeded, setShowSubscriptionModal } = useData();
+
+  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    if (isLimitExceeded && href !== "/dashboard") {
+      e.preventDefault();
+      setShowSubscriptionModal(true);
+    }
+  };
 
   if (isMobile) {
     return (
@@ -68,6 +76,7 @@ export default function Nav({ isMobile = false }: { isMobile?: boolean }) {
                 <SheetClose key={item.href} asChild>
                     <Link
                         href={item.href}
+                        onClick={(e) => handleNavClick(e, item.href)}
                         className={cn("flex items-center gap-3 rounded-lg px-3 py-2 text-foreground/70 transition-all hover:text-primary",
                             pathname === item.href && "text-primary bg-primary/10"
                         )}
@@ -87,6 +96,7 @@ export default function Nav({ isMobile = false }: { isMobile?: boolean }) {
         <Link 
             key={item.href}
             href={item.href}
+            onClick={(e) => handleNavClick(e, item.href)}
             className={cn("transition-all duration-200 hover:text-foreground/80 px-4 py-2 rounded-full cursor-pointer relative hover:scale-105",
                 pathname === item.href ? "text-accent-foreground" : "text-muted-foreground"
             )}

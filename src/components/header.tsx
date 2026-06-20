@@ -26,6 +26,7 @@ import {
 } from './ui/dropdown-menu';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
+import { useData } from '@/context/data-context';
 
 const mobileNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -68,6 +69,7 @@ export function Header() {
   const auth = useAuth();
   const { theme, setTheme } = useTheme();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const { isLimitExceeded, setShowSubscriptionModal } = useData();
 
   const handleLogout = async () => {
     if (auth) {
@@ -258,7 +260,13 @@ export function Header() {
                     <motion.div key={item.href} variants={itemVariants}>
                       <Link
                         href={item.href}
-                        onClick={() => setIsMenuOpen(false)}
+                        onClick={(e) => {
+                          setIsMenuOpen(false);
+                          if (isLimitExceeded && item.href !== '/dashboard') {
+                            e.preventDefault();
+                            setShowSubscriptionModal(true);
+                          }
+                        }}
                         className={cn(
                           "flex items-center gap-3.5 rounded-xl px-4 py-3 text-base font-medium transition-all duration-200 relative border border-border/20 shadow-sm",
                           isActive 

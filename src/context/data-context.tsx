@@ -46,6 +46,13 @@ interface DataContextProps {
   bulkAddTransactions: (transactions: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt' | 'tenantId'>[]) => Promise<void>;
   clearAllData: () => Promise<void>;
   isLoading: boolean;
+  activePlan: string;
+  isProcessingPayment: string | null;
+  showSubscriptionModal: boolean;
+  setShowSubscriptionModal: (show: boolean) => void;
+  isLimitExceeded: boolean;
+  activePlanLimit: number;
+  handleUpgrade: (planId: string, amount: number, planName: string) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextProps | undefined>(undefined);
@@ -92,6 +99,124 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const transactions = useMemo(() => uniqueBy(transactionsData, 'id'), [transactionsData]);
   const categories = useMemo(() => uniqueBy(categoriesData, 'name'), [categoriesData]);
 
+  const [activePlan, setActivePlan] = useState<string>("Free Trial");
+  const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState<boolean>(false);
+
+  useEffect(() => {
+    const savedPlan = localStorage.getItem("analyzeup_subscription_plan");
+    if (savedPlan) {
+      setActivePlan(savedPlan);
+    }
+  }, []);
+
+  const activePlanLimit = useMemo(() => {
+    if (activePlan === "Starter Plan") return 500;
+    if (activePlan === "Pro Plan") return Infinity;
+    return 50; // Free Trial
+  }, [activePlan]);
+
+  const isLimitExceeded = useMemo(() => {
+    return products.length >= activePlanLimit;
+  }, [products.length, activePlanLimit]);
+
+  const handleUpgrade = useCallback(async (planId: string, amount: number, planName: string) => {
+    setIsProcessingPayment(planId);
+    try {
+      // 1. Create order on backend
+      const res = await fetch("/api/razorpay/order", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ planId, amount, planName }),
+      });
+
+      const data = await res.json();
+      if (!data.success) {
+        throw new Error(data.error || "Order creation failed");
+      }
+
+      const { order, keyId } = data;
+
+      // 2. Open Razorpay Checkout modal
+      const options = {
+        key: keyId || "rzp_test_T40kl4zsYBSbQl",
+        amount: order.amount,
+        currency: order.currency,
+        name: "AnalyzeUp",
+        description: `Upgrade to ${planName}`,
+        order_id: order.id,
+        handler: async function (response: any) {
+          try {
+            // 3. Verify payment signature on backend
+            const verifyRes = await fetch("/api/razorpay/verify", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+              }),
+            });
+
+            const verifyData = await verifyRes.json();
+            if (verifyData.success) {
+              localStorage.setItem("analyzeup_subscription_plan", planName);
+              setActivePlan(planName);
+              setShowSubscriptionModal(false);
+              toast({
+                title: "Payment Successful!",
+                description: `You have successfully upgraded to ${planName}.`,
+              });
+            } else {
+              toast({
+                title: "Verification Failed",
+                description: "Payment verification failed. Please contact support.",
+                variant: "destructive",
+              });
+            }
+          } catch (err: any) {
+            console.error("Verification error:", err);
+            toast({
+              title: "Verification Error",
+              description: "An error occurred while verifying the payment.",
+              variant: "destructive",
+            });
+          }
+        },
+        prefill: {
+          name: "Workspace Owner",
+          email: "owner@example.com",
+        },
+        theme: {
+          color: "#9a3412",
+        },
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.on("payment.failed", function (response: any) {
+        toast({
+          title: "Payment Failed",
+          description: response.error.description || "The transaction was unsuccessful.",
+          variant: "destructive",
+        });
+      });
+      rzp.open();
+    } catch (error: any) {
+      console.error("Upgrade error:", error);
+      toast({
+        title: "Checkout Error",
+        description: error.message || "Could not launch Razorpay checkout modal.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsProcessingPayment(null);
+    }
+  }, [toast]);
+
   const isLoading = productsLoading || ordersLoading || suppliersLoading || transactionsLoading || categoriesLoading;
 
   const addCategory = useCallback(async (categoryData: Omit<Category, 'id' | 'userId'>) => {
@@ -114,6 +239,15 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
 
   const addProduct = useCallback(async (productData: Omit<Product, 'id' | 'createdAt' | 'updatedAt' | 'userId'>) => {
+    if (isLimitExceeded) {
+      setShowSubscriptionModal(true);
+      toast({
+        variant: 'destructive',
+        title: 'Limit Exceeded',
+        description: `You have reached the product limit (${activePlanLimit}) for your plan. Please upgrade to add more products.`,
+      });
+      return;
+    }
     if (!firestore || !user || !productsRef || !transactionsRef) return;
     
     const batch = writeBatch(firestore);
@@ -178,6 +312,15 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, [firestore, user, transactionsRef, toast]);
   
   const bulkAddProducts = useCallback(async (productsData: Omit<Product, 'id' | 'createdAt' | 'updatedAt' | 'userId'>[]) => {
+    if (products.length + productsData.length > activePlanLimit) {
+      setShowSubscriptionModal(true);
+      toast({
+        variant: 'destructive',
+        title: 'Limit Exceeded',
+        description: `Importing these products would exceed your plan limit of ${activePlanLimit} products. Please upgrade.`,
+      });
+      return;
+    }
     if (!firestore || !user || !productsRef || !transactionsRef) return;
     
     const batch = writeBatch(firestore);
@@ -546,6 +689,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     bulkAddTransactions,
     clearAllData,
     isLoading,
+    activePlan,
+    isProcessingPayment,
+    showSubscriptionModal,
+    setShowSubscriptionModal,
+    isLimitExceeded,
+    activePlanLimit,
+    handleUpgrade,
   }), [
     products,
     orders,
@@ -568,6 +718,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     bulkUpdateProducts,
     bulkAddTransactions,
     clearAllData,
+    activePlan,
+    isProcessingPayment,
+    showSubscriptionModal,
+    isLimitExceeded,
+    activePlanLimit,
+    handleUpgrade,
   ]);
 
   return (
