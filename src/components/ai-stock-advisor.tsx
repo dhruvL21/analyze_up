@@ -87,7 +87,7 @@ export function AIStockAdvisor() {
                         className="flex items-start justify-between p-4 rounded-lg bg-muted/50 gap-4"
                     >
                         <div className="flex-1">
-                        <p className="font-semibold">{products.find(p => item.reasoning.includes(p.name))?.name}</p>
+                        <p className="font-semibold">{item.productName}</p>
                         <p className="text-sm text-muted-foreground mt-1">
                            {item.reasoning}
                         </p>

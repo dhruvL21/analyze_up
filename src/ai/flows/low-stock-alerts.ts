@@ -26,6 +26,7 @@ export type AIStockAdvisorOutput = {
   stockoutRisk: boolean;
   recommendedReorderQuantity: number;
   reasoning: string;
+  productName: string;
 };
 
 /* ------------------ EXPORT ------------------ */
@@ -35,6 +36,7 @@ export async function aiStockAdvisor(
 ): Promise<AIStockAdvisorOutput> {
   const prompt = `
 You are an AI inventory assistant.
+In the "reasoning" explanation, refer to the product by its actual name "${input.productName}" rather than using generic terms like "the product".
 
 Respond ONLY in valid JSON matching the schema:
 
@@ -73,6 +75,7 @@ Current Stock Level: ${input.currentStockLevel}
       stockoutRisk: validated.stockoutRisk,
       recommendedReorderQuantity: validated.recommendedReorderQuantity,
       reasoning: Array.isArray(validated.reasoning) ? validated.reasoning.join(' ') : validated.reasoning,
+      productName: input.productName,
     };
   } catch (error) {
     console.error('Error in aiStockAdvisor:', error);
