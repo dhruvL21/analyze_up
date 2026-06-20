@@ -82,10 +82,15 @@ export function DataVisualizer() {
   const chartRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState<'downloading' | 'sharing' | null>(null);
   const [canShare, setCanShare] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && (navigator as any).share) {
-      setCanShare(true);
+    if (typeof window !== 'undefined') {
+      const mobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      setIsMobile(mobile);
+      if ((navigator as any).share) {
+        setCanShare(true);
+      }
     }
   }, []);
 
@@ -310,27 +315,33 @@ export function DataVisualizer() {
         const filename = `AnalyzeUp-${metric}-Report.pdf`;
         const file = new File([pdfBlob], filename, { type: 'application/pdf' });
         
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
+        if (canShare && (navigator as any).canShare && (navigator as any).canShare({ files: [file] })) {
+          await (navigator as any).share({
             files: [file],
             title: 'AnalyzeUp Report',
             text: `Here is the generated ${metric} report from AnalyzeUp.`,
           });
         } else {
-          await navigator.share({
-            title: 'AnalyzeUp Report',
-            text: `Here is the generated ${metric} report from AnalyzeUp.`,
-          });
+          // Fallback for browsers that don't support file sharing or HTTP context
+          const blobUrl = URL.createObjectURL(pdfBlob);
+          window.open(blobUrl, '_blank');
         }
       } else {
-        pdf.save(`AnalyzeUp-${metric}-Report.pdf`);
+        // On mobile, pdf.save() is often blocked or fails. Open in new tab instead to view/save/share natively.
+        if (isMobile) {
+          const pdfBlob = pdf.output('blob');
+          const blobUrl = URL.createObjectURL(pdfBlob);
+          window.open(blobUrl, '_blank');
+        } else {
+          pdf.save(`AnalyzeUp-${metric}-Report.pdf`);
+        }
       }
     } catch (err) {
       console.error('Failed to export PDF:', err);
     } finally {
       setIsExporting(null);
     }
-  }, [chartType, metric, data]);
+  }, [chartType, metric, data, canShare, isMobile]);
   
   const renderChart = () => {
     const ChartComponent = chartComponents[chartType];
@@ -512,7 +523,7 @@ export function DataVisualizer() {
                 {isExporting === 'downloading' ? 'Processing...' : 'Download PDF'}
               </span>
             </Button>
-            {canShare && (
+            {(isMobile || canShare) && (
               <Button
                 size="sm"
                 variant="secondary"

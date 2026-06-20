@@ -234,11 +234,11 @@ export function Header() {
 
             {/* Slide Down Menu Content */}
             <motion.div
-              initial={{ opacity: 0, y: -20, height: 0 }}
-              animate={{ opacity: 1, y: 0, height: 'auto' }}
-              exit={{ opacity: 0, y: -20, height: 0 }}
-              transition={{ type: 'spring', stiffness: 260, damping: 26 }}
-              className="absolute top-16 left-0 right-0 z-40 bg-background/95 backdrop-blur-xl border-b border-border shadow-2xl p-6 md:hidden overflow-hidden flex flex-col gap-4 rounded-b-2xl"
+              initial={{ opacity: 0, y: -16 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -16 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="absolute top-16 left-0 right-0 z-40 bg-background/95 backdrop-blur-xl border-b border-border shadow-2xl p-6 md:hidden flex flex-col gap-4 rounded-b-2xl"
             >
               <motion.div
                 variants={containerVariants}
@@ -246,9 +246,6 @@ export function Header() {
                 animate="show"
                 className="flex flex-col gap-2.5"
               >
-                <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-1">
-                  Navigation Menu
-                </div>
                 {mobileNavItems.map((item) => {
                   const isActive = item.href === '/dashboard' 
                     ? pathname === '/dashboard' 

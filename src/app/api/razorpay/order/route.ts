@@ -6,8 +6,8 @@ export async function POST(req: Request) {
     const { planId, amount, planName } = await req.json();
 
     const instance = new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID || '',
-      key_secret: process.env.RAZORPAY_KEY_SECRET || '',
+      key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_T40kl4zsYBSbQl',
+      key_secret: process.env.RAZORPAY_KEY_SECRET || 'VxZJ2YR13MvalrRKgA3UzOID',
     });
 
     const options = {
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     };
 
     const order = await instance.orders.create(options);
-    return NextResponse.json({ success: true, order, keyId: process.env.RAZORPAY_KEY_ID });
+    return NextResponse.json({ success: true, order, keyId: process.env.RAZORPAY_KEY_ID || 'rzp_test_T40kl4zsYBSbQl' });
   } catch (error: any) {
     console.error('Order creation error:', error);
     return NextResponse.json(

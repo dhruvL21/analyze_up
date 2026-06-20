@@ -30,7 +30,7 @@ function DashboardLoading() {
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useUser();
-  const { showSubscriptionModal, setShowSubscriptionModal, isLimitExceeded } = useData();
+  const { showSubscriptionModal, setShowSubscriptionModal, isLimitExceeded, activePlan } = useData();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -58,6 +58,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       localStorage.removeItem("analyzeup_just_registered");
     }
   }, [setShowSubscriptionModal]);
+
+  // Show popup once per login session if user is on the Starter Plan
+  useEffect(() => {
+    if (activePlan === "Starter Plan") {
+      const sessionPrompted = sessionStorage.getItem("analyzeup_starter_session_prompted");
+      if (!sessionPrompted) {
+        setShowSubscriptionModal(true);
+        sessionStorage.setItem("analyzeup_starter_session_prompted", "true");
+      }
+    }
+  }, [activePlan, setShowSubscriptionModal]);
 
   // Auto-pop the subscription modal if limit is exceeded and visiting a feature page
   useEffect(() => {
