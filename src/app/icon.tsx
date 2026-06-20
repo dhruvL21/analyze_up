@@ -20,7 +20,7 @@ export default function Icon() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          color: 'hsl(35, 33%, 50%)', // AnalyzeUp primary brand color (brownish-tan/gold)
+          color: '#aa8755', // AnalyzeUp primary brand color hex representation of hsl(35, 33%, 50%)
         }}
       >
         <svg
@@ -43,4 +43,5 @@ export default function Icon() {
     }
   );
 }
+
 

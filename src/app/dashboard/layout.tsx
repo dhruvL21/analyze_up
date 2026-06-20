@@ -60,26 +60,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [setShowSubscriptionModal, loading, user]);
 
-  // Show popup once per login session if user is on the Starter Plan, or on explicit login redirect
+  // Show popup once per login session if user is on the Free Trial, or on explicit login redirect
   useEffect(() => {
     if (loading || !user) return;
     const savedPlan = localStorage.getItem("analyzeup_subscription_plan") || "Free Trial";
 
     const justLoggedIn = localStorage.getItem("analyzeup_just_logged_in");
     if (justLoggedIn === "true") {
-      if (savedPlan === "Starter Plan") {
+      if (savedPlan === "Free Trial") {
         setShowSubscriptionModal(true);
       }
       localStorage.removeItem("analyzeup_just_logged_in");
-      sessionStorage.setItem("analyzeup_starter_session_prompted", "true");
+      sessionStorage.setItem("analyzeup_free_trial_session_prompted", "true");
       return;
     }
 
-    if (savedPlan === "Starter Plan") {
-      const sessionPrompted = sessionStorage.getItem("analyzeup_starter_session_prompted");
+    if (savedPlan === "Free Trial") {
+      const sessionPrompted = sessionStorage.getItem("analyzeup_free_trial_session_prompted");
       if (!sessionPrompted) {
         setShowSubscriptionModal(true);
-        sessionStorage.setItem("analyzeup_starter_session_prompted", "true");
+        sessionStorage.setItem("analyzeup_free_trial_session_prompted", "true");
       }
     }
   }, [setShowSubscriptionModal, loading, user]);
@@ -128,7 +128,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </main>
       </div>
       <SubscriptionModal />
-      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive" />
     </div>
   );
 }
