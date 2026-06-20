@@ -17,6 +17,8 @@ import {
   Download,
 } from 'lucide-react';
 import { SalesChart } from '@/components/sales-chart';
+import { InventoryValueChart } from '@/components/inventory-value-chart';
+import { cn } from '@/lib/utils';
 import {
   Table,
   TableBody,
@@ -70,7 +72,7 @@ export default function ReportsPage() {
     items.forEach(el => observer.observe(el));
 
     return () => items.forEach(el => observer.unobserve(el));
-  }, [isLoading]);
+  }, [isLoading, reportType, dateRange]);
 
   const getFilteredTransactions = () => {
     if (dateRange === 'all') return transactions;
@@ -138,6 +140,8 @@ export default function ReportsPage() {
   const totalProductsInStock =
     products.reduce((acc, p) => acc + p.stock, 0) || 0;
   const totalSalesCount = filteredTransactions.filter((t) => t.type === 'Sale').length || 0;
+  const totalInventoryValue =
+    products.reduce((acc, p) => acc + p.stock * p.price, 0) || 0;
 
   const handleDownloadCsv = () => {
     let dataToExport: any[] = [];
@@ -246,160 +250,361 @@ export default function ReportsPage() {
           </Button>
         </div>
       </div>
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card className="scroll-reveal-item bg-primary/5">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
-            <IndianRupee className="h-4 w-4 text-destructive" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              ₹
-              {totalExpenses.toLocaleString('en-IN', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Cost of acquisitions
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="scroll-reveal-item border-primary/20 bg-primary/10">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Net Profit</CardTitle>
-            <IndianRupee className="h-4 w-4 text-primary" />
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${totalNetProfit >= 0 ? 'text-primary' : 'text-destructive'}`}>
-               {totalNetProfit >= 0 ? '+' : '-'}₹
-              {Math.abs(totalNetProfit).toLocaleString('en-IN', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Sales minus COGS
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="scroll-reveal-item">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">
-              Products in Stock
-            </CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {totalProductsInStock.toLocaleString()}
-            </div>
-            <p className="text-xs text-muted-foreground">Across all products</p>
-          </CardContent>
-        </Card>
-      </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2">
-        <Card className="scroll-reveal-item">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-            <IndianRupee className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              ₹
-              {totalRevenue.toLocaleString('en-IN', {
-                minimumFractionDigits: 2,
-                maximumFractionDigits: 2,
-              })}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {dateRange === 'all' ? 'From all sales' : `From sales in the last ${dateRange} days`}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="scroll-reveal-item">
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Sales Count</CardTitle>
-            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalSalesCount}</div>
-            <p className="text-xs text-muted-foreground">
-             {dateRange === 'all' ? 'Total sales transactions' : `Sales transactions in the last ${dateRange} days`}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      {reportType === 'inventory_summary' && (
+         <>
+           {/* Inventory Cards */}
+           <div className="grid gap-4 md:grid-cols-3">
+             <Card className="scroll-reveal-item">
+               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                 <CardTitle className="text-sm font-medium">Total Inventory Value</CardTitle>
+                 <IndianRupee className="h-4 w-4 text-primary" />
+               </CardHeader>
+               <CardContent>
+                 <div className="text-2xl font-bold">
+                   ₹
+                   {totalInventoryValue.toLocaleString('en-IN', {
+                     minimumFractionDigits: 2,
+                     maximumFractionDigits: 2,
+                   })}
+                 </div>
+                 <p className="text-xs text-muted-foreground">Total retail value of stock</p>
+               </CardContent>
+             </Card>
+             <Card className="scroll-reveal-item">
+               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                 <CardTitle className="text-sm font-medium">Products in Stock</CardTitle>
+                 <Package className="h-4 w-4 text-muted-foreground" />
+               </CardHeader>
+               <CardContent>
+                 <div className="text-2xl font-bold">{totalProductsInStock.toLocaleString()}</div>
+                 <p className="text-xs text-muted-foreground">Total unit volume across stock</p>
+               </CardContent>
+             </Card>
+             <Card className="scroll-reveal-item">
+               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                 <CardTitle className="text-sm font-medium">Low Stock Items</CardTitle>
+                 <Package className="h-4 w-4 text-destructive" />
+               </CardHeader>
+               <CardContent>
+                 <div className="text-2xl font-bold">{products.filter(p => p.stock < 20).length}</div>
+                 <p className="text-xs text-muted-foreground">Items with stock level &lt; 20 units</p>
+               </CardContent>
+             </Card>
+           </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-stretch">
-        <Card className="scroll-reveal-item">
-          <CardHeader>
-            <CardTitle>Sales Overview</CardTitle>
-            <CardDescription>
-              Your sales trend over the last 12 months.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <SalesChart />
-          </CardContent>
-        </Card>
-        <Card className='relative scroll-reveal-item'>
-          <CardHeader>
-            <CardTitle>Top Selling Products</CardTitle>
-            <CardDescription>
-              {`Your best-performing products by revenue ${dateRange === 'all' ? 'of all time' : `in the last ${dateRange} days`}.`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-0">
-            {/* Desktop Table View */}
-            <div className="hidden md:block overflow-x-auto">
-              <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Product</TableHead>
-                  <TableHead className="text-right">Total Revenue</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {topSellingProducts.map((product) => (
-                  <TableRow key={product.id}>
-                    <TableCell className="font-medium">
-                      {product.name}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      ₹
-                      {product.revenue.toLocaleString('en-IN', {
-                        minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
-                      })}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-              </Table>
-            </div>
+           {/* Inventory Chart & Details Table */}
+           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-stretch">
+             <Card className="scroll-reveal-item">
+               <CardHeader>
+                 <CardTitle>Inventory Breakdown</CardTitle>
+                 <CardDescription>Value breakdown by category.</CardDescription>
+               </CardHeader>
+               <CardContent>
+                 <InventoryValueChart />
+               </CardContent>
+             </Card>
+             
+             <Card className="scroll-reveal-item relative">
+               <CardHeader>
+                 <CardTitle>Inventory Overview</CardTitle>
+                 <CardDescription>Stock status details of your product lines.</CardDescription>
+               </CardHeader>
+               <CardContent className="p-0">
+                 {/* Desktop table */}
+                 <div className="hidden md:block overflow-x-auto">
+                   <Table>
+                     <TableHeader>
+                       <TableRow>
+                         <TableHead>Product Name</TableHead>
+                         <TableHead>SKU</TableHead>
+                         <TableHead className="text-right">Stock</TableHead>
+                         <TableHead className="text-right">Price</TableHead>
+                         <TableHead className="text-right">Total Value</TableHead>
+                       </TableRow>
+                     </TableHeader>
+                     <TableBody>
+                       {products.slice(0, 10).map((p) => (
+                         <TableRow key={p.id}>
+                           <TableCell className="font-medium">{p.name}</TableCell>
+                           <TableCell className="text-muted-foreground text-xs">{p.sku}</TableCell>
+                           <TableCell className="text-right">{p.stock}</TableCell>
+                           <TableCell className="text-right">₹{p.price.toLocaleString('en-IN')}</TableCell>
+                           <TableCell className="text-right font-medium">₹{(p.stock * p.price).toLocaleString('en-IN')}</TableCell>
+                         </TableRow>
+                       ))}
+                     </TableBody>
+                   </Table>
+                 </div>
+                 {/* Mobile list view */}
+                 <div className="md:hidden divide-y divide-border/50">
+                   {products.slice(0, 10).map((p) => (
+                     <div key={p.id} className="flex justify-between items-center p-4">
+                       <div className="flex flex-col gap-1 min-w-0 pr-2">
+                         <span className="font-medium text-sm text-foreground truncate">{p.name}</span>
+                         <span className="text-xs text-muted-foreground">SKU: {p.sku}</span>
+                       </div>
+                       <div className="flex flex-col items-end shrink-0 gap-1">
+                         <span className="text-xs font-semibold text-muted-foreground">{p.stock} units</span>
+                         <span className="text-sm font-semibold text-primary">₹{(p.stock * p.price).toLocaleString('en-IN')}</span>
+                       </div>
+                     </div>
+                   ))}
+                 </div>
+               </CardContent>
+             </Card>
+           </div>
+         </>
+      )}
 
-            {/* Mobile List View */}
-            <div className="md:hidden divide-y divide-border/50">
-              {topSellingProducts.map((product, index) => (
-                <div key={product.id} className="flex items-center justify-between p-4 hover:bg-muted/10 transition-colors">
-                  <div className="flex items-center gap-3 min-w-0 pr-2">
-                    <span className="text-xs font-bold text-muted-foreground w-4">#{index + 1}</span>
-                    <span className="font-medium text-sm text-foreground truncate">{product.name}</span>
-                  </div>
-                  <span className="text-sm font-semibold text-primary shrink-0">
-                    ₹{product.revenue.toLocaleString('en-IN', {
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      {reportType === 'sales_report' && (
+         <>
+           {/* Sales Cards */}
+           <div className="grid gap-4 md:grid-cols-3">
+             <Card className="scroll-reveal-item">
+               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                 <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+                 <IndianRupee className="h-4 w-4 text-primary" />
+               </CardHeader>
+               <CardContent>
+                 <div className="text-2xl font-bold">
+                   ₹
+                   {totalRevenue.toLocaleString('en-IN', {
+                     minimumFractionDigits: 2,
+                     maximumFractionDigits: 2,
+                   })}
+                 </div>
+                 <p className="text-xs text-muted-foreground">
+                   {dateRange === 'all' ? 'From all sales' : `From sales in the last ${dateRange} days`}
+                 </p>
+               </CardContent>
+             </Card>
+             <Card className="scroll-reveal-item">
+               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                 <CardTitle className="text-sm font-medium">Net Profit</CardTitle>
+                 <IndianRupee className="h-4 w-4 text-primary" />
+               </CardHeader>
+               <CardContent>
+                 <div className={`text-2xl font-bold ${totalNetProfit >= 0 ? 'text-primary' : 'text-destructive'}`}>
+                    {totalNetProfit >= 0 ? '+' : '-'}₹
+                   {Math.abs(totalNetProfit).toLocaleString('en-IN', {
+                     minimumFractionDigits: 2,
+                     maximumFractionDigits: 2,
+                   })}
+                 </div>
+                 <p className="text-xs text-muted-foreground">Sales minus Cost of Goods Sold</p>
+               </CardContent>
+             </Card>
+             <Card className="scroll-reveal-item">
+               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                 <CardTitle className="text-sm font-medium">Total Sales Count</CardTitle>
+                 <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+               </CardHeader>
+               <CardContent>
+                 <div className="text-2xl font-bold">{totalSalesCount}</div>
+                 <p className="text-xs text-muted-foreground">
+                   {dateRange === 'all' ? 'Total sales transactions' : `Sales transactions in the last ${dateRange} days`}
+                 </p>
+               </CardContent>
+             </Card>
+           </div>
+
+           {/* Sales Chart & Top Selling Table */}
+           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-stretch">
+             <Card className="scroll-reveal-item">
+               <CardHeader>
+                 <CardTitle>Sales Overview</CardTitle>
+                 <CardDescription>Your sales trend over the last 12 months.</CardDescription>
+               </CardHeader>
+               <CardContent>
+                 <SalesChart />
+               </CardContent>
+             </Card>
+             <Card className="scroll-reveal-item relative">
+               <CardHeader>
+                 <CardTitle>Top Selling Products</CardTitle>
+                 <CardDescription>
+                   {`Your best-performing products by revenue ${dateRange === 'all' ? 'of all time' : `in the last ${dateRange} days`}.`}
+                 </CardDescription>
+               </CardHeader>
+               <CardContent className="p-0">
+                 {/* Desktop Table View */}
+                 <div className="hidden md:block overflow-x-auto">
+                   <Table>
+                     <TableHeader>
+                       <TableRow>
+                         <TableHead>Product</TableHead>
+                         <TableHead className="text-right">Total Revenue</TableHead>
+                       </TableRow>
+                     </TableHeader>
+                     <TableBody>
+                       {topSellingProducts.map((product) => (
+                         <TableRow key={product.id}>
+                           <TableCell className="font-medium">{product.name}</TableCell>
+                           <TableCell className="text-right">
+                             ₹
+                             {product.revenue.toLocaleString('en-IN', {
+                               minimumFractionDigits: 2,
+                               maximumFractionDigits: 2,
+                             })}
+                           </TableCell>
+                         </TableRow>
+                       ))}
+                     </TableBody>
+                   </Table>
+                 </div>
+                 {/* Mobile List View */}
+                 <div className="md:hidden divide-y divide-border/50">
+                   {topSellingProducts.map((product, index) => (
+                     <div key={product.id} className="flex items-center justify-between p-4 hover:bg-muted/10 transition-colors">
+                       <div className="flex items-center gap-3 min-w-0 pr-2">
+                         <span className="text-xs font-bold text-muted-foreground w-4">#{index + 1}</span>
+                         <span className="font-medium text-sm text-foreground truncate">{product.name}</span>
+                       </div>
+                       <span className="text-sm font-semibold text-primary shrink-0">
+                         ₹{product.revenue.toLocaleString('en-IN', {
+                           minimumFractionDigits: 2,
+                           maximumFractionDigits: 2,
+                         })}
+                       </span>
+                     </div>
+                   ))}
+                 </div>
+               </CardContent>
+             </Card>
+           </div>
+         </>
+      )}
+
+      {reportType === 'transaction_log' && (
+         <>
+           {/* Transaction Cards */}
+           <div className="grid gap-4 md:grid-cols-3">
+             <Card className="scroll-reveal-item">
+               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                 <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
+                 <IndianRupee className="h-4 w-4 text-destructive" />
+               </CardHeader>
+               <CardContent>
+                 <div className="text-2xl font-bold">
+                   ₹
+                   {totalExpenses.toLocaleString('en-IN', {
+                     minimumFractionDigits: 2,
+                     maximumFractionDigits: 2,
+                   })}
+                 </div>
+                 <p className="text-xs text-muted-foreground">Total cost of acquisitions</p>
+               </CardContent>
+             </Card>
+             <Card className="scroll-reveal-item">
+               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                 <CardTitle className="text-sm font-medium">Total Sales Revenue</CardTitle>
+                 <IndianRupee className="h-4 w-4 text-primary" />
+               </CardHeader>
+               <CardContent>
+                 <div className="text-2xl font-bold">
+                   ₹
+                   {totalRevenue.toLocaleString('en-IN', {
+                     minimumFractionDigits: 2,
+                     maximumFractionDigits: 2,
+                   })}
+                 </div>
+                 <p className="text-xs text-muted-foreground">Total revenue from sales</p>
+               </CardContent>
+             </Card>
+             <Card className="scroll-reveal-item">
+               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                 <CardTitle className="text-sm font-medium">Total Transactions</CardTitle>
+                 <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+               </CardHeader>
+               <CardContent>
+                 <div className="text-2xl font-bold">{filteredTransactions.length}</div>
+                 <p className="text-xs text-muted-foreground">Total log movements recorded</p>
+               </CardContent>
+             </Card>
+           </div>
+
+           {/* Transaction Ledger Table */}
+           <Card className="scroll-reveal-item relative w-full">
+             <CardHeader>
+               <CardTitle>Transaction Ledger</CardTitle>
+               <CardDescription>A comprehensive audit trail of inventory movements.</CardDescription>
+             </CardHeader>
+             <CardContent className="p-0">
+               {/* Desktop ledger view */}
+               <div className="hidden md:block overflow-x-auto">
+                 <Table>
+                   <TableHeader>
+                     <TableRow>
+                       <TableHead>Date</TableHead>
+                       <TableHead>Type</TableHead>
+                       <TableHead>Product Name</TableHead>
+                       <TableHead className="text-right">Quantity</TableHead>
+                       <TableHead className="text-right">Unit Price</TableHead>
+                       <TableHead className="text-right">Total Price</TableHead>
+                     </TableRow>
+                   </TableHeader>
+                   <TableBody>
+                     {filteredTransactions.slice(0, 15).map((t) => {
+                       const product = products.find((p) => p.id === t.productId || p.sku === t.sku);
+                       const date = t.transactionDate instanceof Timestamp 
+                         ? t.transactionDate.toDate() 
+                         : new Date(t.transactionDate as string);
+                       const totalPrice = t.totalCost || t.totalRevenue || (t.quantity * (t.price || 0));
+
+                       return (
+                         <TableRow key={t.id}>
+                           <TableCell className="text-xs text-muted-foreground">{date.toLocaleDateString()}</TableCell>
+                           <TableCell>
+                             <span className={cn(
+                               "px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider",
+                               t.type === 'Sale' ? "bg-red-500/10 text-red-500" : "bg-green-500/10 text-green-500"
+                             )}>
+                               {t.type}
+                             </span>
+                           </TableCell>
+                           <TableCell className="font-medium">{product?.name || t.productName || 'Unknown Product'}</TableCell>
+                           <TableCell className="text-right">{t.quantity}</TableCell>
+                           <TableCell className="text-right">₹{(t.price || 0).toLocaleString('en-IN')}</TableCell>
+                           <TableCell className="text-right font-medium">₹{totalPrice.toLocaleString('en-IN')}</TableCell>
+                         </TableRow>
+                       );
+                     })}
+                   </TableBody>
+                 </Table>
+               </div>
+               {/* Mobile ledger view */}
+               <div className="md:hidden divide-y divide-border/50">
+                 {filteredTransactions.slice(0, 15).map((t) => {
+                   const product = products.find((p) => p.id === t.productId || p.sku === t.sku);
+                   const date = t.transactionDate instanceof Timestamp 
+                     ? t.transactionDate.toDate() 
+                     : new Date(t.transactionDate as string);
+                   const isSale = t.type === 'Sale';
+                   const totalPrice = t.totalCost || t.totalRevenue || (t.quantity * (t.price || 0));
+
+                   return (
+                     <div key={t.id} className="flex justify-between items-center p-4">
+                       <div className="flex flex-col gap-1 min-w-0 pr-2">
+                         <span className="font-medium text-sm text-foreground truncate">{product?.name || t.productName || 'Unknown Product'}</span>
+                         <span className="text-xs text-muted-foreground">{date.toLocaleDateString()}</span>
+                       </div>
+                       <div className="flex items-center gap-3 shrink-0">
+                         <span className={cn("text-xs font-bold uppercase", isSale ? "text-red-500" : "text-green-500")}>
+                           {t.type}
+                         </span>
+                         <span className="text-sm font-semibold text-primary">
+                           ₹{totalPrice.toLocaleString('en-IN')}
+                         </span>
+                       </div>
+                     </div>
+                   );
+                 })}
+               </div>
+             </CardContent>
+           </Card>
+         </>
+      )}
     </div>
   );
 }

@@ -25,6 +25,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Shirt,
+  ShoppingBag,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMemo, useEffect } from 'react';
@@ -36,6 +37,7 @@ import { AIStockAdvisor } from '@/components/ai-stock-advisor';
 function DashboardLoading() {
   return (
     <div className="flex flex-col gap-8">
+      {/* Row 1 Skeletons */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -59,6 +61,28 @@ function DashboardLoading() {
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Expenses</CardTitle>
+            <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-8 w-1/2" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Net Profit</CardTitle>
+            <ArrowDownRight className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-8 w-1/2" />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Row 2 Skeletons */}
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Low Stock Items
             </CardTitle>
@@ -77,6 +101,17 @@ function DashboardLoading() {
           </CardHeader>
           <CardContent>
             <Skeleton className="h-6 w-3/4" />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Items Sold
+            </CardTitle>
+            <ShoppingBag className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className="h-8 w-1/4" />
           </CardContent>
         </Card>
       </div>
@@ -213,6 +248,11 @@ export default function DashboardPage() {
 
   const totalProfit = totalSales - totalCOGS;
 
+  const totalItemsSold =
+    transactions
+      .filter((t) => t.type === 'Sale')
+      .reduce((acc, t) => acc + t.quantity, 0) || 0;
+
   const topSellingProductMap = useMemo(() => 
     (transactions || [])
       .filter((t) => t.type === 'Sale')
@@ -276,9 +316,9 @@ export default function DashboardPage() {
             </p>
           </CardContent>
         </Card>
-        <Card className="scroll-reveal-item bg-primary/5">
+        <Card className="scroll-reveal-item">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Expenses</CardTitle>
             <ArrowUpRight className="h-4 w-4 text-destructive" />
           </CardHeader>
           <CardContent>
@@ -294,9 +334,9 @@ export default function DashboardPage() {
             </p>
           </CardContent>
         </Card>
-        <Card className="scroll-reveal-item border-primary/50 bg-primary/10">
+        <Card className="scroll-reveal-item">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Net Profit</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Net Profit</CardTitle>
             <ArrowDownRight className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
@@ -314,7 +354,7 @@ export default function DashboardPage() {
         </Card>
       </div>
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        <Card className="scroll-reveal-item bg-secondary/20">
+        <Card className="scroll-reveal-item">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Low Stock Items
@@ -328,7 +368,7 @@ export default function DashboardPage() {
             </p>
           </CardContent>
         </Card>
-        <Card className="scroll-reveal-item bg-secondary/10">
+        <Card className="scroll-reveal-item">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Top Selling Product
@@ -339,6 +379,20 @@ export default function DashboardPage() {
             <div className="text-xl font-bold truncate">{topSeller[0]}</div>
             <p className="text-xs text-muted-foreground">
               {topSeller[1]} units sold
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="scroll-reveal-item">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Items Sold
+            </CardTitle>
+            <ShoppingBag className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalItemsSold.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">
+              Units sold to customers
             </p>
           </CardContent>
         </Card>
