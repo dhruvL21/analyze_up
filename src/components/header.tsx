@@ -74,6 +74,7 @@ export function Header() {
   const handleLogout = async () => {
     if (auth) {
       await signOut(auth);
+      sessionStorage.removeItem("analyzeup_starter_session_prompted");
       router.push('/');
     }
   };

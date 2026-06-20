@@ -52,23 +52,37 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Check if user has just registered to prompt them with plans
   useEffect(() => {
+    if (loading || !user) return;
     const justRegistered = localStorage.getItem("analyzeup_just_registered");
     if (justRegistered === "true") {
       setShowSubscriptionModal(true);
       localStorage.removeItem("analyzeup_just_registered");
     }
-  }, [setShowSubscriptionModal]);
+  }, [setShowSubscriptionModal, loading, user]);
 
-  // Show popup once per login session if user is on the Starter Plan
+  // Show popup once per login session if user is on the Starter Plan, or on explicit login redirect
   useEffect(() => {
-    if (activePlan === "Starter Plan") {
+    if (loading || !user) return;
+    const savedPlan = localStorage.getItem("analyzeup_subscription_plan") || "Free Trial";
+
+    const justLoggedIn = localStorage.getItem("analyzeup_just_logged_in");
+    if (justLoggedIn === "true") {
+      if (savedPlan === "Starter Plan") {
+        setShowSubscriptionModal(true);
+      }
+      localStorage.removeItem("analyzeup_just_logged_in");
+      sessionStorage.setItem("analyzeup_starter_session_prompted", "true");
+      return;
+    }
+
+    if (savedPlan === "Starter Plan") {
       const sessionPrompted = sessionStorage.getItem("analyzeup_starter_session_prompted");
       if (!sessionPrompted) {
         setShowSubscriptionModal(true);
         sessionStorage.setItem("analyzeup_starter_session_prompted", "true");
       }
     }
-  }, [activePlan, setShowSubscriptionModal]);
+  }, [setShowSubscriptionModal, loading, user]);
 
   // Auto-pop the subscription modal if limit is exceeded and visiting a feature page
   useEffect(() => {
@@ -91,28 +105,33 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex flex-col h-dvh overflow-hidden">
-      <Header />
+      <div 
+        className={cn(
+          "flex flex-col h-dvh overflow-hidden transition-all duration-300",
+          showSubscriptionModal && "blur-sm pointer-events-none select-none"
+        )}
+      >
+        <Header />
+        <main className="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto relative">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={pathname}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.15, ease: 'easeOut' }}
+              className="w-full h-full"
+            >
+              {children}
+            </motion.div>
+          </AnimatePresence>
+        </main>
+      </div>
       <SubscriptionModal />
       <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
-      <main className="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto relative">
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div
-            key={pathname}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.15, ease: 'easeOut' }}
-            className={cn(
-              "w-full h-full transition-all duration-300",
-              showSubscriptionModal && "blur-sm pointer-events-none select-none"
-            )}
-          >
-            {children}
-          </motion.div>
-        </AnimatePresence>
-      </main>
     </div>
   );
 }
+
 
     

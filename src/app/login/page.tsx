@@ -36,6 +36,7 @@ export default function LoginPage() {
 
     try {
       await signIn(auth, email, password);
+      localStorage.setItem("analyzeup_just_logged_in", "true");
       toast({
         title: 'Login Successful',
         description: "Welcome back!",
