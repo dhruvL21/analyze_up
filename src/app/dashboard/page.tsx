@@ -103,7 +103,8 @@ function DashboardLoading() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          {/* Desktop Skeleton Table */}
+          <div className="hidden md:block overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -132,6 +133,18 @@ function DashboardLoading() {
                 ))}
               </TableBody>
             </Table>
+          </div>
+          {/* Mobile Skeleton List */}
+          <div className="md:hidden divide-y divide-border/50">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="flex items-center justify-between p-4">
+                <div className="flex flex-col gap-2">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3.5 w-16" />
+                </div>
+                <Skeleton className="h-6 w-16 rounded-full" />
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>
@@ -369,7 +382,8 @@ export default function DashboardPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -417,6 +431,35 @@ export default function DashboardPage() {
                 ))}
               </TableBody>
             </Table>
+          </div>
+
+          {/* Mobile Card List View */}
+          <div className="md:hidden divide-y divide-border/50">
+            {recentTransactions.map((transaction) => {
+              const productName = transaction.productName || products.find(p => p.id === transaction.productId)?.name || 'Unknown Product';
+              const isSale = transaction.type === 'Sale';
+              const date = transaction.transactionDate instanceof Timestamp 
+                ? transaction.transactionDate.toDate() 
+                : new Date(transaction.transactionDate as string);
+              
+              return (
+                <div key={transaction.id} className="flex items-center justify-between p-4 hover:bg-muted/10 transition-colors">
+                  <div className="flex flex-col gap-1 min-w-0 pr-2">
+                    <span className="font-medium text-sm text-foreground truncate">{productName}</span>
+                    <span className="text-xs text-muted-foreground">{date.toLocaleDateString()}</span>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="text-xs font-semibold text-muted-foreground">{transaction.type}</span>
+                    <Badge
+                      variant={isSale ? 'destructive' : 'secondary'}
+                      className="capitalize font-semibold text-xs py-0.5 px-2"
+                    >
+                      {isSale ? '-' : '+'}{transaction.quantity}
+                    </Badge>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </CardContent>
       </Card>

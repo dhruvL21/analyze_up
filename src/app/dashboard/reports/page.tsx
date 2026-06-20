@@ -352,7 +352,8 @@ export default function ReportsPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
               <Table>
               <TableHeader>
                 <TableRow>
@@ -377,6 +378,24 @@ export default function ReportsPage() {
                 ))}
               </TableBody>
               </Table>
+            </div>
+
+            {/* Mobile List View */}
+            <div className="md:hidden divide-y divide-border/50">
+              {topSellingProducts.map((product, index) => (
+                <div key={product.id} className="flex items-center justify-between p-4 hover:bg-muted/10 transition-colors">
+                  <div className="flex items-center gap-3 min-w-0 pr-2">
+                    <span className="text-xs font-bold text-muted-foreground w-4">#{index + 1}</span>
+                    <span className="font-medium text-sm text-foreground truncate">{product.name}</span>
+                  </div>
+                  <span className="text-sm font-semibold text-primary shrink-0">
+                    ₹{product.revenue.toLocaleString('en-IN', {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </span>
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>

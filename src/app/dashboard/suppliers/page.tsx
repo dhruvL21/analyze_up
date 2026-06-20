@@ -136,7 +136,7 @@ export default function SuppliersPage() {
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuLabel className="bg-primary/10 text-primary text-[10px] uppercase tracking-wider font-bold text-center py-1 rounded-sm mb-1 select-none">Actions</DropdownMenuLabel>
                         <AlertDialog>
                         <AlertDialogTrigger asChild>
                             <DropdownMenuItem
@@ -146,7 +146,7 @@ export default function SuppliersPage() {
                             Delete
                             </DropdownMenuItem>
                         </AlertDialogTrigger>
-                        <AlertDialogContent>
+                        <AlertDialogContent className="w-[95vw] sm:max-w-md rounded-xl">
                             <AlertDialogHeader>
                             <AlertDialogTitle>
                                 Are you sure?
@@ -185,7 +185,7 @@ export default function SuppliersPage() {
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md ios-glass">
+        <DialogContent className="w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto ios-glass">
           <DialogHeader>
             <DialogTitle>Add New Supplier</DialogTitle>
           </DialogHeader>

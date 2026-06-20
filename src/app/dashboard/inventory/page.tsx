@@ -282,7 +282,8 @@ export default function InventoryPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
+            {/* Desktop Table View */}
+            <div className="hidden md:block overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -363,7 +364,7 @@ export default function InventoryPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                            <DropdownMenuLabel className="bg-primary/10 text-primary text-[10px] uppercase tracking-wider font-bold text-center py-1 rounded-sm mb-1 select-none">Actions</DropdownMenuLabel>
                             <DropdownMenuItem
                               onClick={() => openEditDialog(product)}
                             >
@@ -387,7 +388,7 @@ export default function InventoryPage() {
                                   Delete
                                 </DropdownMenuItem>
                               </AlertDialogTrigger>
-                              <AlertDialogContent>
+                              <AlertDialogContent className="w-[95vw] sm:max-w-md rounded-xl">
                                 <AlertDialogHeader>
                                   <AlertDialogTitle>
                                     Are you sure?
@@ -414,6 +415,116 @@ export default function InventoryPage() {
                   )))}
                 </TableBody>
               </Table>
+            </div>
+
+            {/* Mobile Card List View */}
+            <div className="md:hidden divide-y divide-border/50">
+              {isLoading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-4 p-4 animate-pulse">
+                    <div className="w-16 h-16 bg-secondary rounded-lg shrink-0" />
+                    <div className="flex-1 space-y-2 min-w-0">
+                      <div className="h-4 bg-secondary rounded w-2/3" />
+                      <div className="h-3.5 bg-secondary rounded w-1/3" />
+                    </div>
+                    <div className="h-8 w-8 bg-secondary rounded-full" />
+                  </div>
+                ))
+              ) : (
+                products.map((product) => (
+                  <div key={product.id} className="flex items-center gap-4 p-4 hover:bg-muted/10 transition-colors">
+                    <div className="w-16 h-16 rounded-lg overflow-hidden border shrink-0 bg-muted/20 relative">
+                      <Image
+                        alt={product.name}
+                        className="aspect-square object-cover"
+                        height="64"
+                        src={product.imageUrl || 'https://placehold.co/64x64'}
+                        width="64"
+                        unoptimized
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="font-semibold text-sm text-foreground truncate block mb-1">{product.name}</span>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant={
+                            product.stock > 20
+                              ? 'outline'
+                              : product.stock > 0
+                              ? 'secondary'
+                              : 'destructive'
+                          }
+                          className="text-[10px] py-0 px-1.5"
+                        >
+                          {product.stock > 20
+                            ? 'In Stock'
+                            : product.stock > 0
+                            ? 'Low Stock'
+                            : 'Out of Stock'}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">{product.stock} units</span>
+                      </div>
+                      <p className="text-xs font-semibold text-primary mt-1.5">
+                        ₹{typeof product.price === 'number' ? product.price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'N/A'}
+                      </p>
+                    </div>
+                    <div className="shrink-0">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            aria-haspopup="true"
+                            size="icon"
+                            variant="ghost"
+                            className="rounded-full h-8 w-8"
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                            <span className="sr-only">Toggle menu</span>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel className="bg-primary/10 text-primary text-[10px] uppercase tracking-wider font-bold text-center py-1 rounded-sm mb-1 select-none">Actions</DropdownMenuLabel>
+                          <DropdownMenuItem onClick={() => openEditDialog(product)}>
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setSellingProduct(product);
+                              setIsSellDialogOpen(true);
+                            }}
+                            className="text-primary font-medium"
+                          >
+                            Sell
+                          </DropdownMenuItem>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <DropdownMenuItem
+                                onSelect={(e) => e.preventDefault()}
+                                className="text-destructive"
+                              >
+                                Delete
+                              </DropdownMenuItem>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent className="w-[95vw] sm:max-w-md rounded-xl">
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This action cannot be undone. This will permanently delete the product.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => deleteProduct(product.id)}>
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </CardContent>
         </Card>
@@ -675,7 +786,7 @@ export default function InventoryPage() {
 
     {/* Sell Product Dialog */}
     <Dialog open={isSellDialogOpen} onOpenChange={setIsSellDialogOpen}>
-        <DialogContent className="sm:max-w-md ios-glass">
+        <DialogContent className="w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto ios-glass">
             <DialogHeader>
             <DialogTitle>Record Sale</DialogTitle>
             <DialogDescription>

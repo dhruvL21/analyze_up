@@ -14,6 +14,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { AnalyzeUpIcon } from "./analyze-up-icon";
 import { motion } from "framer-motion";
+import { SheetClose } from "@/components/ui/sheet";
 
 const navItems = [
   {
@@ -54,24 +55,27 @@ export default function Nav({ isMobile = false }: { isMobile?: boolean }) {
   if (isMobile) {
     return (
         <nav className="grid gap-2 text-lg font-medium">
-            <Link
-                href="/dashboard"
-                className="flex items-center gap-2 text-xl font-semibold mb-4"
-            >
-                <AnalyzeUpIcon className="h-6 w-6 text-primary" />
-                <span>AnalyzeUp</span>
-            </Link>
-            {navItems.map((item) => (
+            <SheetClose asChild>
                 <Link
-                    key={item.href}
-                    href={item.href}
-                    className={cn("flex items-center gap-3 rounded-lg px-3 py-2 text-foreground/70 transition-all hover:text-primary",
-                        pathname === item.href && "text-primary bg-primary/10"
-                    )}
+                    href="/dashboard"
+                    className="flex items-center gap-2 text-xl font-semibold mb-4"
                 >
-                    <item.icon className="h-4 w-4" />
-                    {item.label}
+                    <AnalyzeUpIcon className="h-6 w-6 text-primary" />
+                    <span>AnalyzeUp</span>
                 </Link>
+            </SheetClose>
+            {navItems.map((item) => (
+                <SheetClose key={item.href} asChild>
+                    <Link
+                        href={item.href}
+                        className={cn("flex items-center gap-3 rounded-lg px-3 py-2 text-foreground/70 transition-all hover:text-primary",
+                            pathname === item.href && "text-primary bg-primary/10"
+                        )}
+                    >
+                        <item.icon className="h-4 w-4" />
+                        {item.label}
+                    </Link>
+                </SheetClose>
             ))}
         </nav>
     );
