@@ -1,9 +1,8 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { BotIcon, ZapIcon, BarChartIcon, TrendingUp, Package, Scale, Menu } from 'lucide-react';
+import { BotIcon, ZapIcon, BarChartIcon, TrendingUp, Package, Scale } from 'lucide-react';
 import { AnimatedHero } from '@/components/animated-hero';
 import { AnalyzeUpIcon } from '@/components/analyze-up-icon';
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 
 export default function LandingPage() {
   return (
@@ -35,73 +34,39 @@ export default function LandingPage() {
             <Link href="/login">
                 <Button variant="ghost" size="sm">Sign In</Button>
             </Link>
-            <Sheet>
-                <SheetTrigger asChild>
-                    <Button variant="ghost" size="icon" className="rounded-full">
-                        <Menu className="h-5 w-5" />
-                        <span className="sr-only">Toggle navigation menu</span>
-                    </Button>
-                </SheetTrigger>
-                <SheetContent side="right" className="ios-glass w-[300px] sm:w-[400px]">
-                    <SheetTitle className="flex items-center gap-2 mb-8">
-                        <AnalyzeUpIcon className="h-6 w-6 text-primary" />
-                        <span className="font-semibold text-xl">AnalyzeUp</span>
-                    </SheetTitle>
-                    <div className="flex flex-col gap-4 mt-4">
-                        <Link
-                            href="#features"
-                            className="text-lg font-medium hover:text-primary transition-colors py-2 border-b border-border/50"
-                        >
-                            Features
-                        </Link>
-                        <Link
-                            href="/login"
-                            className="text-lg font-medium hover:text-primary transition-colors py-2 border-b border-border/50"
-                        >
-                            Sign In
-                        </Link>
-                        <Link
-                            href="/register"
-                            className="mt-4"
-                        >
-                            <Button className="w-full" size="lg">Get Started</Button>
-                        </Link>
-                    </div>
-                </SheetContent>
-            </Sheet>
         </div>
       </header>
       <main className="flex-1">
         <section className="w-full pt-12 pb-20 md:pt-16 md:pb-24 lg:pt-20 lg:pb-32 animated-grid-background overflow-hidden">
           <div className="container px-4 md:px-6 mx-auto">
-            <div className="grid gap-10 lg:grid-cols-[1fr_500px] lg:gap-12 xl:grid-cols-[1fr_600px] items-center">
-              <div className="flex flex-col justify-center space-y-6 text-center lg:text-left">
+            <div className="grid grid-cols-[1fr_100px] min-[400px]:grid-cols-[1fr_130px] sm:grid-cols-[1.2fr_0.8fr] lg:grid-cols-[1fr_500px] gap-4 md:gap-12 items-center">
+              <div className="flex flex-col justify-center space-y-6 text-left">
                 <div className="space-y-4">
-                  <h1 className="text-4xl font-bold tracking-tighter sm:text-5xl md:text-6xl xl:text-7xl/none text-foreground">
+                  <h1 className="text-2xl min-[400px]:text-3xl sm:text-4xl md:text-6xl xl:text-7xl/none text-foreground font-bold tracking-tighter">
                     The Smartest Way to <span className='text-primary'>Manage</span> Your Inventory
                   </h1>
-                  <p className="max-w-[600px] mx-auto lg:mx-0 text-muted-foreground text-lg md:text-xl">
+                  <p className="max-w-[600px] text-muted-foreground text-sm min-[400px]:text-base md:text-xl">
                     AnalyzeUp provides a powerful and intuitive platform to
                     streamline your stock, track sales, and make data-driven
                     decisions with the power of AI.
                   </p>
                 </div>
-                <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start">
+                <div className="flex flex-row gap-3 justify-start">
                   <Link
                     href="/register"
-                    className='w-full sm:w-auto'
+                    className="w-auto"
                   >
-                    <Button size="lg" className='w-full sm:w-auto px-8'>Get Started Free</Button>
+                    <Button size="lg" className="px-4 sm:px-8 text-xs min-[400px]:text-sm sm:text-base">Get Started Free</Button>
                   </Link>
                   <Link
                     href="#features"
-                    className='w-full sm:w-auto'
+                    className="w-auto"
                   >
-                    <Button size="lg" variant="secondary" className='w-full sm:w-auto px-8'>Learn More</Button>
+                    <Button size="lg" variant="secondary" className="px-4 sm:px-8 text-xs min-[400px]:text-sm sm:text-base">Learn More</Button>
                   </Link>
                 </div>
               </div>
-              <div className="flex items-center justify-center lg:order-last min-h-[250px] lg:min-h-[400px]">
+              <div className="flex items-center justify-center lg:order-last min-h-[200px] lg:min-h-[400px]">
                   <AnimatedHero />
               </div>
             </div>

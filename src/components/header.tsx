@@ -2,8 +2,9 @@
 'use client';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
-import { useRouter } from 'next/navigation';
-import { LogOut, Settings, Menu, Sun, Moon } from 'lucide-react';
+import { useRouter, usePathname } from 'next/navigation';
+import { useState } from 'react';
+import { LogOut, Settings, Menu, Sun, Moon, X, LayoutDashboard, Boxes, ShoppingCart, Truck, BarChart3, PieChart } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -13,7 +14,6 @@ import {
 import Nav from './nav';
 import Link from 'next/link';
 import { AnalyzeUpIcon } from './analyze-up-icon';
-import { Sheet, SheetContent, SheetTitle, SheetTrigger } from './ui/sheet';
 import { useUser, useAuth } from '@/firebase';
 import { signOut } from '@/firebase/auth/auth-service';
 import { useTheme } from 'next-themes';
@@ -24,14 +24,50 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
+import { motion, AnimatePresence } from 'framer-motion';
+import { cn } from '@/lib/utils';
 
+const mobileNavItems = [
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/dashboard/inventory', label: 'Inventory', icon: Boxes },
+  { href: '/dashboard/orders', label: 'Orders', icon: ShoppingCart },
+  { href: '/dashboard/suppliers', label: 'Suppliers', icon: Truck },
+  { href: '/dashboard/reports', label: 'Reports', icon: BarChart3 },
+  { href: '/dashboard/reports/visualizer', label: 'Visualizer', icon: PieChart },
+];
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.04,
+      delayChildren: 0.05,
+    }
+  }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: -12, scale: 0.95 },
+  show: { 
+    opacity: 1, 
+    y: 0,
+    scale: 1,
+    transition: {
+      type: "spring",
+      stiffness: 300,
+      damping: 24
+    }
+  }
+};
 
 export function Header() {
   const router = useRouter();
+  const pathname = usePathname();
   const { user } = useUser();
   const auth = useAuth();
   const { theme, setTheme } = useTheme();
-
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const handleLogout = async () => {
     if (auth) {
@@ -160,7 +196,87 @@ export function Header() {
             <AvatarFallback>{user?.displayName?.charAt(0) || user?.email?.charAt(0) || 'U'}</AvatarFallback>
           </Avatar>
         </Button>
+
+        {/* Mobile Hamburger Menu Icon - Far Right */}
+        <div className="md:hidden flex items-center">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="rounded-full h-9 w-9 relative z-30"
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+          >
+            <motion.div
+              animate={{ rotate: isMenuOpen ? 90 : 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 20 }}
+              className="flex items-center justify-center"
+            >
+              {isMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </motion.div>
+          </Button>
+        </div>
       </div>
+
+      {/* Mobile Navigation Dropdown Overlay */}
+      <AnimatePresence>
+        {isMenuOpen && (
+          <>
+            {/* Backdrop blur */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setIsMenuOpen(false)}
+              className="fixed inset-0 top-16 bg-black/40 backdrop-blur-sm z-30 md:hidden"
+            />
+
+            {/* Slide Down Menu Content */}
+            <motion.div
+              initial={{ opacity: 0, y: -20, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: 'auto' }}
+              exit={{ opacity: 0, y: -20, height: 0 }}
+              transition={{ type: 'spring', stiffness: 260, damping: 26 }}
+              className="absolute top-16 left-0 right-0 z-40 bg-background/95 backdrop-blur-xl border-b border-border shadow-2xl p-6 md:hidden overflow-hidden flex flex-col gap-4 rounded-b-2xl"
+            >
+              <motion.div
+                variants={containerVariants}
+                initial="hidden"
+                animate="show"
+                className="flex flex-col gap-2.5"
+              >
+                <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider px-3 mb-1">
+                  Navigation Menu
+                </div>
+                {mobileNavItems.map((item) => {
+                  const isActive = item.href === '/dashboard' 
+                    ? pathname === '/dashboard' 
+                    : item.href === '/dashboard/reports'
+                      ? pathname.startsWith('/dashboard/reports') && !pathname.startsWith('/dashboard/reports/visualizer')
+                      : pathname.startsWith(item.href);
+
+                  return (
+                    <motion.div key={item.href} variants={itemVariants}>
+                      <Link
+                        href={item.href}
+                        onClick={() => setIsMenuOpen(false)}
+                        className={cn(
+                          "flex items-center gap-3.5 rounded-xl px-4 py-3 text-base font-medium transition-all duration-200 relative border border-border/20 shadow-sm",
+                          isActive 
+                            ? "bg-primary/10 text-primary border-primary/20" 
+                            : "text-muted-foreground hover:text-foreground bg-secondary/20 hover:bg-secondary/40"
+                        )}
+                      >
+                        <item.icon className="h-5 w-5" />
+                        {item.label}
+                      </Link>
+                    </motion.div>
+                  );
+                })}
+              </motion.div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </header>
   );
 }
