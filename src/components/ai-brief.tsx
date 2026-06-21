@@ -78,7 +78,7 @@ export function AIBrief() {
   if (!brief && isPending) {
     return (
       <div className="relative overflow-hidden rounded-2xl border border-border/80 bg-card/60 p-6 shadow-xl backdrop-blur-md">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border/40 pb-4 mb-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b border-border/40 pb-4 mb-5">
           <div className="flex items-center gap-2.5">
             <Skeleton className="h-9 w-9 rounded-xl animate-pulse bg-muted" />
             <div className="space-y-2">
@@ -86,15 +86,15 @@ export function AIBrief() {
               <Skeleton className="h-3 w-48 animate-pulse bg-muted" />
             </div>
           </div>
-          <div className="flex flex-col gap-2 min-w-[160px]">
-            <div className="flex justify-between">
+          <div className="flex flex-col gap-2 w-full md:w-auto md:min-w-[160px]">
+            <div className="flex justify-between md:justify-end md:gap-3">
               <Skeleton className="h-4 w-20 animate-pulse bg-muted" />
               <Skeleton className="h-4 w-10 animate-pulse bg-muted" />
             </div>
-            <Skeleton className="h-1.5 w-full animate-pulse bg-muted" />
+            <Skeleton className="h-1.5 w-full md:w-[180px] animate-pulse bg-muted" />
           </div>
         </div>
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="flex gap-3.5 p-4 rounded-xl border border-border/30 bg-secondary/10">
             <Skeleton className="h-10 w-10 shrink-0 rounded-lg animate-pulse bg-muted" />
             <div className="space-y-2 w-full">
@@ -143,7 +143,7 @@ export function AIBrief() {
       <div className="absolute -bottom-24 -right-24 h-48 w-48 rounded-full bg-emerald-500/5 blur-[80px]" />
 
       {/* Header section */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border/40 pb-4 mb-5">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b border-border/40 pb-4 mb-5">
         <div className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary shadow-inner">
             {isPending ? (
@@ -161,8 +161,8 @@ export function AIBrief() {
         </div>
 
         {/* Inventory Health Score and Refresh */}
-        <div className="flex flex-col sm:items-end gap-2.5">
-          <div className="flex items-center justify-between sm:justify-end gap-4 w-full">
+        <div className="flex flex-col md:items-end gap-2.5 w-full md:w-auto">
+          <div className="flex flex-wrap items-center justify-between md:justify-end gap-3 w-full">
             <button
               onClick={fetchBrief}
               disabled={isPending}
@@ -179,14 +179,14 @@ export function AIBrief() {
               </span>
             </div>
           </div>
-          <Progress value={activeBrief.healthScore} className="h-1.5 w-full sm:w-[180px] bg-secondary/80 [&>div]:transition-all [&>div]:duration-500" indicatorClassName={getHealthColor(activeBrief.healthScore)} />
+          <Progress value={activeBrief.healthScore} className="h-1.5 w-full md:w-[180px] bg-secondary/80 [&>div]:transition-all [&>div]:duration-500" indicatorClassName={getHealthColor(activeBrief.healthScore)} />
         </div>
       </div>
 
       {/* Content grid */}
-      <div className="grid gap-6 md:grid-cols-2">
+      <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 transition-opacity duration-300 ${isPending ? 'opacity-60' : 'opacity-100'}`}>
         {/* Left Column: Stockout Risk */}
-        <div className="relative group flex gap-3.5 p-4 rounded-xl border border-border/30 bg-secondary/20 hover:bg-secondary/30 transition-all duration-200">
+        <div className="relative group flex gap-3.5 p-4 rounded-xl border border-border/30 bg-secondary/20 hover:bg-secondary/30 transition-all duration-200 min-h-[140px]">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500">
             <AlertTriangle className="h-5 w-5" />
           </div>
@@ -202,7 +202,7 @@ export function AIBrief() {
         </div>
 
         {/* Right Column: Dead Stock / Slow Sales */}
-        <div className="relative group flex gap-3.5 p-4 rounded-xl border border-border/30 bg-secondary/20 hover:bg-secondary/30 transition-all duration-200">
+        <div className="relative group flex gap-3.5 p-4 rounded-xl border border-border/30 bg-secondary/20 hover:bg-secondary/30 transition-all duration-200 min-h-[140px]">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
             <Coins className="h-5 w-5" />
           </div>
@@ -211,7 +211,7 @@ export function AIBrief() {
             <h4 className="font-bold text-base text-foreground truncate">{activeBrief.slowMovingItem.name}</h4>
             <div className="space-y-1 mt-1 text-sm">
               <p className="text-muted-foreground">{activeBrief.slowMovingItem.riskText}</p>
-              <p className="text-emerald-400 font-semibold">{activeBrief.slowMovingItem.costText}</p>
+              <p className="text-emerald-400 font-semibold">{activeBrief.costText || activeBrief.slowMovingItem.costText}</p>
               <p className="text-primary font-medium">{activeBrief.slowMovingItem.actionText}</p>
             </div>
           </div>
@@ -219,7 +219,7 @@ export function AIBrief() {
       </div>
 
       {/* Footer Banner */}
-      <div className="mt-5 flex items-center justify-between p-3.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-sm font-semibold">
+      <div className={`mt-5 flex items-center justify-between p-3.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-sm font-semibold transition-opacity duration-300 ${isPending ? 'opacity-60' : 'opacity-100'}`}>
         <div className="flex items-center gap-2">
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
