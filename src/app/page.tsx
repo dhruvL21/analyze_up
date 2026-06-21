@@ -43,12 +43,10 @@ export default function LandingPage() {
               <div className="flex flex-col justify-center space-y-6 text-left">
                 <div className="space-y-4">
                   <h1 className="text-2xl min-[400px]:text-3xl sm:text-4xl md:text-6xl xl:text-7xl/none text-foreground font-bold tracking-tighter">
-                    The Smartest Way to <span className='text-primary'>Manage</span> Your Inventory
+                    An AI Business Copilot & <span className='text-primary'>Inventory Management</span> for Small Businesses
                   </h1>
                   <p className="max-w-[600px] text-muted-foreground text-sm min-[400px]:text-base md:text-xl">
-                    AnalyzeUp provides a powerful and intuitive platform to
-                    streamline your stock, track sales, and make data-driven
-                    decisions with the power of AI.
+                    Know what to reorder, what to stop selling, and where you’re losing money.
                   </p>
                 </div>
                 <div className="flex flex-row gap-3 justify-start">

@@ -7,7 +7,8 @@ import {
   ShoppingCart,
   Truck,
   BarChart3,
-  PieChart,
+  Sparkles,
+  Activity,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -30,7 +31,7 @@ const navItems = [
   {
     href: "/dashboard/orders",
     icon: ShoppingCart,
-    label: "Orders",
+    label: "Order",
   },
   {
     href: "/dashboard/suppliers",
@@ -38,14 +39,19 @@ const navItems = [
     label: "Suppliers",
   },
   {
-    href: "/dashboard/reports",
-    icon: BarChart3,
-    label: "Reports",
+    href: "/dashboard/ai-advisor",
+    icon: Sparkles,
+    label: "AI Advisor",
   },
   {
-    href: "/dashboard/reports/visualizer",
-    icon: PieChart,
-    label: "Visualizer"
+    href: "/dashboard/insights",
+    icon: BarChart3,
+    label: "Insights",
+  },
+  {
+    href: "/dashboard/business-health",
+    icon: Activity,
+    label: "Business Health",
   },
 ];
 

@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { LogOut, Settings, Menu, Sun, Moon, X, LayoutDashboard, Boxes, ShoppingCart, Truck, BarChart3, PieChart } from 'lucide-react';
+import { LogOut, Settings, Menu, Sun, Moon, X, LayoutDashboard, Boxes, ShoppingCart, Truck, BarChart3, Sparkles, Activity } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -31,10 +31,11 @@ import { useData } from '@/context/data-context';
 const mobileNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/dashboard/inventory', label: 'Inventory', icon: Boxes },
-  { href: '/dashboard/orders', label: 'Orders', icon: ShoppingCart },
+  { href: '/dashboard/orders', label: 'Order', icon: ShoppingCart },
   { href: '/dashboard/suppliers', label: 'Suppliers', icon: Truck },
-  { href: '/dashboard/reports', label: 'Reports', icon: BarChart3 },
-  { href: '/dashboard/reports/visualizer', label: 'Visualizer', icon: PieChart },
+  { href: '/dashboard/ai-advisor', label: 'AI Advisor', icon: Sparkles },
+  { href: '/dashboard/insights', label: 'Insights', icon: BarChart3 },
+  { href: '/dashboard/business-health', label: 'Business Health', icon: Activity },
 ];
 
 const containerVariants = {
@@ -250,9 +251,7 @@ export function Header() {
                 {mobileNavItems.map((item) => {
                   const isActive = item.href === '/dashboard' 
                     ? pathname === '/dashboard' 
-                    : item.href === '/dashboard/reports'
-                      ? pathname.startsWith('/dashboard/reports') && !pathname.startsWith('/dashboard/reports/visualizer')
-                      : pathname.startsWith(item.href);
+                    : pathname.startsWith(item.href);
 
                   return (
                     <motion.div key={item.href} variants={itemVariants}>

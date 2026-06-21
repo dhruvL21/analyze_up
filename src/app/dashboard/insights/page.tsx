@@ -43,7 +43,7 @@ import { useData } from '@/context/data-context';
 type ReportType = 'inventory_summary' | 'sales_report' | 'transaction_log';
 type DateRange = '7' | '30' | '90' | 'all';
 
-export default function ReportsPage() {
+export default function InsightsPage() {
   const { products, transactions, isLoading } = useData();
   const [reportType, setReportType] = useState<ReportType>('inventory_summary');
   const [dateRange, setDateRange] = useState<DateRange>('30');
@@ -221,7 +221,7 @@ export default function ReportsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-        <h1 className="text-lg font-semibold md:text-2xl">Reports</h1>
+        <h1 className="text-lg font-semibold md:text-2xl">Insights</h1>
         <div className="sm:ml-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
            <Select value={dateRange} onValueChange={(v) => setDateRange(v as DateRange)}>
             <SelectTrigger className="w-full sm:w-[140px]">

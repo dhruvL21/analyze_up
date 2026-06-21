@@ -1,6 +1,5 @@
-
 import { DataVisualizer } from '@/components/data-visualizer';
 
-export default function VisualizerPage() {
+export default function BusinessHealthPage() {
     return <DataVisualizer />;
 }

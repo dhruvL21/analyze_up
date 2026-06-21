@@ -92,7 +92,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         pathname.startsWith("/dashboard/inventory") ||
         pathname.startsWith("/dashboard/orders") ||
         pathname.startsWith("/dashboard/suppliers") ||
-        pathname.startsWith("/dashboard/reports");
+        pathname.startsWith("/dashboard/ai-advisor") ||
+        pathname.startsWith("/dashboard/insights") ||
+        pathname.startsWith("/dashboard/business-health");
 
       if (isFeatureRoute) {
         setShowSubscriptionModal(true);
