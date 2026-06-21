@@ -36,10 +36,50 @@ import { useData } from '@/context/data-context';
 import { InventoryValueChart } from '@/components/inventory-value-chart';
 import { SalesChart } from '@/components/sales-chart';
 import { AIStockAdvisor } from '@/components/ai-stock-advisor';
+import { AIBrief } from '@/components/ai-brief';
 
 function DashboardLoading() {
   return (
     <div className="flex flex-col gap-8">
+      {/* AI Brief Skeleton */}
+      <Card className="relative overflow-hidden p-6 bg-card/60 border border-border/80">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-border/40 pb-4 mb-5">
+          <div className="flex items-center gap-2.5">
+            <Skeleton className="h-9 w-9 rounded-xl animate-pulse" />
+            <div className="space-y-2">
+              <Skeleton className="h-5 w-32 animate-pulse" />
+              <Skeleton className="h-3 w-48 animate-pulse" />
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 min-w-[160px]">
+            <div className="flex justify-between">
+              <Skeleton className="h-4 w-20 animate-pulse" />
+              <Skeleton className="h-4 w-10 animate-pulse" />
+            </div>
+            <Skeleton className="h-1.5 w-full animate-pulse" />
+          </div>
+        </div>
+        <div className="grid gap-6 md:grid-cols-2">
+          <div className="flex gap-3.5 p-4 rounded-xl border border-border/30 bg-secondary/10">
+            <Skeleton className="h-10 w-10 shrink-0 rounded-lg animate-pulse" />
+            <div className="space-y-2 w-full">
+              <Skeleton className="h-3 w-16 animate-pulse" />
+              <Skeleton className="h-4 w-1/2 animate-pulse" />
+              <Skeleton className="h-3.5 w-3/4 animate-pulse" />
+            </div>
+          </div>
+          <div className="flex gap-3.5 p-4 rounded-xl border border-border/30 bg-secondary/10">
+            <Skeleton className="h-10 w-10 shrink-0 rounded-lg animate-pulse" />
+            <div className="space-y-2 w-full">
+              <Skeleton className="h-3 w-24 animate-pulse" />
+              <Skeleton className="h-4 w-1/2 animate-pulse" />
+              <Skeleton className="h-3.5 w-3/4 animate-pulse" />
+            </div>
+          </div>
+        </div>
+        <Skeleton className="h-12 w-full mt-5 rounded-xl animate-pulse" />
+      </Card>
+
       {/* Row 1 Skeletons */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -280,6 +320,7 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-8">
+      <AIBrief />
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="scroll-reveal-item">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">

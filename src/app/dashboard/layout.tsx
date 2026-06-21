@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import Script from 'next/script';
 import SubscriptionModal from '@/components/subscription-modal';
 import { useData } from '@/context/data-context';
+import { ChatWidget } from '@/components/chat-widget';
 
 function DashboardLoading() {
     return (
@@ -127,6 +128,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </AnimatePresence>
         </main>
       </div>
+      <ChatWidget />
       <SubscriptionModal />
       <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive" />
     </div>

@@ -70,7 +70,7 @@ export function AIStockAdvisor() {
             <CardHeader className="relative bg-gradient-to-br from-secondary/50 to-background rounded-t-lg">
                 <CardTitle className="flex items-center gap-2">
                 <CheckCircle className="text-primary"/>
-                AI Stock Advisor
+                What Should I Reorder?
                 </CardTitle>
                 <CardDescription>
                 Get intelligent recommendations for products that are running low on
@@ -124,7 +124,7 @@ export function AIStockAdvisor() {
             <CardHeader className="relative bg-gradient-to-br from-secondary/50 to-background rounded-t-lg">
                 <CardTitle className='flex items-center gap-2'>
                     <CheckCircle className='text-primary' />
-                    AI Strategy Generator
+                    Growth Suggestions
                 </CardTitle>
                 <CardDescription>
                     Receive an AI-powered growth strategy based on your sales and product data.
