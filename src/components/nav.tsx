@@ -60,7 +60,12 @@ export default function Nav({ isMobile = false }: { isMobile?: boolean }) {
   const { isLimitExceeded, setShowSubscriptionModal } = useData();
 
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
-    if (isLimitExceeded && href !== "/dashboard") {
+    const isLockedRoute =
+      href.startsWith("/dashboard/ai-advisor") ||
+      href.startsWith("/dashboard/insights") ||
+      href.startsWith("/dashboard/business-health");
+
+    if (isLimitExceeded && isLockedRoute) {
       e.preventDefault();
       setShowSubscriptionModal(true);
     }

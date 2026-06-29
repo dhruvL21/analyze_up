@@ -37,13 +37,14 @@ import {
   Info,
   Layers,
   ArrowRight,
-  ShieldCheck
+  ShieldCheck,
+  Lock
 } from 'lucide-react';
 import { generateAIAdvisorInsights } from '@/ai/flows/ai-advisor';
 import { askAnalyzeUpChat, ChatMessage } from '@/ai/flows/chat';
 
 export default function AIAdvisorPage() {
-  const { products, transactions, suppliers, isLoading } = useData();
+  const { products, transactions, suppliers, isLoading, activePlan, setShowSubscriptionModal } = useData();
   const [isPending, startTransition] = useTransition();
   const [isChatPending, startChatTransition] = useTransition();
   const [aiInsights, setAiInsights] = useState<{
@@ -202,13 +203,16 @@ export default function AIAdvisorPage() {
     });
   };
 
+  const isPaid = activePlan !== 'Free Trial';
+
   useEffect(() => {
-    if (hasData) {
+    if (hasData && isPaid) {
       fetchAIInsights();
     }
-  }, [products.length, transactions.length, suppliers.length]);
+  }, [products.length, transactions.length, suppliers.length, isPaid, hasData]);
 
   const handleSendMessage = (textToSend?: string) => {
+    if (!isPaid) return;
     const text = textToSend || chatMessage;
     if (!text.trim() || isChatPending) return;
 
@@ -369,8 +373,8 @@ export default function AIAdvisorPage() {
         </Card>
 
         {/* Natural Language AI Chat Console */}
-        <Card className="lg:col-span-3 border border-border/80 backdrop-blur-xl flex flex-col justify-between overflow-hidden">
-          <CardHeader className="border-b border-border/40 py-4">
+        <Card className="lg:col-span-3 border border-border/80 backdrop-blur-xl flex flex-col justify-between overflow-hidden relative min-h-[360px]">
+          <CardHeader className="border-b border-border/40 py-4 shrink-0">
             <CardTitle className="flex items-center gap-2 text-base font-bold">
               <Bot className="h-4.5 w-4.5 text-primary" />
               Natural Language AI Advisor
@@ -380,84 +384,109 @@ export default function AIAdvisorPage() {
             </CardDescription>
           </CardHeader>
           
-          {/* Chat Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3.5 max-h-[260px] min-h-[220px] scrollbar-thin">
-            {chatHistory.map((msg, index) => (
-              <div
-                key={index}
-                className={`flex gap-3 max-w-[85%] ${
-                  msg.role === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'
-                }`}
-              >
-                {msg.role === 'assistant' && (
-                  <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0 mt-0.5">
-                    <Sparkles className="h-3.5 w-3.5" />
+          <div className="relative flex-1 flex flex-col justify-between">
+            {/* Chat Body & Input with conditional blur */}
+            <div className={`flex-1 flex flex-col justify-between transition-all duration-300 ${!isPaid ? 'blur-[5px] select-none pointer-events-none opacity-40' : ''}`}>
+              {/* Chat Messages */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-3.5 max-h-[260px] min-h-[220px] scrollbar-thin">
+                {chatHistory.map((msg, index) => (
+                  <div
+                    key={index}
+                    className={`flex gap-3 max-w-[85%] ${
+                      msg.role === 'user' ? 'ml-auto flex-row-reverse' : 'mr-auto'
+                    }`}
+                  >
+                    {msg.role === 'assistant' && (
+                      <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0 mt-0.5">
+                        <Sparkles className="h-3.5 w-3.5" />
+                      </div>
+                    )}
+                    <div
+                      className={`rounded-2xl px-4 py-2 text-xs leading-relaxed ${
+                        msg.role === 'user'
+                          ? 'bg-primary text-primary-foreground font-semibold rounded-tr-none shadow-sm'
+                          : 'bg-secondary/30 text-foreground border border-border/20 rounded-tl-none whitespace-pre-wrap'
+                      }`}
+                    >
+                      {msg.content}
+                    </div>
+                  </div>
+                ))}
+                
+                {isChatPending && (
+                  <div className="flex gap-3 max-w-[85%] mr-auto items-start">
+                    <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0 mt-0.5">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    </div>
+                    <div className="rounded-2xl rounded-tl-none px-4 py-2 text-xs bg-secondary/20 text-muted-foreground border border-border/10">
+                      Advisor is analyzing your inventory logs...
+                    </div>
                   </div>
                 )}
-                <div
-                  className={`rounded-2xl px-4 py-2 text-xs leading-relaxed ${
-                    msg.role === 'user'
-                      ? 'bg-primary text-primary-foreground font-semibold rounded-tr-none shadow-sm'
-                      : 'bg-secondary/30 text-foreground border border-border/20 rounded-tl-none whitespace-pre-wrap'
-                  }`}
-                >
-                  {msg.content}
-                </div>
               </div>
-            ))}
-            
-            {isChatPending && (
-              <div className="flex gap-3 max-w-[85%] mr-auto items-start">
-                <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary border border-primary/20 flex items-center justify-center shrink-0 mt-0.5">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+
+              <CardFooter className="flex-col gap-3 border-t border-border/40 p-4 bg-secondary/5 shrink-0">
+                {/* Suggetions */}
+                <div className="flex flex-wrap gap-1.5 w-full">
+                  {suggestions.map((query) => (
+                    <button
+                      key={query}
+                      onClick={() => handleSendMessage(query)}
+                      disabled={isChatPending}
+                      className="text-[10px] bg-secondary/20 hover:bg-primary/10 border border-border/30 hover:border-primary/30 px-2.5 py-1 rounded-full text-muted-foreground hover:text-foreground transition-all duration-150 active:scale-95"
+                    >
+                      {query}
+                    </button>
+                  ))}
                 </div>
-                <div className="rounded-2xl rounded-tl-none px-4 py-2 text-xs bg-secondary/20 text-muted-foreground border border-border/10">
-                  Advisor is analyzing your inventory logs...
+
+                {/* Input Form */}
+                <form 
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }}
+                  className="flex items-center gap-2 w-full"
+                >
+                  <Input
+                    value={chatMessage}
+                    onChange={(e) => setChatMessage(e.target.value)}
+                    placeholder="Ask me to review supplier safety margins or spot dead stock..."
+                    disabled={isChatPending}
+                    className="flex-1 bg-secondary/25 border-border/60 hover:border-border/80 focus:border-primary/80 focus:ring-1 text-xs"
+                  />
+                  <Button
+                    type="submit"
+                    disabled={!chatMessage.trim() || isChatPending}
+                    size="icon"
+                    className="h-9 w-9 shrink-0 rounded-xl"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                  </Button>
+                </form>
+              </CardFooter>
+            </div>
+
+            {/* Paywall Overlay */}
+            {!isPaid && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-card/10 backdrop-blur-[2px] z-10">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary/10 border border-primary/20 text-primary shadow-sm mb-2.5">
+                  <Lock className="h-5 w-5 animate-pulse" />
                 </div>
+                <p className="font-bold text-sm text-foreground">Premium AI Chat Advisor</p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-[280px] mb-4">
+                  Ask deep, natural-language questions about safety margins, dead stock clearance, or profit margins.
+                </p>
+                <Button 
+                  onClick={() => setShowSubscriptionModal(true)} 
+                  size="sm"
+                  className="bg-primary text-primary-foreground font-semibold shadow-sm hover:bg-primary/90 active:scale-95"
+                >
+                  Upgrade to Unlock
+                </Button>
               </div>
             )}
           </div>
-
-          <CardFooter className="flex-col gap-3 border-t border-border/40 p-4 bg-secondary/5">
-            {/* Suggetions */}
-            <div className="flex flex-wrap gap-1.5 w-full">
-              {suggestions.map((query) => (
-                <button
-                  key={query}
-                  onClick={() => handleSendMessage(query)}
-                  disabled={isChatPending}
-                  className="text-[10px] bg-secondary/20 hover:bg-primary/10 border border-border/30 hover:border-primary/30 px-2.5 py-1 rounded-full text-muted-foreground hover:text-foreground transition-all duration-150 active:scale-95"
-                >
-                  {query}
-                </button>
-              ))}
-            </div>
-
-            {/* Input Form */}
-            <form 
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSendMessage();
-              }}
-              className="flex items-center gap-2 w-full"
-            >
-              <Input
-                value={chatMessage}
-                onChange={(e) => setChatMessage(e.target.value)}
-                placeholder="Ask me to review supplier safety margins or spot dead stock..."
-                disabled={isChatPending}
-                className="flex-1 bg-secondary/25 border-border/60 hover:border-border/80 focus:border-primary/80 focus:ring-1 text-xs"
-              />
-              <Button
-                type="submit"
-                disabled={!chatMessage.trim() || isChatPending}
-                size="icon"
-                className="h-9 w-9 shrink-0 rounded-xl"
-              >
-                <Send className="h-3.5 w-3.5" />
-              </Button>
-            </form>
-          </CardFooter>
         </Card>
       </div>
 

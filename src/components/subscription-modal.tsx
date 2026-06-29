@@ -26,7 +26,7 @@ export default function SubscriptionModal() {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={() => setShowSubscriptionModal(false)}
-          className="fixed inset-0 bg-black/70 backdrop-blur-md"
+          className="fixed inset-0 bg-black/50 backdrop-blur-lg"
         />
 
         {/* Modal Content container */}
@@ -35,7 +35,7 @@ export default function SubscriptionModal() {
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
           transition={{ type: "spring", stiffness: 300, damping: 25 }}
-          className="relative w-full max-w-5xl bg-card border border-border shadow-2xl rounded-3xl overflow-hidden z-10 max-h-[90vh] flex flex-col"
+          className="relative w-full max-w-5xl bg-card/80 border border-border shadow-2xl rounded-3xl overflow-hidden z-10 max-h-[90vh] flex flex-col backdrop-blur-md"
         >
           {/* Close button */}
           <button
@@ -88,10 +88,13 @@ export default function SubscriptionModal() {
                       <Check className="h-4 w-4 text-primary shrink-0" /> Up to 50 products
                     </li>
                     <li className="flex items-center gap-2.5">
-                      <Check className="h-4 w-4 text-primary shrink-0" /> Basic inventory tracking
+                      <Check className="h-4 w-4 text-primary shrink-0" /> Inventory, Orders & Suppliers
                     </li>
                     <li className="flex items-center gap-2.5">
-                      <Check className="h-4 w-4 text-primary shrink-0" /> Manual reporting
+                      <Check className="h-4 w-4 text-primary shrink-0" /> Core CSV import/export
+                    </li>
+                    <li className="flex items-center gap-2.5 text-muted-foreground/50">
+                      <X className="h-4 w-4 shrink-0 text-muted-foreground/40" /> Today's AI Brief & Chat locked
                     </li>
                   </ul>
                 </div>
@@ -128,7 +131,13 @@ export default function SubscriptionModal() {
                       <Check className="h-4 w-4 text-primary shrink-0" /> Up to 500 products
                     </li>
                     <li className="flex items-center gap-2.5">
-                      <Check className="h-4 w-4 text-primary shrink-0" /> AI reorder alerts
+                      <Check className="h-4 w-4 text-primary shrink-0" /> Today's AI Brief unlocked
+                    </li>
+                    <li className="flex items-center gap-2.5">
+                      <Check className="h-4 w-4 text-primary shrink-0" /> AI Reorder Alerts unlocked
+                    </li>
+                    <li className="flex items-center gap-2.5">
+                      <Check className="h-4 w-4 text-primary shrink-0" /> Chat Widget & Copilot unlocked
                     </li>
                     <li className="flex items-center gap-2.5">
                       <Check className="h-4 w-4 text-primary shrink-0" /> Dynamic CSV exports
@@ -185,10 +194,16 @@ export default function SubscriptionModal() {
                       <Check className="h-4 w-4 text-primary shrink-0" /> Unlimited products
                     </li>
                     <li className="flex items-center gap-2.5">
-                      <Check className="h-4 w-4 text-primary shrink-0" /> Advanced AI Advisor
+                      <Check className="h-4 w-4 text-primary shrink-0" /> Everything in Starter
                     </li>
                     <li className="flex items-center gap-2.5">
-                      <Check className="h-4 w-4 text-primary shrink-0" /> Dynamic PDFs & analytics
+                      <Check className="h-4 w-4 text-primary shrink-0" /> Advanced AI Advisor & Strategy
+                    </li>
+                    <li className="flex items-center gap-2.5">
+                      <Check className="h-4 w-4 text-primary shrink-0" /> Business Health Score & Insights
+                    </li>
+                    <li className="flex items-center gap-2.5">
+                      <Check className="h-4 w-4 text-primary shrink-0" /> Premium PDF downloads
                     </li>
                   </ul>
                 </div>

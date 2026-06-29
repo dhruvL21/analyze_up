@@ -1,18 +1,21 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect, useTransition, useCallback } from 'react';
 import { useData } from '@/context/data-context';
-import { Sparkles, AlertTriangle, Coins, Loader2, RefreshCw } from 'lucide-react';
+import { Sparkles, AlertTriangle, Coins, Loader2, RefreshCw, Lock } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { generateAIBrief, AIBriefOutput } from '@/ai/flows/ai-brief-generator';
 import { Skeleton } from '@/components/ui/skeleton';
 
 export function AIBrief() {
-  const { products, transactions } = useData();
+  const { products, transactions, activePlan, setShowSubscriptionModal } = useData();
   const [brief, setBrief] = useState<AIBriefOutput | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const fetchBrief = () => {
+  const isPaid = activePlan !== 'Free Trial';
+
+  const fetchBrief = useCallback(() => {
+    if (!isPaid) return;
     startTransition(async () => {
       try {
         const simplifiedProducts = products.map((p) => ({
@@ -55,12 +58,16 @@ export function AIBrief() {
         console.error('Failed to generate AI Brief:', err);
       }
     });
-  };
+  }, [products, transactions, isPaid]);
 
-  // Re-fetch AI brief when products or transactions change
+  // Re-fetch AI brief when products or transactions change and plan is paid
   useEffect(() => {
-    fetchBrief();
-  }, [products.length, transactions.length]);
+    if (isPaid) {
+      fetchBrief();
+    } else {
+      setBrief(null);
+    }
+  }, [isPaid, fetchBrief]);
 
   // Determine health color based on score
   const getHealthColor = (score: number) => {
@@ -75,7 +82,7 @@ export function AIBrief() {
     return 'text-destructive';
   };
 
-  if (!brief && isPending) {
+  if (!brief && isPending && isPaid) {
     return (
       <div className="relative overflow-hidden rounded-2xl border border-border/80 bg-card/60 p-6 shadow-xl backdrop-blur-md">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b border-border/40 pb-4 mb-5">
@@ -146,7 +153,7 @@ export function AIBrief() {
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b border-border/40 pb-4 mb-5">
         <div className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/15 text-primary shadow-inner">
-            {isPending ? (
+            {isPending && isPaid ? (
               <Loader2 className="h-5 w-5 animate-spin" />
             ) : (
               <Sparkles className="h-5 w-5 text-primary animate-pulse" />
@@ -164,70 +171,98 @@ export function AIBrief() {
         <div className="flex flex-col md:items-end gap-2.5 w-full md:w-auto">
           <div className="flex flex-wrap items-center justify-between md:justify-end gap-3 w-full">
             <button
-              onClick={fetchBrief}
-              disabled={isPending}
-              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 px-2 py-1 rounded-md border border-border/30 bg-secondary/20 transition-all active:scale-95 disabled:opacity-50"
-              title="Refresh Brief"
+              onClick={isPaid ? fetchBrief : () => setShowSubscriptionModal(true)}
+              disabled={isPending && isPaid}
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 px-2.5 py-1 rounded-md border border-border/30 bg-secondary/20 transition-all active:scale-95 disabled:opacity-50"
+              title={isPaid ? "Refresh Brief" : "Upgrade to Unlock"}
             >
-              <RefreshCw className={`h-3 w-3 ${isPending ? 'animate-spin' : ''}`} />
-              <span>Analyze</span>
+              {isPaid ? (
+                <RefreshCw className={`h-3 w-3 ${isPending ? 'animate-spin' : ''}`} />
+              ) : (
+                <Lock className="h-3 w-3 text-primary" />
+              )}
+              <span>{isPaid ? 'Analyze' : 'Unlock'}</span>
             </button>
             <div className="flex items-center gap-1.5 text-sm">
               <span className="font-medium text-muted-foreground">Inventory Health</span>
-              <span className={`font-bold ${getHealthTextColor(activeBrief.healthScore)}`}>
-                {activeBrief.healthScore}/100
+              <span className={`font-bold ${isPaid ? getHealthTextColor(activeBrief.healthScore) : 'text-muted-foreground/60'}`}>
+                {isPaid ? `${activeBrief.healthScore}/100` : '--/100'}
               </span>
             </div>
           </div>
-          <Progress value={activeBrief.healthScore} className="h-1.5 w-full md:w-[180px] bg-secondary/80 [&>div]:transition-all [&>div]:duration-500" indicatorClassName={getHealthColor(activeBrief.healthScore)} />
+          <Progress value={isPaid ? activeBrief.healthScore : 0} className="h-1.5 w-full md:w-[180px] bg-secondary/80 [&>div]:transition-all [&>div]:duration-500" indicatorClassName={getHealthColor(activeBrief.healthScore)} />
         </div>
       </div>
 
-      {/* Content grid */}
-      <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 transition-opacity duration-300 ${isPending ? 'opacity-60' : 'opacity-100'}`}>
-        {/* Left Column: Stockout Risk */}
-        <div className="relative group flex gap-3.5 p-4 rounded-xl border border-border/30 bg-secondary/20 hover:bg-secondary/30 transition-all duration-200 min-h-[140px]">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500">
-            <AlertTriangle className="h-5 w-5" />
+      {/* Main Content Area with conditional blur */}
+      <div className="relative">
+        {/* Content grid */}
+        <div className={`grid grid-cols-1 md:grid-cols-2 gap-6 transition-all duration-300 ${!isPaid ? 'blur-[5px] select-none pointer-events-none opacity-40' : (isPending ? 'opacity-60' : 'opacity-100')}`}>
+          {/* Left Column: Stockout Risk */}
+          <div className="relative group flex gap-3.5 p-4 rounded-xl border border-border/30 bg-secondary/20 hover:bg-secondary/30 transition-all duration-200 min-h-[140px]">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-500">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <div className="flex flex-col gap-1 min-w-0">
+              <span className="text-xs font-semibold uppercase tracking-wider text-amber-500/80">Stockout Risk</span>
+              <h4 className="font-bold text-base text-foreground truncate">{activeBrief.stockoutItem.name}</h4>
+              <div className="space-y-1 mt-1 text-sm">
+                <p className="text-amber-400 font-medium">{activeBrief.stockoutItem.riskText}</p>
+                <p className="text-muted-foreground">{activeBrief.stockoutItem.reorderText}</p>
+                <p className="text-muted-foreground font-semibold">{activeBrief.stockoutItem.costText}</p>
+              </div>
+            </div>
           </div>
-          <div className="flex flex-col gap-1 min-w-0">
-            <span className="text-xs font-semibold uppercase tracking-wider text-amber-500/80">Stockout Risk</span>
-            <h4 className="font-bold text-base text-foreground truncate">{activeBrief.stockoutItem.name}</h4>
-            <div className="space-y-1 mt-1 text-sm">
-              <p className="text-amber-400 font-medium">{activeBrief.stockoutItem.riskText}</p>
-              <p className="text-muted-foreground">{activeBrief.stockoutItem.reorderText}</p>
-              <p className="text-muted-foreground font-semibold">{activeBrief.stockoutItem.costText}</p>
+
+          {/* Right Column: Dead Stock / Slow Sales */}
+          <div className="relative group flex gap-3.5 p-4 rounded-xl border border-border/30 bg-secondary/20 hover:bg-secondary/30 transition-all duration-200 min-h-[140px]">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
+              <Coins className="h-5 w-5" />
+            </div>
+            <div className="flex flex-col gap-1 min-w-0">
+              <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">Slow-Moving Inventory</span>
+              <h4 className="font-bold text-base text-foreground truncate">{activeBrief.slowMovingItem.name}</h4>
+              <div className="space-y-1 mt-1 text-sm">
+                <p className="text-muted-foreground">{activeBrief.slowMovingItem.riskText}</p>
+                <p className="text-emerald-400 font-semibold">{activeBrief.slowMovingItem.costText}</p>
+                <p className="text-primary font-medium">{activeBrief.slowMovingItem.actionText}</p>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Right Column: Dead Stock / Slow Sales */}
-        <div className="relative group flex gap-3.5 p-4 rounded-xl border border-border/30 bg-secondary/20 hover:bg-secondary/30 transition-all duration-200 min-h-[140px]">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-500">
-            <Coins className="h-5 w-5" />
+        {/* Footer Banner */}
+        <div className={`mt-5 flex items-center justify-between p-3.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-sm font-semibold transition-all duration-300 ${!isPaid ? 'blur-[5px] select-none pointer-events-none opacity-40' : (isPending ? 'opacity-60' : 'opacity-100')}`}>
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <span>{activeBrief.savingsText}</span>
           </div>
-          <div className="flex flex-col gap-1 min-w-0">
-            <span className="text-xs font-semibold uppercase tracking-wider text-emerald-400">Slow-Moving Inventory</span>
-            <h4 className="font-bold text-base text-foreground truncate">{activeBrief.slowMovingItem.name}</h4>
-            <div className="space-y-1 mt-1 text-sm">
-              <p className="text-muted-foreground">{activeBrief.slowMovingItem.riskText}</p>
-              <p className="text-emerald-400 font-semibold">{activeBrief.costText || activeBrief.slowMovingItem.costText}</p>
-              <p className="text-primary font-medium">{activeBrief.slowMovingItem.actionText}</p>
-            </div>
-          </div>
+          <span className="text-xs font-medium text-emerald-500/70 hidden sm:inline">Optimized via AI Copilot</span>
         </div>
-      </div>
 
-      {/* Footer Banner */}
-      <div className={`mt-5 flex items-center justify-between p-3.5 rounded-xl border border-emerald-500/20 bg-emerald-500/5 text-emerald-400 text-sm font-semibold transition-opacity duration-300 ${isPending ? 'opacity-60' : 'opacity-100'}`}>
-        <div className="flex items-center gap-2">
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-          </span>
-          <span>{activeBrief.savingsText}</span>
-        </div>
-        <span className="text-xs font-medium text-emerald-500/70 hidden sm:inline">Optimized via AI Copilot</span>
+        {/* Paywall Overlay */}
+        {!isPaid && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 z-10 bg-card/20 rounded-xl backdrop-blur-[2px]">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20 text-primary shadow-lg mb-3">
+              <Lock className="h-6 w-6 animate-pulse" />
+            </div>
+            <h4 className="font-bold text-lg text-foreground mb-1.5 flex items-center gap-2">
+              Unlock Today's AI Brief
+            </h4>
+            <p className="text-sm text-muted-foreground max-w-md mb-4">
+              Get detailed product health diagnostics, automated low-stock warnings, and actionable cost-saving recommendations.
+            </p>
+            <button
+              onClick={() => setShowSubscriptionModal(true)}
+              className="inline-flex h-10 items-center justify-center rounded-xl bg-primary px-6 font-semibold text-primary-foreground shadow-md transition-all hover:bg-primary/90 hover:scale-[1.02] active:scale-[0.98]"
+            >
+              Upgrade Plan
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

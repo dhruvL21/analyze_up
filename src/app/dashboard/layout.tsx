@@ -85,18 +85,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [setShowSubscriptionModal, loading, user]);
 
-  // Auto-pop the subscription modal if limit is exceeded and visiting a feature page
+  // Auto-pop the subscription modal if limit is exceeded and visiting a locked feature page
   useEffect(() => {
     if (isLimitExceeded) {
-      const isFeatureRoute =
-        pathname.startsWith("/dashboard/inventory") ||
-        pathname.startsWith("/dashboard/orders") ||
-        pathname.startsWith("/dashboard/suppliers") ||
+      const isLockedRoute =
         pathname.startsWith("/dashboard/ai-advisor") ||
         pathname.startsWith("/dashboard/insights") ||
         pathname.startsWith("/dashboard/business-health");
 
-      if (isFeatureRoute) {
+      if (isLockedRoute) {
         setShowSubscriptionModal(true);
       }
     }

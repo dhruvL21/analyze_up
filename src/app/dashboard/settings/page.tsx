@@ -31,7 +31,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Check, Loader2 } from "lucide-react";
+import { Check, Loader2, X } from "lucide-react";
 
 export default function SettingsPage() {
   const { toast } = useToast();
@@ -161,10 +161,13 @@ export default function SettingsPage() {
                       <Check className="h-4 w-4 text-primary shrink-0" /> Up to 50 products
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-primary shrink-0" /> Basic inventory tracking
+                      <Check className="h-4 w-4 text-primary shrink-0" /> Inventory, Orders & Suppliers
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-primary shrink-0" /> Manual reporting
+                      <Check className="h-4 w-4 text-primary shrink-0" /> Core CSV import/export
+                    </li>
+                    <li className="flex items-center gap-2 text-muted-foreground/50">
+                      <X className="h-4 w-4 shrink-0 text-muted-foreground/40" /> Today's AI Brief & Chat locked
                     </li>
                   </ul>
                 </div>
@@ -201,7 +204,13 @@ export default function SettingsPage() {
                       <Check className="h-4 w-4 text-primary shrink-0" /> Up to 500 products
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-primary shrink-0" /> AI reorder alerts
+                      <Check className="h-4 w-4 text-primary shrink-0" /> Today's AI Brief unlocked
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-primary shrink-0" /> AI Reorder Alerts unlocked
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-primary shrink-0" /> Chat Widget & Copilot unlocked
                     </li>
                     <li className="flex items-center gap-2">
                       <Check className="h-4 w-4 text-primary shrink-0" /> Dynamic CSV exports
@@ -258,10 +267,16 @@ export default function SettingsPage() {
                       <Check className="h-4 w-4 text-primary shrink-0" /> Unlimited products
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-primary shrink-0" /> Advanced AI Advisor
+                      <Check className="h-4 w-4 text-primary shrink-0" /> Everything in Starter
                     </li>
                     <li className="flex items-center gap-2">
-                      <Check className="h-4 w-4 text-primary shrink-0" /> Dynamic PDFs & analytics
+                      <Check className="h-4 w-4 text-primary shrink-0" /> Advanced AI Advisor & Strategy
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-primary shrink-0" /> Business Health Score & Insights
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-primary shrink-0" /> Premium PDF downloads
                     </li>
                   </ul>
                 </div>
