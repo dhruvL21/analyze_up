@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { LogOut, Settings, Menu, Sun, Moon, X, LayoutDashboard, Boxes, ShoppingCart, Truck, BarChart3, Sparkles, Activity } from 'lucide-react';
+import { LogOut, Settings, Menu, Sun, Moon, X, LayoutDashboard, Boxes, ShoppingCart, Truck, BarChart3, Sparkles, Activity, Lock } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -70,7 +70,7 @@ export function Header() {
   const auth = useAuth();
   const { theme, setTheme } = useTheme();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const { isLimitExceeded, setShowSubscriptionModal } = useData();
+  const { isLimitExceeded, activePlan, setShowSubscriptionModal } = useData();
 
   const handleLogout = async () => {
     if (auth) {
@@ -253,13 +253,19 @@ export function Header() {
                     ? pathname === '/dashboard' 
                     : pathname.startsWith(item.href);
 
+                  const isPremiumRoute =
+                    item.href.startsWith("/dashboard/ai-advisor") ||
+                    item.href.startsWith("/dashboard/insights") ||
+                    item.href.startsWith("/dashboard/business-health");
+                  const isLocked = isPremiumRoute && (activePlan !== "Pro Plan" || isLimitExceeded);
+
                   return (
                     <motion.div key={item.href} variants={itemVariants}>
                       <Link
                         href={item.href}
                         onClick={(e) => {
                           setIsMenuOpen(false);
-                          if (isLimitExceeded && item.href !== '/dashboard') {
+                          if (isLocked) {
                             e.preventDefault();
                             setShowSubscriptionModal(true);
                           }

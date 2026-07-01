@@ -85,19 +85,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [setShowSubscriptionModal, loading, user]);
 
-  // Auto-pop the subscription modal if limit is exceeded and visiting a locked feature page
+  // Auto-pop the subscription modal if visiting a locked feature page based on plan or product limit
   useEffect(() => {
-    if (isLimitExceeded) {
-      const isLockedRoute =
-        pathname.startsWith("/dashboard/ai-advisor") ||
-        pathname.startsWith("/dashboard/insights") ||
-        pathname.startsWith("/dashboard/business-health");
+    const isPremiumRoute =
+      pathname.startsWith("/dashboard/ai-advisor") ||
+      pathname.startsWith("/dashboard/insights") ||
+      pathname.startsWith("/dashboard/business-health");
 
-      if (isLockedRoute) {
-        setShowSubscriptionModal(true);
+    const isLocked = isPremiumRoute && (activePlan !== "Pro Plan" || isLimitExceeded);
+
+    if (isLocked) {
+      setShowSubscriptionModal(true);
+      // If the subscription modal is closed while on a locked premium route, redirect back to the main dashboard
+      if (!showSubscriptionModal) {
+        router.push("/dashboard");
       }
     }
-  }, [pathname, isLimitExceeded, setShowSubscriptionModal]);
+  }, [pathname, activePlan, isLimitExceeded, showSubscriptionModal, setShowSubscriptionModal, router]);
 
   if (loading || !user) {
     return <DashboardLoading />;

@@ -9,6 +9,7 @@ import {
   BarChart3,
   Sparkles,
   Activity,
+  Lock,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -57,15 +58,17 @@ const navItems = [
 
 export default function Nav({ isMobile = false }: { isMobile?: boolean }) {
   const pathname = usePathname();
-  const { isLimitExceeded, setShowSubscriptionModal } = useData();
+  const { isLimitExceeded, activePlan, setShowSubscriptionModal } = useData();
 
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
-    const isLockedRoute =
+    const isPremiumRoute =
       href.startsWith("/dashboard/ai-advisor") ||
       href.startsWith("/dashboard/insights") ||
       href.startsWith("/dashboard/business-health");
 
-    if (isLimitExceeded && isLockedRoute) {
+    const isLocked = isPremiumRoute && (activePlan !== "Pro Plan" || isLimitExceeded);
+
+    if (isLocked) {
       e.preventDefault();
       setShowSubscriptionModal(true);
     }
