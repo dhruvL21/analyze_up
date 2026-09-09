@@ -542,9 +542,100 @@ export async function getShopifyConnectionByTenant(tenantId: string): Promise<Sh
 }
 
 /**
+ * Helper to purge all Shopify-originated documents for a tenant from server Firestore.
+ */
+async function purgeTenantShopifyData(db: any, tenantId: string, shop?: string | null): Promise<void> {
+  if (!db || !tenantId) return;
+  try {
+    const collectionsToClean = ['sales_orders', 'refunds', 'inventory'];
+    for (const col of collectionsToClean) {
+      const snap = await db.collection('users').doc(tenantId).collection(col).get();
+      if (!snap.empty) {
+        const batch = db.batch();
+        snap.docs.forEach((d: any) => batch.delete(d.ref));
+        await batch.commit().catch(console.warn);
+      }
+    }
+
+    // Products
+    const prodSnap = await db.collection('users').doc(tenantId).collection('products').get();
+    if (!prodSnap.empty) {
+      const batch = db.batch();
+      let hasShopifyProds = false;
+      prodSnap.docs.forEach((d: any) => {
+        const data = d.data();
+        if (
+          data.source === 'SHOPIFY' ||
+          d.id.startsWith('shopify_') ||
+          data.shopifyProductId ||
+          data.shopifyVariantId ||
+          (typeof data.sku === 'string' && data.sku.startsWith('SHOPIFY-'))
+        ) {
+          batch.delete(d.ref);
+          hasShopifyProds = true;
+        }
+      });
+      if (hasShopifyProds) await batch.commit().catch(console.warn);
+    }
+
+    // Transactions
+    const txSnap = await db.collection('users').doc(tenantId).collection('transactions').get();
+    if (!txSnap.empty) {
+      const batch = db.batch();
+      let hasShopifyTx = false;
+      txSnap.docs.forEach((d: any) => {
+        const data = d.data();
+        if (
+          data.source === 'SHOPIFY' ||
+          d.id.startsWith('tx_shopify_') ||
+          d.id.startsWith('tx_refund_') ||
+          data.paymentMethod === 'Shopify Payments' ||
+          data.shopifyOrderId
+        ) {
+          batch.delete(d.ref);
+          hasShopifyTx = true;
+        }
+      });
+      if (hasShopifyTx) await batch.commit().catch(console.warn);
+    }
+
+    // Returns
+    const retSnap = await db.collection('users').doc(tenantId).collection('returns').get();
+    if (!retSnap.empty) {
+      const batch = db.batch();
+      let hasShopifyRet = false;
+      retSnap.docs.forEach((d: any) => {
+        const data = d.data();
+        if (
+          data.source === 'SHOPIFY' ||
+          d.id.startsWith('ret_shopify_') ||
+          d.id.startsWith('ret_') ||
+          data.shopifyReturnId ||
+          (typeof data.notes === 'string' && data.notes.toLowerCase().includes('shopify'))
+        ) {
+          batch.delete(d.ref);
+          hasShopifyRet = true;
+        }
+      });
+      if (hasShopifyRet) await batch.commit().catch(console.warn);
+    }
+
+    // Integration doc
+    await db.collection('users').doc(tenantId).collection('integrations').doc('shopify').delete().catch(console.warn);
+
+    // Store lookup
+    if (shop) {
+      await db.collection('shopify_stores').doc(shop).delete().catch(console.warn);
+    }
+  } catch (err) {
+    console.warn('[Shopify Connection Store] purgeTenantShopifyData notice:', err);
+  }
+}
+
+/**
  * Marks a Shopify connection UNINSTALLED, scrubs credentials, and updates merchant status.
  */
-export async function markShopifyUninstalled(rawShop: string): Promise<void> {
+export async function markShopifyUninstalled(rawShop: string, purgeData: boolean = true): Promise<void> {
   const shop = sanitizeShopDomain(rawShop);
   if (!shop) return;
 
@@ -599,12 +690,19 @@ export async function markShopifyUninstalled(rawShop: string): Promise<void> {
           {
             shopifyConnected: false,
             shopifyStatus: 'Uninstalled',
+            shopifyStoreUrl: '',
+            shopifyStoreName: '',
+            shopifyAccessToken: null,
             updatedAt: nowIso,
           },
           { merge: true }
         );
       }
       await batch.commit();
+
+      if (purgeData && tenantId) {
+        await purgeTenantShopifyData(db, tenantId, shop);
+      }
     }
   } catch (err) {
     console.warn('[Shopify Connection Store] markShopifyUninstalled firestore notice:', err);
@@ -614,7 +712,11 @@ export async function markShopifyUninstalled(rawShop: string): Promise<void> {
 /**
  * Marks a Shopify connection DISCONNECTED, invalidates active sessions, and updates merchant profile.
  */
-export async function markShopifyDisconnected(rawShop?: string | null, explicitTenantId?: string): Promise<void> {
+export async function markShopifyDisconnected(
+  rawShop?: string | null,
+  explicitTenantId?: string,
+  purgeData: boolean = true
+): Promise<void> {
   const shop = rawShop ? sanitizeShopDomain(rawShop) : null;
   const nowIso = new Date().toISOString();
 
@@ -682,6 +784,10 @@ export async function markShopifyDisconnected(rawShop?: string | null, explicitT
         );
       }
       await batch.commit();
+
+      if (purgeData && tenantId) {
+        await purgeTenantShopifyData(db, tenantId, shop);
+      }
     }
   } catch (err) {
     console.warn('[Shopify Connection Store] markShopifyDisconnected firestore notice:', err);

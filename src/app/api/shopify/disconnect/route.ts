@@ -16,6 +16,7 @@ export async function POST(req: NextRequest) {
 
     const shop = body?.shop || null;
     const tenantId = tenant?.tenantId || body?.userId || body?.tenantId;
+    const purgeData = body?.purgeData !== false;
 
     if (!shop && !tenantId) {
       return NextResponse.json(
@@ -24,11 +25,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    await markShopifyDisconnected(shop, tenantId);
+    await markShopifyDisconnected(shop, tenantId, purgeData);
 
     return NextResponse.json({
       success: true,
-      message: 'Shopify integration has been disconnected.',
+      message: 'Shopify integration has been disconnected and data purged.',
+      purged: purgeData,
       disconnectedAt: new Date().toISOString(),
     });
   } catch (error: any) {

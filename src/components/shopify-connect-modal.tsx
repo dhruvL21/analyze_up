@@ -53,6 +53,7 @@ export function ShopifyConnectModal() {
     bulkAddProducts,
     bulkAddTransactions,
     bulkAddReturns,
+    disconnectShopify,
   } = useData();
   const { user } = useUser();
   const firestore = useFirestore();
@@ -67,6 +68,7 @@ export function ShopifyConnectModal() {
   const [accessToken, setAccessToken] = useState(businessProfile?.shopifyAccessToken || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [isCheckingScopes, setIsCheckingScopes] = useState(false);
   const [scopeCheckResult, setScopeCheckResult] = useState<any>(null);
@@ -309,58 +311,36 @@ export function ShopifyConnectModal() {
     }
   };
 
-  // 4. Disconnect Shopify Store
+  // 4. Disconnect Shopify Store & Purge Synced Data
   const handleDisconnect = async () => {
-    if (!confirm('Are you sure you want to disconnect this Shopify store? Synchronized data will remain in your workspace.')) {
+    if (
+      !confirm(
+        'Are you sure you want to disconnect this Shopify store? All products, orders, and synchronized data imported from Shopify will be immediately deleted from your workspace.'
+      )
+    ) {
       return;
     }
 
+    setIsDisconnecting(true);
     try {
       const shopToDisconnect = businessProfile?.shopifyStoreUrl || storeUrl;
-      const idToken = user ? await user.getIdToken().catch(() => null) : null;
-
-      // 1. Notify server store to mark connection as DISCONNECTED
-      await fetch('/api/shopify/disconnect', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
-        body: JSON.stringify({
-          shop: shopToDisconnect,
-          userId: user?.uid,
-        }),
-      }).catch(console.warn);
-
-      // 2. Update client Firestore
-      if (user && firestore) {
-        const connectionRef = doc(firestore, 'users', user.uid, 'integrations', 'shopify');
-        await setDoc(
-          connectionRef,
-          {
-            connectionStatus: 'Disconnected',
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-      }
-
-      // 3. Update business profile in state & storage
-      await updateBusinessProfile({
-        shopifyConnected: false,
-        shopifyStoreUrl: '',
-        shopifyStoreName: '',
-        shopifyStatus: 'Disconnected',
-        shopifyAccessToken: undefined,
-      }, true);
+      const result = await disconnectShopify({
+        purgeData: true,
+        shopOverride: shopToDisconnect,
+      });
 
       setStoreUrl('');
       setAccessToken('');
       setShowShopifyModal(false);
 
+      const itemsRemoved =
+        result.deletedProducts > 0 || result.deletedTransactions > 0 || result.deletedReturns > 0
+          ? ` Removed ${result.deletedProducts} products, ${result.deletedTransactions} orders, and ${result.deletedReturns} returns.`
+          : '';
+
       toast({
-        title: 'Shopify Disconnected',
-        description: 'Store integration has been disconnected.',
+        title: 'Shopify Disconnected & Purged 🗑️',
+        description: `Store integration disconnected successfully.${itemsRemoved}`,
       });
     } catch (err: any) {
       toast({
@@ -368,6 +348,8 @@ export function ShopifyConnectModal() {
         title: 'Disconnect Error',
         description: err?.message || 'Failed to disconnect Shopify.',
       });
+    } finally {
+      setIsDisconnecting(false);
     }
   };
 
@@ -662,11 +644,20 @@ export function ShopifyConnectModal() {
               <Button
                 variant="outline"
                 onClick={handleDisconnect}
-                disabled={isSyncing}
-                className="rounded-xl text-xs font-semibold gap-1.5 border-rose-500/30 text-rose-400 hover:bg-rose-500/10 h-10"
+                disabled={isSyncing || isDisconnecting}
+                className="rounded-xl text-xs font-semibold gap-1.5 border-rose-500/30 text-rose-400 hover:bg-rose-500/10 h-10 cursor-pointer"
               >
-                <Unlink className="w-3.5 h-3.5" />
-                Disconnect
+                {isDisconnecting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    Deleting Data...
+                  </>
+                ) : (
+                  <>
+                    <Unlink className="w-3.5 h-3.5" />
+                    Disconnect & Delete Data
+                  </>
+                )}
               </Button>
             </div>
           </div>

@@ -76,6 +76,7 @@ import {
   UploadCloud,
   Table,
   Sliders,
+  Unlink,
 } from 'lucide-react';
 import {
   Dialog,
@@ -196,6 +197,7 @@ export default function IntegrationsPage() {
     updateGoogleDriveSettings,
     recordSyncSuccess,
     saveMappingProfile,
+    disconnectShopify,
   } = useData();
   const { user } = useUser();
   const firestore = useFirestore();
@@ -209,6 +211,37 @@ export default function IntegrationsPage() {
     businessProfile?.shopifyConnected || businessProfile?.shopifyStatus === 'Connected'
   );
   const [showShopifyScheduleModal, setShowShopifyScheduleModal] = useState(false);
+  const [isShopifyDisconnecting, setIsShopifyDisconnecting] = useState(false);
+
+  const handleDisconnectShopify = async () => {
+    if (
+      !window.confirm(
+        'Are you sure you want to disconnect Shopify? All products, orders, and synchronized data imported from Shopify will be permanently deleted from your workspace.'
+      )
+    ) {
+      return;
+    }
+    try {
+      setIsShopifyDisconnecting(true);
+      const result = await disconnectShopify({ purgeData: true });
+      const itemsRemoved =
+        result.deletedProducts > 0 || result.deletedTransactions > 0 || result.deletedReturns > 0
+          ? ` Removed ${result.deletedProducts} products, ${result.deletedTransactions} orders, and ${result.deletedReturns} returns.`
+          : '';
+      toast({
+        title: 'Shopify Disconnected & Purged 🗑️',
+        description: `Store integration disconnected successfully.${itemsRemoved}`,
+      });
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Disconnection Failed',
+        description: err?.message || 'Failed to disconnect Shopify.',
+      });
+    } finally {
+      setIsShopifyDisconnecting(false);
+    }
+  };
 
   // Real Google Drive integration states
   const [driveConnection, setDriveConnection] = useState<any>(null);
@@ -1745,12 +1778,12 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
                   )}
                 </div>
 
-                <div className="flex gap-2 mt-auto pt-2">
+                <div className="flex flex-wrap sm:flex-nowrap gap-2 mt-auto pt-2">
                   {isShopifyConnected && (
                     <>
                       <Button
                         onClick={() => autoSyncShopifyNow(true, businessProfile?.shopifyStoreUrl)}
-                        disabled={isShopifySyncing}
+                        disabled={isShopifySyncing || isShopifyDisconnecting}
                         className="flex-1 rounded-2xl text-xs font-bold gap-2 bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20 h-10 cursor-pointer"
                       >
                         <RefreshCw className={cn("w-3.5 h-3.5", isShopifySyncing && "animate-spin")} />
@@ -1758,6 +1791,7 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
                       </Button>
                       <Button
                         onClick={() => setShowShopifyScheduleModal(true)}
+                        disabled={isShopifySyncing || isShopifyDisconnecting}
                         variant="outline"
                         title="Configure Auto-Sync Schedule & Real-Time Sync"
                         className="rounded-2xl text-xs font-bold gap-1.5 h-10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 px-3 cursor-pointer"
@@ -1769,6 +1803,7 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
                   )}
                   <Button
                     onClick={() => setShowShopifyModal(true)}
+                    disabled={isShopifyDisconnecting}
                     variant={isShopifyConnected ? 'outline' : 'default'}
                     className={cn(
                       "rounded-2xl text-xs font-bold gap-2 h-10 cursor-pointer",
@@ -1781,6 +1816,22 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
                     {isShopifyConnected ? 'Settings' : 'Connect Shopify Store'}
                     {!isShopifyConnected && <ArrowRight className="w-3.5 h-3.5 ml-auto" />}
                   </Button>
+                  {isShopifyConnected && (
+                    <Button
+                      onClick={handleDisconnectShopify}
+                      disabled={isShopifySyncing || isShopifyDisconnecting}
+                      variant="outline"
+                      title="Disconnect Shopify and Delete All Synced Data"
+                      className="rounded-2xl text-xs font-semibold gap-1.5 h-10 border-rose-500/30 text-rose-400 hover:bg-rose-500/10 px-3 cursor-pointer"
+                    >
+                      {isShopifyDisconnecting ? (
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Unlink className="w-3.5 h-3.5" />
+                      )}
+                      <span className="hidden lg:inline">Disconnect</span>
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
