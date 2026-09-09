@@ -216,6 +216,9 @@ export default function TermsOfServicePage() {
             <li>
               You agree to comply at all times with Shopify&apos;s Acceptable Use Policy, Shopify API License and Terms of Use, and all applicable merchant policies. AnalyzeUp is an independent technology provider and is not endorsed, sponsored, or affiliated with Shopify Inc.
             </li>
+            <li>
+              <strong className="text-foreground">Google Drive Integration:</strong> When connecting Google Drive, you authorize AnalyzeUp to access and process select inventory spreadsheets, purchase order documents, and catalog CSV files via Google APIs (<span className="font-mono text-primary text-[11px]">drive.readonly</span>, <span className="font-mono text-primary text-[11px]">drive.file</span>, and <span className="font-mono text-primary text-[11px]">userinfo.email</span>). AnalyzeUp&apos;s use of information received from Google APIs adheres to the Google API Services User Data Policy, including Limited Use requirements.
+            </li>
           </ul>
         </div>
       </section>

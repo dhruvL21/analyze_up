@@ -13,7 +13,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import { getAdminFirestore, PersistenceError } from '@/lib/firebase/admin';
+import { getAdminFirestore, hasAdminCredentials, PersistenceError } from '@/lib/firebase/admin';
 export { PersistenceError };
 import type {
   ShopifyConnectionRecord,
@@ -133,6 +133,9 @@ export function _clearShopifyMemoryStoresForTesting(): void {
 
 function getDb() {
   try {
+    if (!hasAdminCredentials()) {
+      return null;
+    }
     return getAdminFirestore();
   } catch {
     return null;
@@ -605,6 +608,83 @@ export async function markShopifyUninstalled(rawShop: string): Promise<void> {
     }
   } catch (err) {
     console.warn('[Shopify Connection Store] markShopifyUninstalled firestore notice:', err);
+  }
+}
+
+/**
+ * Marks a Shopify connection DISCONNECTED, invalidates active sessions, and updates merchant profile.
+ */
+export async function markShopifyDisconnected(rawShop?: string | null, explicitTenantId?: string): Promise<void> {
+  const shop = rawShop ? sanitizeShopDomain(rawShop) : null;
+  const nowIso = new Date().toISOString();
+
+  let tenantId = explicitTenantId;
+  const conns = getMemoryConnections();
+
+  if (shop && conns.has(shop)) {
+    const conn = conns.get(shop)!;
+    tenantId = tenantId || conn.tenantId;
+    const updated: ShopifyConnectionRecord = {
+      ...conn,
+      status: 'DISCONNECTED',
+      encryptedAccessToken: null as any,
+      encryptedRefreshToken: null,
+      accessTokenExpiresAt: null,
+      refreshTokenExpiresAt: null,
+      updatedAt: nowIso,
+    };
+    conns.set(shop, updated);
+    saveFileConnections(conns);
+  } else if (tenantId) {
+    for (const [s, conn] of conns.entries()) {
+      if (conn.tenantId === tenantId) {
+        conn.status = 'DISCONNECTED';
+        conn.encryptedAccessToken = null as any;
+        conn.updatedAt = nowIso;
+        conns.set(s, conn);
+      }
+    }
+    saveFileConnections(conns);
+  }
+
+  try {
+    const db = getDb();
+    if (db) {
+      const batch = db.batch();
+      if (shop) {
+        const connRef = db.collection('shopify_connections').doc(shop);
+        batch.set(
+          connRef,
+          {
+            status: 'DISCONNECTED',
+            encryptedAccessToken: null,
+            updatedAt: nowIso,
+          },
+          { merge: true }
+        );
+      }
+      if (tenantId) {
+        const userConnRef = db.collection('users').doc(tenantId).collection('integrations').doc('shopify');
+        batch.set(userConnRef, { connectionStatus: 'Disconnected', updatedAt: nowIso }, { merge: true });
+
+        const profileRef = db.collection('users').doc(tenantId).collection('settings').doc('business_profile');
+        batch.set(
+          profileRef,
+          {
+            shopifyConnected: false,
+            shopifyStatus: 'Disconnected',
+            shopifyStoreUrl: '',
+            shopifyStoreName: '',
+            shopifyAccessToken: null,
+            updatedAt: nowIso,
+          },
+          { merge: true }
+        );
+      }
+      await batch.commit();
+    }
+  } catch (err) {
+    console.warn('[Shopify Connection Store] markShopifyDisconnected firestore notice:', err);
   }
 }
 

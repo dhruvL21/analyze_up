@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Card,
   CardContent,
@@ -414,16 +414,37 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
         description: `Successfully linked and authenticated "${connectedShop}". Live catalog and order sync initialized.`,
       });
 
-      // Synchronize businessProfile state from Firestore
-      if (user && firestore) {
-        const profileRef = doc(firestore, 'users', user.uid, 'settings', 'business_profile');
-        getDoc(profileRef)
-          .then((snap) => {
-            if (snap.exists()) {
-              updateBusinessProfile(snap.data() as any);
-            }
+      // Synchronize businessProfile state immediately
+      updateBusinessProfile({
+        shopifyConnected: true,
+        shopifyStatus: 'Connected',
+        shopifyStoreUrl: connectedShop,
+        shopifyStoreName: connectedShop.replace('.myshopify.com', ''),
+        shopifyLastSyncedAt: new Date().toISOString(),
+      }, true);
+
+      // Ingest live catalog & orders directly into Cloud Firestore via client SDK
+      autoSyncShopifyNow(true).catch(console.warn);
+
+      if (user) {
+        user.getIdToken().then((idToken) => {
+          fetch(`/api/shopify/status?shop=${encodeURIComponent(connectedShop)}&userId=${user.uid}`, {
+            headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
           })
-          .catch(console.warn);
+            .then((r) => r.json())
+            .then((data) => {
+              if (data?.connected) {
+                updateBusinessProfile({
+                  shopifyConnected: true,
+                  shopifyStatus: 'Connected',
+                  shopifyStoreUrl: data.shop,
+                  shopifyStoreName: data.storeName,
+                  shopifyLastSyncedAt: data.lastSyncAt,
+                }, true);
+              }
+            })
+            .catch(console.warn);
+        });
       }
 
       window.history.replaceState({}, '', window.location.pathname);
@@ -572,7 +593,42 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
       });
       window.history.replaceState({}, '', window.location.pathname);
     }
-  }, [user, firestore, toast]);
+  }, [user, firestore, toast, updateBusinessProfile]);
+
+  // 1.2 Fetch live Shopify connection status on mount (single check)
+  const hasFetchedShopifyStatusRef = useRef(false);
+  useEffect(() => {
+    if (!user || hasFetchedShopifyStatusRef.current) return;
+    hasFetchedShopifyStatusRef.current = true;
+
+    const fetchShopifyStatus = async () => {
+      try {
+        const idToken = await user.getIdToken();
+        const shopQuery = businessProfile?.shopifyStoreUrl ? `&shop=${encodeURIComponent(businessProfile.shopifyStoreUrl)}` : '';
+        const res = await fetch(`/api/shopify/status?userId=${user.uid}${shopQuery}`, {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        });
+        const data = await res.json();
+        if (data?.connected) {
+          updateBusinessProfile({
+            shopifyConnected: true,
+            shopifyStatus: 'Connected',
+            shopifyStoreUrl: data.shop,
+            shopifyStoreName: data.storeName,
+            shopifyLastSyncedAt: data.lastSyncAt,
+          }, true);
+        } else if (data && data.connected === false && businessProfile?.shopifyConnected) {
+          updateBusinessProfile({
+            shopifyConnected: false,
+            shopifyStatus: 'Disconnected',
+          }, true);
+        }
+      } catch (err) {
+        console.warn('Could not fetch Shopify connection status:', err);
+      }
+    };
+    fetchShopifyStatus();
+  }, [user?.uid]);
 
   // 2. Fetch scanned files list and stats on connection changes
   useEffect(() => {
@@ -1626,7 +1682,7 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
                   {isShopifyConnected && (
                     <>
                       <Button
-                        onClick={() => autoSyncShopifyNow(true)}
+                        onClick={() => autoSyncShopifyNow(true, businessProfile?.shopifyStoreUrl)}
                         disabled={isShopifySyncing}
                         className="flex-1 rounded-2xl text-xs font-bold gap-2 bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20 h-10 cursor-pointer"
                       >

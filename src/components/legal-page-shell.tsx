@@ -137,9 +137,9 @@ export function LegalPageShell({
               <Printer className="w-3.5 h-3.5" />
               Print
             </Button>
-            <Link href="/dashboard">
+            <Link href="/login">
               <Button variant="ghost" size="sm" className="text-xs">
-                Dashboard
+                Sign In
               </Button>
             </Link>
             <Link href="/register">

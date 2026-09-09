@@ -149,7 +149,6 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
     shopifyConnected: true,
     shopifyStoreUrl: businessProfile?.shopifyStoreUrl,
     shopifyRealtimeSyncEnabled: realtimeEnabled,
-    shopifyAutoSyncEnabled: autoSyncEnabled,
     shopifySyncFrequency: scheduleType === 'custom_datetime'
       ? 'custom_datetime'
       : frequency,
@@ -157,6 +156,8 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
     shopifySyncDay: syncDay,
     shopifyScheduledDateTime: scheduledDateTime,
   };
+
+  if (!open) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

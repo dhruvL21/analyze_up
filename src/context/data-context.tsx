@@ -91,7 +91,7 @@ interface DataContextProps {
   refreshAnalytics: () => Promise<void>;
   // Shopify Real-Time & Auto-Sync
   isShopifySyncing: boolean;
-  autoSyncShopifyNow: (showToast?: boolean) => Promise<void>;
+  autoSyncShopifyNow: (showToast?: boolean, shopOverride?: string) => Promise<void>;
   updateShopifyScheduleSettings: (settings: {
     shopifyAutoSyncEnabled?: boolean;
     shopifyRealtimeSyncEnabled?: boolean;
@@ -201,6 +201,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [isTourOpen, setIsTourOpen] = useState<boolean>(false);
 
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
+  const businessProfileRef = useRef<BusinessProfile | null>(businessProfile);
+  businessProfileRef.current = businessProfile;
+
   const [showOnboardingWizard, setShowOnboardingWizard] = useState<boolean>(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(false);
   const [showShopifyModal, setShowShopifyModal] = useState<boolean>(false);
@@ -214,6 +217,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       try {
         const parsed = JSON.parse(localProfile);
         setBusinessProfile(parsed);
+        businessProfileRef.current = parsed;
         if (parsed.inventorySetupMethod === 'demo') {
           setHasDemoData(true);
         }
@@ -225,6 +229,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   const updateBusinessProfile = useCallback(async (updates: Partial<BusinessProfile>, silent: boolean = false) => {
     if (!user) return;
+    const current = businessProfileRef.current;
     const updatedProfile: BusinessProfile = {
       businessName: 'My Business',
       businessType: 'Retail',
@@ -235,12 +240,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       country: 'India',
       language: 'English',
       isOnboardingCompleted: true,
-      ...businessProfile,
+      ...current,
       ...updates,
       updatedAt: new Date().toISOString(),
     };
 
     setBusinessProfile(updatedProfile);
+    businessProfileRef.current = updatedProfile;
     localStorage.setItem(`analyzeup_profile_${user.uid}`, JSON.stringify(updatedProfile));
 
     if (firestore) {
@@ -250,7 +256,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     if (!silent) {
       toast({ title: 'Business Profile Updated', description: 'Your business preferences have been saved.' });
     }
-  }, [user, firestore, businessProfile, toast]);
+  }, [user, firestore, toast]);
 
   const loadDemoBusiness = useCallback(async (customType?: BusinessType) => {
     if (!user || !firestore) return;
@@ -2256,9 +2262,49 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const isShopifySyncingRef = useRef(false);
   const [isShopifySyncing, setIsShopifySyncing] = useState(false);
 
-  const autoSyncShopifyNow = useCallback(async (showToast: boolean = true) => {
-    const shop = businessProfile?.shopifyStoreUrl;
-    const token = businessProfile?.shopifyAccessToken;
+  const autoSyncShopifyNow = useCallback(async (showToast: boolean = true, shopOverride?: string) => {
+    let shop = shopOverride || businessProfile?.shopifyStoreUrl || businessProfileRef.current?.shopifyStoreUrl;
+    let token = businessProfile?.shopifyAccessToken || businessProfileRef.current?.shopifyAccessToken;
+
+    // Check localStorage fallback if state ref is empty
+    if (!shop && user) {
+      try {
+        const localRaw = localStorage.getItem(`analyzeup_profile_${user.uid}`);
+        if (localRaw) {
+          const parsed = JSON.parse(localRaw);
+          if (parsed?.shopifyStoreUrl) {
+            shop = parsed.shopifyStoreUrl;
+            token = token || parsed.shopifyAccessToken;
+          }
+        }
+      } catch (err) {
+        console.warn('[Shopify] Error reading local profile:', err);
+      }
+    }
+
+    // Auto-resolve shop from server status if still not found
+    if (!shop && user) {
+      try {
+        const idToken = await user.getIdToken().catch(() => null);
+        const statusRes = await fetch('/api/shopify/status', {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
+        });
+        const statusData = await statusRes.json().catch(() => ({}));
+        if (statusData.connected && statusData.store?.shopDomain) {
+          shop = statusData.store.shopDomain;
+          token = token || statusData.store.accessToken;
+          await updateBusinessProfile({
+            shopifyConnected: true,
+            shopifyStoreUrl: statusData.store.shopDomain,
+            shopifyStoreName: statusData.store.storeName,
+            shopifyStatus: 'Connected',
+            shopifyAccessToken: statusData.store.accessToken || token,
+          }, true);
+        }
+      } catch (err) {
+        console.warn('[Shopify] Auto-resolve status failed:', err);
+      }
+    }
 
     if (!shop) {
       if (showToast) {

@@ -1,108 +1,26 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { AnalyzeUpIcon } from './analyze-up-icon';
 import { Button } from './ui/button';
-import { Badge } from './ui/badge';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from './ui/dialog';
 import {
   ArrowRight,
   ShieldCheck,
-  Zap,
   Sparkles,
   CheckCircle2,
-  Lock,
-  Globe,
   BarChart3,
   Boxes,
   Truck,
-  Layers,
   Crown,
   CreditCard,
   FileText,
-  Scale,
+  Lock,
   ExternalLink,
-  ChevronRight,
-  Eye,
-  RotateCcw,
 } from 'lucide-react';
-
-interface LegalModalContent {
-  type: 'terms' | 'privacy' | 'subscription';
-  title: string;
-  badge: string;
-  subtitle: string;
-  description: string;
-  highlights: string[];
-  fullPageRoute: string;
-}
-
-const LEGAL_DETAILS: Record<'terms' | 'privacy' | 'subscription', LegalModalContent> = {
-  terms: {
-    type: 'terms',
-    title: 'Terms of Service',
-    badge: 'Official SaaS Agreement',
-    subtitle: 'Clear, transparent rules governing your AnalyzeUp workspace and integrations.',
-    description:
-      'Our Terms of Service establish the legal framework for accessing the AnalyzeUp Intelligence Platform, ensuring your business data is protected while defining platform usage boundaries.',
-    highlights: [
-      '100% Merchant Data Ownership: You retain complete intellectual property and ownership over your catalog, orders, and sales telemetry.',
-      'Strict Multi-Tenant Isolation: Data is cryptographically partitioned; no other merchant or tenant can view or access your records.',
-      'Shopify 2026-07 API Compliance: We strictly adhere to Shopify least-privilege OAuth scopes (read_products, read_orders, read_inventory, read_locations, write_inventory).',
-      'AI Copilot Operational Disclaimer: AI demand forecasts and restock suggestions are automated decision-support aids designed to guide procurement without replacing executive discretion.',
-      'No Hidden Penalties: 99.9% target uptime SLA with clear service boundaries and fair cancellation terms.',
-    ],
-    fullPageRoute: '/terms',
-  },
-  privacy: {
-    type: 'privacy',
-    title: 'Privacy Policy',
-    badge: 'Enterprise Data Protection',
-    subtitle: 'How we collect, encrypt, isolate, and protect your commercial records.',
-    description:
-      'We treat merchant data with bank-grade security. We never sell your sales data, never broker customer records, and strictly enforce data segregation across our cloud architecture.',
-    highlights: [
-      'Zero Model Training: Your proprietary business data is NEVER used to train public foundation AI models (e.g. OpenAI or Google).',
-      'AES-256 Token Vaulting: Offline Shopify merchant access tokens are encrypted with military-grade AES-256-GCM and never exposed to browser sessions.',
-      'Strict Multi-Tenant Boundaries: Firebase Firestore database rules prevent cross-tenant data reads or writes at the engine level.',
-      'Automated 48-Hour Purge: When an app is uninstalled from Shopify, tokens are immediately revoked and all cached data is permanently purged within 48 hours.',
-      'Full Data Portability: Export your inventory, purchase orders, and audit logs at any time in standard CSV and Excel formats.',
-    ],
-    fullPageRoute: '/privacy',
-  },
-  subscription: {
-    type: 'subscription',
-    title: 'Subscription Terms & Billing Policy',
-    badge: 'Transparent Pricing & Plans',
-    subtitle: 'Honest billing cycles, free trials, cancellations, and refund protections.',
-    description:
-      'AnalyzeUp provides straightforward, predictable monthly plans with zero hidden fees, automated recurring billing via Razorpay, and a merchant-first refund guarantee.',
-    highlights: [
-      '14-Day Free Trial: Test all features, forecast demand, and sync your Shopify store with zero credit card required to start.',
-      'Predictable Monthly Tiers: Starter (₹1,499/mo | $19), Growth (₹3,999/mo | $49), and Enterprise Pro (₹8,999/mo | $99).',
-      '1-Click Self-Service Cancellation: Cancel anytime directly in Dashboard > Billing with zero cancellation fees or lock-ins.',
-      '7-Day Money-Back Guarantee: If your first paid month does not fit your workflow, request a 100% refund within 7 days.',
-      'GST Tax Invoicing: Automatic GST-compliant tax invoices for Indian registered businesses to claim Input Tax Credit (ITC).',
-    ],
-    fullPageRoute: '/subscription-terms',
-  },
-};
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
-  const [activeModal, setActiveModal] = useState<LegalModalContent | null>(null);
-
-  const openModal = (type: 'terms' | 'privacy' | 'subscription') => {
-    setActiveModal(LEGAL_DETAILS[type]);
-  };
 
   return (
     <footer className="w-full bg-background border-t border-border/40 relative overflow-hidden">
@@ -155,7 +73,7 @@ export function Footer() {
       </div>
 
       {/* Main Multi-Column Footer Grid */}
-      <div className="container px-4 md:px-6 mx-auto pt-8 pb-10 border-t border-border/30">
+      <div className="container px-4 md:px-6 mx-auto pt-8 pb-12 border-t border-border/30">
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8 lg:gap-12">
           {/* Brand & Platform Summary */}
           <div className="col-span-2 md:col-span-4 lg:col-span-2 space-y-3">
@@ -211,6 +129,11 @@ export function Footer() {
               </li>
               <li>
                 <Link href="/dashboard/connect" className="hover:text-primary transition-colors">
+                  Google Drive Connection
+                </Link>
+              </li>
+              <li>
+                <Link href="/dashboard/connect" className="hover:text-primary transition-colors">
                   Zoho Inventory
                 </Link>
               </li>
@@ -224,36 +147,49 @@ export function Footer() {
                   AI CSV & Excel Parser
                 </Link>
               </li>
-              <li>
-                <Link href="/dashboard/connect" className="hover:text-primary transition-colors">
-                  REST API & Webhooks
-                </Link>
-              </li>
             </ul>
           </div>
 
           {/* Column: Trust & Security */}
           <div className="space-y-3">
-            <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">Security & Trust</h4>
+            <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">Security & Legal</h4>
             <ul className="space-y-2 text-xs text-muted-foreground">
               <li>
-                <Link href="/dashboard/executive" className="hover:text-primary transition-colors">
-                  Multi-Tenant Isolation
+                <Link
+                  href="/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-primary transition-colors flex items-center gap-1.5 text-left group"
+                >
+                  <FileText className="w-3.5 h-3.5 text-primary" /> Terms of Service
+                  <ExternalLink className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100" />
                 </Link>
               </li>
               <li>
-                <Link href="/dashboard/billing" className="hover:text-primary transition-colors">
-                  Razorpay PCI-DSS Compliance
+                <Link
+                  href="/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-primary transition-colors flex items-center gap-1.5 text-left group"
+                >
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Privacy Policy
+                  <ExternalLink className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100" />
                 </Link>
               </li>
               <li>
-                <Link href="/dashboard/executive" className="hover:text-primary transition-colors">
-                  Automated Audit Trail
+                <Link
+                  href="/subscription-terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-primary transition-colors flex items-center gap-1.5 text-left group"
+                >
+                  <CreditCard className="w-3.5 h-3.5 text-amber-400" /> Subscription Terms
+                  <ExternalLink className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100" />
                 </Link>
               </li>
               <li>
-                <Link href="/login" className="hover:text-primary transition-colors">
-                  Enterprise SSO Access
+                <Link href="/dashboard/billing" className="hover:text-primary transition-colors flex items-center gap-1.5">
+                  <Lock className="w-3.5 h-3.5 text-primary" /> Multi-Tenant Isolation
                 </Link>
               </li>
               <li>
@@ -266,214 +202,42 @@ export function Footer() {
         </div>
       </div>
 
-      {/* Prominent Legal & Policies Cards Section with Full Descriptions */}
-      <div className="container px-4 md:px-6 mx-auto pb-10">
-        <div className="p-6 rounded-2xl border border-border/40 bg-card/40 backdrop-blur-sm space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-border/30 pb-3">
-            <div className="flex items-center gap-2">
-              <Scale className="w-4 h-4 text-primary" />
-              <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                Governance, Legal Policies & Merchant Transparency
-              </h3>
-            </div>
-            <span className="text-[11px] text-muted-foreground font-medium">
-              Click any policy below to view detailed descriptions or full documentation
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {/* Card 1: Terms of Service */}
-            <div className="p-4 rounded-xl border border-border/50 bg-secondary/20 hover:border-primary/40 transition-all flex flex-col justify-between space-y-3 group">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-bold text-sm text-foreground">
-                    <FileText className="w-4 h-4 text-primary" />
-                    <span>Terms of Service</span>
-                  </div>
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-primary/10 border-primary/20 text-primary">
-                    SaaS Agreement
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Comprehensive provisions governing multi-tenant workspace access, 100% merchant data ownership, Shopify 2026-07 API compliance, role-based security, and acceptable use.
-                </p>
-              </div>
-              <div className="flex items-center justify-between pt-2 border-t border-border/20 text-xs">
-                <button
-                  type="button"
-                  onClick={() => openModal('terms')}
-                  className="text-primary hover:underline font-medium inline-flex items-center gap-1"
-                >
-                  <Eye className="w-3.5 h-3.5" /> Quick Preview
-                </button>
-                <Link
-                  href="/terms"
-                  className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-                >
-                  Full Document <ChevronRight className="w-3 h-3" />
-                </Link>
-              </div>
-            </div>
-
-            {/* Card 2: Privacy Policy */}
-            <div className="p-4 rounded-xl border border-border/50 bg-secondary/20 hover:border-emerald-500/40 transition-all flex flex-col justify-between space-y-3 group">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-bold text-sm text-foreground">
-                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                    <span>Privacy Policy</span>
-                  </div>
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-emerald-500/10 border-emerald-500/20 text-emerald-400">
-                    Data Protection
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  Strict tenant isolation, AES-256 encrypted OAuth token vaulting, zero AI model training on customer data, and automatic 48-hour data purge upon Shopify app uninstall.
-                </p>
-              </div>
-              <div className="flex items-center justify-between pt-2 border-t border-border/20 text-xs">
-                <button
-                  type="button"
-                  onClick={() => openModal('privacy')}
-                  className="text-emerald-400 hover:underline font-medium inline-flex items-center gap-1"
-                >
-                  <Eye className="w-3.5 h-3.5" /> Quick Preview
-                </button>
-                <Link
-                  href="/privacy"
-                  className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-                >
-                  Full Document <ChevronRight className="w-3 h-3" />
-                </Link>
-              </div>
-            </div>
-
-            {/* Card 3: Subscription Terms */}
-            <div className="p-4 rounded-xl border border-border/50 bg-secondary/20 hover:border-amber-500/40 transition-all flex flex-col justify-between space-y-3 group">
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 font-bold text-sm text-foreground">
-                    <CreditCard className="w-4 h-4 text-amber-400" />
-                    <span>Subscription Terms</span>
-                  </div>
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-amber-500/10 border-amber-500/20 text-amber-400">
-                    Pricing & Refunds
-                  </Badge>
-                </div>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  14-day free trial without credit card, transparent tiers (Starter ₹1,499, Growth ₹3,999, Pro ₹8,999), 1-click cancellation, and 7-day money-back guarantee.
-                </p>
-              </div>
-              <div className="flex items-center justify-between pt-2 border-t border-border/20 text-xs">
-                <button
-                  type="button"
-                  onClick={() => openModal('subscription')}
-                  className="text-amber-400 hover:underline font-medium inline-flex items-center gap-1"
-                >
-                  <Eye className="w-3.5 h-3.5" /> Quick Preview
-                </button>
-                <Link
-                  href="/subscription-terms"
-                  className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
-                >
-                  Full Document <ChevronRight className="w-3 h-3" />
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Bottom Copyright & Direct Legal Strip */}
+      {/* Bottom Copyright & Direct Legal Strip (Public Pages - No Login Required) */}
       <div className="border-t border-border/40 bg-secondary/15 py-6">
         <div className="container px-4 md:px-6 mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-muted-foreground text-center sm:text-left">
             &copy; {currentYear} AnalyzeUp Intelligence Platform. All rights reserved.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-xs text-muted-foreground">
-            <button
-              type="button"
-              onClick={() => openModal('terms')}
-              className="hover:text-foreground transition-colors inline-flex items-center gap-1"
+            <Link
+              href="/terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-foreground transition-colors inline-flex items-center gap-1 cursor-pointer font-medium"
             >
               Terms of Service
-            </button>
+            </Link>
             <span className="text-muted-foreground/40 hidden sm:inline">&bull;</span>
-            <button
-              type="button"
-              onClick={() => openModal('privacy')}
-              className="hover:text-foreground transition-colors inline-flex items-center gap-1"
+            <Link
+              href="/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-foreground transition-colors inline-flex items-center gap-1 cursor-pointer font-medium"
             >
               Privacy Policy
-            </button>
+            </Link>
             <span className="text-muted-foreground/40 hidden sm:inline">&bull;</span>
-            <button
-              type="button"
-              onClick={() => openModal('subscription')}
-              className="hover:text-foreground transition-colors inline-flex items-center gap-1"
+            <Link
+              href="/subscription-terms"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-foreground transition-colors inline-flex items-center gap-1 cursor-pointer font-medium"
             >
               Subscription Terms
-            </button>
+            </Link>
           </div>
         </div>
       </div>
-
-      {/* Interactive Quick-Preview Legal Modal */}
-      {activeModal && (
-        <Dialog open={!!activeModal} onOpenChange={(open) => !open && setActiveModal(null)}>
-          <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto p-6 md:p-8 bg-card border-border/60 shadow-2xl">
-            <DialogHeader className="space-y-2 text-left">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="text-[11px] font-semibold uppercase bg-primary/10 border-primary/25 text-primary">
-                  {activeModal.badge}
-                </Badge>
-              </div>
-              <DialogTitle className="text-2xl font-bold text-foreground">
-                {activeModal.title}
-              </DialogTitle>
-              <DialogDescription className="text-sm text-muted-foreground">
-                {activeModal.subtitle}
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-5 py-4 text-xs md:text-sm text-muted-foreground border-y border-border/30">
-              <div className="p-3.5 rounded-xl border border-border/40 bg-secondary/25 text-foreground leading-relaxed font-medium">
-                {activeModal.description}
-              </div>
-
-              <div className="space-y-2.5">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-primary" /> Key Protections & Governance Highlights
-                </h4>
-                <ul className="space-y-2">
-                  {activeModal.highlights.map((h, i) => (
-                    <li key={i} className="flex items-start gap-2.5 text-xs text-muted-foreground leading-relaxed">
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                      <span>{h}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-
-            <DialogFooter className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setActiveModal(null)}
-                className="text-xs text-muted-foreground hover:text-foreground"
-              >
-                Close Summary
-              </Button>
-              <Link href={activeModal.fullPageRoute} onClick={() => setActiveModal(null)}>
-                <Button size="sm" className="text-xs font-semibold gap-1.5">
-                  Open Full {activeModal.title} Document <ExternalLink className="w-3.5 h-3.5" />
-                </Button>
-              </Link>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
     </footer>
   );
 }

@@ -1,4 +1,3 @@
-
 'use client';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
@@ -38,7 +37,9 @@ const mobileNavItems = [
   { href: '/dashboard/executive', label: 'Executive', icon: Crown },
   { href: '/dashboard/integrations', label: 'Connect', icon: Layers },
   { href: '/dashboard/insights', label: 'Insights & Health', icon: BarChart3 },
-  { href: '/dashboard/billing', label: 'Pricing', icon: CreditCard },
+  { href: '/dashboard/ai-advisor', label: 'AI Advisor', icon: Sparkles },
+  { href: '/dashboard/billing', label: 'Billing & Plan', icon: CreditCard },
+  { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ];
 
 const containerVariants = {
@@ -46,24 +47,14 @@ const containerVariants = {
   show: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.04,
-      delayChildren: 0.05,
-    }
-  }
+      staggerChildren: 0.05,
+    },
+  },
 };
 
 const itemVariants = {
-  hidden: { opacity: 0, y: -12, scale: 0.95 },
-  show: {
-    opacity: 1,
-    y: 0,
-    scale: 1,
-    transition: {
-      type: "spring",
-      stiffness: 300,
-      damping: 24
-    }
-  }
+  hidden: { opacity: 0, x: -10 },
+  show: { opacity: 1, x: 0 },
 };
 
 export function Header() {
@@ -74,8 +65,19 @@ export function Header() {
   const { theme, setTheme } = useTheme();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [notifDrawerOpen, setNotifDrawerOpen] = useState(false);
-  const { products, transactions, suppliers, orders, returns, isLimitExceeded, activePlan, setShowSubscriptionModal, setIsTourOpen, businessProfile } = useData();
   const [healthTick, setHealthTick] = useState(0);
+
+  const {
+    products,
+    transactions,
+    suppliers,
+    orders,
+    returns,
+    businessProfile,
+    activePlan,
+    isLimitExceeded,
+    setShowSubscriptionModal,
+  } = useData();
 
   useEffect(() => {
     const handleUpdate = () => setHealthTick(t => t + 1);
@@ -180,9 +182,11 @@ export function Header() {
               <p className="font-bold text-xs text-foreground truncate">{user?.displayName || 'Business User'}</p>
               <p className="text-[10px] text-muted-foreground truncate">{user?.email || 'user@business.com'}</p>
             </div>
-            <DropdownMenuItem onClick={() => router.push('/dashboard/settings')} className="cursor-pointer text-xs">
-              <Settings className="mr-2 h-4 w-4" />
-              Account Settings
+            <DropdownMenuItem asChild className="cursor-pointer text-xs">
+              <Link href="/dashboard/settings" className="flex items-center w-full">
+                <Settings className="mr-2 h-4 w-4" />
+                Account Settings
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="cursor-pointer text-xs">
               {theme === 'light' ? (

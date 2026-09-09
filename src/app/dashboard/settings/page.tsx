@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
@@ -85,6 +85,16 @@ export default function SettingsPage() {
   const [bizSize, setBizSize] = useState<BusinessSize>(businessProfile?.businessSize || "2-10 Employees");
   const [currency, setCurrency] = useState(businessProfile?.currency || "INR (₹)");
   const [country, setCountry] = useState(businessProfile?.country || "India");
+
+  useEffect(() => {
+    if (businessProfile) {
+      if (businessProfile.businessName) setBizName(businessProfile.businessName);
+      if (businessProfile.businessType) setBizType(businessProfile.businessType);
+      if (businessProfile.businessSize) setBizSize(businessProfile.businessSize);
+      if (businessProfile.currency) setCurrency(businessProfile.currency);
+      if (businessProfile.country) setCountry(businessProfile.country);
+    }
+  }, [businessProfile]);
 
   const handleSaveBusinessProfile = async () => {
     await updateBusinessProfile({
@@ -183,7 +193,7 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 pb-28">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold tracking-tight md:text-2xl">Settings & Business Setup</h1>
@@ -454,80 +464,7 @@ export default function SettingsPage() {
           </Card>
         </div>
 
-        {/* Security & Password Management Card */}
-        <Card className="ios-glass rounded-2xl border-border/50">
-          <CardHeader className="p-4 pb-2">
-            <CardTitle className="text-sm font-bold flex items-center gap-2">
-              <KeyRound className="w-4 h-4 text-primary" />
-              Security & Password Management
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Update your account password or change your login credentials securely.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="p-4 pt-1">
-            <form onSubmit={handleUpdatePassword} className="space-y-4 max-w-xl">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="newPassword" className="text-xs font-semibold">New Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="newPassword"
-                      type={showPassword ? "text" : "password"}
-                      placeholder="At least 6 characters"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      className="pr-10 h-10 rounded-xl bg-secondary/30 border-border/50 text-xs"
-                      required
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="confirmPassword" className="text-xs font-semibold">Confirm New Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="confirmPassword"
-                      type={showPassword ? "text" : "password"}
-                      placeholder="Repeat new password"
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="pr-10 h-10 rounded-xl bg-secondary/30 border-border/50 text-xs"
-                      required
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-1">
-                <p className="text-[11px] text-muted-foreground">
-                  Must be at least 6 characters long.
-                </p>
-                <Button
-                  type="submit"
-                  disabled={updatingPassword || !newPassword || !confirmPassword}
-                  className="rounded-xl text-xs gap-1.5 bg-primary text-primary-foreground font-bold shadow-md h-9 px-4"
-                >
-                  {updatingPassword ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <ShieldCheck className="w-4 h-4" />
-                  )}
-                  Update Password
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-
-        {/* Compact 2-Column Grid: Account & Demo Data */}
+        {/* 2-Column Grid: Account & Security Management */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Account & Session Card */}
           <Card className="ios-glass rounded-2xl border-border/50 flex flex-col justify-between">
@@ -540,8 +477,8 @@ export default function SettingsPage() {
                 Manage your active session or log out safely.
               </CardDescription>
             </CardHeader>
-            <CardContent className="p-4 pt-1">
-              <div className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-secondary/30 border border-border/30 text-xs">
+            <CardContent className="p-4 pt-1 space-y-3">
+              <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-secondary/30 border border-border/30 text-xs">
                 <div className="min-w-0">
                   <h4 className="font-semibold text-foreground text-xs truncate">Active Login</h4>
                   <p className="text-muted-foreground text-[10.5px] truncate mt-0.5">
@@ -552,28 +489,107 @@ export default function SettingsPage() {
                   onClick={handleLogout}
                   variant="destructive"
                   size="sm"
-                  className="rounded-xl text-xs gap-1.5 shrink-0 bg-rose-600 hover:bg-rose-500 text-white font-bold h-9 px-3 cursor-pointer"
+                  className="rounded-xl text-xs gap-1.5 shrink-0 bg-rose-600 hover:bg-rose-500 text-white font-bold h-9 px-3.5 cursor-pointer"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   Log Out
                 </Button>
               </div>
+
+              <div className="p-2.5 rounded-xl bg-secondary/20 border border-border/30 text-[11px] text-muted-foreground">
+                <p>Multi-tenant isolated workspace connected with your unique Firebase account.</p>
+              </div>
             </CardContent>
           </Card>
 
-          {/* Demo Business & Workspace Reset Card */}
+          {/* Security & Password Management Card */}
           <Card className="ios-glass rounded-2xl border-border/50 flex flex-col justify-between">
             <CardHeader className="p-4 pb-2">
               <CardTitle className="text-sm font-bold flex items-center gap-2">
-                <Zap className="w-4 h-4 text-amber-500" />
-                Demo Data & Workspace Maintenance
+                <KeyRound className="w-4 h-4 text-primary" />
+                Security & Password Management
               </CardTitle>
               <CardDescription className="text-xs">
-                Load sample demo business or clear all records.
+                Update your account password or credentials securely.
               </CardDescription>
             </CardHeader>
-            <CardContent className="p-4 pt-1 space-y-2">
-              <div className="flex items-center justify-between gap-3 p-2 rounded-xl bg-secondary/30 border border-border/30 text-xs">
+            <CardContent className="p-4 pt-1">
+              <form onSubmit={handleUpdatePassword} className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <Label htmlFor="newPassword" className="text-[11px] font-semibold">New Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="newPassword"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="At least 6 chars"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="pr-8 h-9 rounded-xl bg-secondary/30 border-border/50 text-xs"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                      >
+                        {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="confirmPassword" className="text-[11px] font-semibold">Confirm Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="confirmPassword"
+                        type={showPassword ? "text" : "password"}
+                        placeholder="Repeat password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="pr-8 h-9 rounded-xl bg-secondary/30 border-border/50 text-xs"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-0.5">
+                  <p className="text-[10px] text-muted-foreground">
+                    Min 6 characters.
+                  </p>
+                  <Button
+                    type="submit"
+                    disabled={updatingPassword || !newPassword || !confirmPassword}
+                    className="rounded-xl text-xs gap-1.5 bg-primary text-primary-foreground font-bold shadow-md h-8 px-3.5 cursor-pointer"
+                  >
+                    {updatingPassword ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                    )}
+                    Update Password
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Demo Business & Workspace Reset Maintenance Card */}
+        <Card className="ios-glass rounded-2xl border-border/50">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <Zap className="w-4 h-4 text-amber-500" />
+              Demo Data & Workspace Maintenance
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Load sample demo business data or permanently clear all workspace records.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 pt-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-secondary/30 border border-border/30 text-xs">
                 <div className="min-w-0">
                   <h4 className="text-xs font-semibold flex items-center gap-1.5 truncate">
                     Explore Demo Business
@@ -586,14 +602,14 @@ export default function SettingsPage() {
                 <Button
                   onClick={() => loadDemoBusiness(bizType)}
                   size="sm"
-                  className="rounded-xl text-xs gap-1.5 bg-amber-600 hover:bg-amber-500 text-white shrink-0 h-8 px-2.5 cursor-pointer"
+                  className="rounded-xl text-xs gap-1.5 bg-amber-600 hover:bg-amber-500 text-white shrink-0 h-9 px-3 cursor-pointer"
                 >
-                  <RefreshCw className="w-3 h-3" />
-                  {hasDemoData ? 'Reload' : 'Load Demo'}
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  {hasDemoData ? 'Reload Demo' : 'Load Demo'}
                 </Button>
               </div>
 
-              <div className="flex items-center justify-between gap-3 p-2 rounded-xl bg-rose-500/5 border border-rose-500/20 text-xs">
+              <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-rose-500/5 border border-rose-500/20 text-xs">
                 <div className="min-w-0">
                   <h4 className="text-xs font-semibold text-rose-500 truncate">Reset Workspace Data</h4>
                   <p className="text-[10.5px] text-muted-foreground truncate">
@@ -606,9 +622,9 @@ export default function SettingsPage() {
                   if (!open) setResetConfirmInput("");
                 }}>
                   <DialogTrigger asChild>
-                    <Button variant="destructive" size="sm" className="rounded-xl text-xs gap-1.5 shrink-0 h-8 px-2.5 cursor-pointer">
-                      <Trash2 className="w-3 h-3" />
-                      Reset
+                    <Button variant="destructive" size="sm" className="rounded-xl text-xs gap-1.5 shrink-0 h-9 px-3 cursor-pointer">
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Reset Data
                     </Button>
                   </DialogTrigger>
                   <DialogContent className="rounded-3xl max-w-md bg-card dark:bg-zinc-950 border border-rose-500/30 p-6 shadow-2xl">
@@ -676,9 +692,9 @@ export default function SettingsPage() {
                   </DialogContent>
                 </Dialog>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

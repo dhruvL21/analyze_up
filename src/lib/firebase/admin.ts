@@ -51,6 +51,16 @@ export function getFirebaseAdminProjectId(): string {
 }
 
 /**
+ * Checks if privileged server-side Admin SDK credentials (service account) are configured.
+ */
+export function hasAdminCredentials(): boolean {
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.trim();
+  const rawPrivateKey = process.env.FIREBASE_PRIVATE_KEY?.trim();
+  const saKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY?.trim() || process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
+  return Boolean((clientEmail && rawPrivateKey) || saKey);
+}
+
+/**
  * Returns the initialized Firebase Admin App singleton.
  */
 export function getAdminApp(): App {

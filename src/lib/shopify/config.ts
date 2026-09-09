@@ -4,6 +4,30 @@
  */
 
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+
+function getEnvFallback(key: string): string | undefined {
+  if (process.env[key]) return process.env[key];
+  try {
+    const envPaths = [
+      path.join(process.cwd(), '.env.local'),
+      path.join(process.cwd(), '.env'),
+    ];
+    for (const p of envPaths) {
+      if (fs.existsSync(p)) {
+        const content = fs.readFileSync(p, 'utf8');
+        const match = content.match(new RegExp(`^${key}=([^\\r\\n]+)`, 'm'));
+        if (match && match[1]) {
+          const val = match[1].trim().replace(/^['"]|['"]$/g, '');
+          process.env[key] = val;
+          return val;
+        }
+      }
+    }
+  } catch {}
+  return undefined;
+}
 
 /**
  * Single centralized configuration value for supported stable Shopify Admin API version.
@@ -12,11 +36,15 @@ import crypto from 'crypto';
 export const SHOPIFY_API_VERSION = (process.env.SHOPIFY_API_VERSION || '2026-07').trim();
 
 export function getShopifyApiVersion(): string {
-  return (process.env.SHOPIFY_API_VERSION || SHOPIFY_API_VERSION).trim();
+  return (process.env.SHOPIFY_API_VERSION || getEnvFallback('SHOPIFY_API_VERSION') || SHOPIFY_API_VERSION).trim();
 }
 
 export function getShopifyClientId(): string {
-  const clientId = process.env.SHOPIFY_CLIENT_ID;
+  const clientId =
+    process.env.SHOPIFY_CLIENT_ID ||
+    process.env.NEXT_PUBLIC_SHOPIFY_CLIENT_ID ||
+    getEnvFallback('SHOPIFY_CLIENT_ID') ||
+    getEnvFallback('NEXT_PUBLIC_SHOPIFY_CLIENT_ID');
   if (!clientId) {
     throw new Error('SHOPIFY_CLIENT_ID environment variable is missing on server.');
   }
@@ -24,7 +52,9 @@ export function getShopifyClientId(): string {
 }
 
 export function getShopifyClientSecret(): string {
-  const secret = process.env.SHOPIFY_CLIENT_SECRET;
+  const secret =
+    process.env.SHOPIFY_CLIENT_SECRET ||
+    getEnvFallback('SHOPIFY_CLIENT_SECRET');
   if (!secret) {
     throw new Error('SHOPIFY_CLIENT_SECRET environment variable is missing on server.');
   }
@@ -102,13 +132,14 @@ export function getShopifyScopes(): string[] {
   return [...REQUIRED_SHOPIFY_SCOPES];
 }
 
-export function getShopifyAppUrl(incomingHost?: string): string {
+export function getShopifyAppUrl(incomingHost?: string, incomingProto?: string): string {
   const envUrl = process.env.SHOPIFY_APP_URL || process.env.NEXT_PUBLIC_APP_URL;
-  if (envUrl && !envUrl.includes('localhost')) {
+  if (envUrl && !envUrl.includes('localhost') && !envUrl.includes('127.0.0.1')) {
     return envUrl.replace(/\/$/, '');
   }
   if (incomingHost) {
-    const proto = incomingHost.includes('localhost') ? 'http' : 'https';
+    const isLocal = incomingHost.includes('localhost') || incomingHost.includes('127.0.0.1');
+    const proto = incomingProto || (isLocal ? 'http' : 'https');
     return `${proto}://${incomingHost}`.replace(/\/$/, '');
   }
   return (envUrl || 'http://localhost:9002').replace(/\/$/, '');

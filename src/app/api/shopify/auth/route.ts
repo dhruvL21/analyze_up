@@ -10,7 +10,9 @@ import { saveOAuthState } from '@/lib/shopify/connection-store';
 import { resolveServerTenant } from '@/lib/shopify/auth-guard';
 
 function getOAuthRedirectUri(req: NextRequest): string {
-  const appUrl = getShopifyAppUrl(req.headers.get('host') || undefined);
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || undefined;
+  const proto = req.headers.get('x-forwarded-proto') || undefined;
+  const appUrl = getShopifyAppUrl(host, proto);
   return `${appUrl}/api/shopify/callback`;
 }
 
@@ -48,7 +50,15 @@ export async function POST(req: NextRequest) {
     }
 
     const clientId = getShopifyClientId();
-    const scopes = getShopifyScopes().join(',');
+    let requestedScopes: string[] = getShopifyScopes();
+    if (Array.isArray(body.scopes) && body.scopes.length > 0) {
+      requestedScopes = body.scopes.map((s: string) => String(s).trim()).filter(Boolean);
+    } else if (typeof body.scopes === 'string' && body.scopes.trim()) {
+      requestedScopes = body.scopes.split(',').map((s: string) => s.trim()).filter(Boolean);
+    }
+
+    // Ensure core scopes are included for baseline function
+    const scopes = Array.from(new Set(['read_products', 'read_orders', 'read_inventory', ...requestedScopes])).join(',');
     const redirectUri = getOAuthRedirectUri(req);
 
     // Generate cryptographically secure one-time state nonce
@@ -76,6 +86,7 @@ export async function POST(req: NextRequest) {
       success: true,
       authUrl,
       shop,
+      scopes: scopes.split(','),
     });
   } catch (error: any) {
     console.error('[Shopify Auth Initiation Error]:', error);

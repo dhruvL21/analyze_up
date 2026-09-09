@@ -18,6 +18,7 @@ import { useData } from '@/context/data-context';
 import { useToast } from '@/hooks/use-toast';
 import { useUser, useFirestore } from '@/firebase';
 import { doc, setDoc } from 'firebase/firestore';
+import { cn } from '@/lib/utils';
 import {
   Store,
   ShoppingBag,
@@ -33,6 +34,9 @@ import {
   ShieldCheck,
   Sliders,
   Clock,
+  Check,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { ShopifyScheduleModal } from '@/components/shopify-schedule-modal';
 import {
@@ -85,6 +89,14 @@ export function ShopifyConnectModal() {
   // 1. Initiate One-Click OAuth Flow (Zero-trust server-resolved session)
   const handleOAuthConnect = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      toast({
+        variant: 'destructive',
+        title: 'Sign In Required',
+        description: 'Please sign in to your AnalyzeUp account before connecting your Shopify store.',
+      });
+      return;
+    }
     if (!storeUrl.trim()) {
       toast({
         variant: 'destructive',
@@ -304,6 +316,23 @@ export function ShopifyConnectModal() {
     }
 
     try {
+      const shopToDisconnect = businessProfile?.shopifyStoreUrl || storeUrl;
+      const idToken = user ? await user.getIdToken().catch(() => null) : null;
+
+      // 1. Notify server store to mark connection as DISCONNECTED
+      await fetch('/api/shopify/disconnect', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          shop: shopToDisconnect,
+          userId: user?.uid,
+        }),
+      }).catch(console.warn);
+
+      // 2. Update client Firestore
       if (user && firestore) {
         const connectionRef = doc(firestore, 'users', user.uid, 'integrations', 'shopify');
         await setDoc(
@@ -316,13 +345,14 @@ export function ShopifyConnectModal() {
         );
       }
 
+      // 3. Update business profile in state & storage
       await updateBusinessProfile({
         shopifyConnected: false,
         shopifyStoreUrl: '',
         shopifyStoreName: '',
         shopifyStatus: 'Disconnected',
         shopifyAccessToken: undefined,
-      });
+      }, true);
 
       setStoreUrl('');
       setAccessToken('');
@@ -404,9 +434,12 @@ export function ShopifyConnectModal() {
     }
   };
 
+  if (!showShopifyModal && !showScheduleModal) return null;
+
   return (
-    <Dialog open={showShopifyModal} onOpenChange={setShowShopifyModal}>
-      <DialogContent className="w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto ios-glass rounded-3xl border border-border/50 p-6 shadow-2xl">
+    <>
+      <Dialog open={showShopifyModal} onOpenChange={setShowShopifyModal}>
+        <DialogContent className="w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto ios-glass rounded-3xl border border-border/50 p-6 shadow-2xl">
         <DialogHeader className="text-left pb-1">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
@@ -683,10 +716,10 @@ export function ShopifyConnectModal() {
 
                   <div className="p-3 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 text-xs space-y-1.5">
                     <div className="flex items-center gap-1.5 font-semibold text-emerald-400">
-                      <Sparkles className="w-3.5 h-3.5" /> Automatic Partner App Authorization
+                      <Sparkles className="w-3.5 h-3.5" /> Official Shopify Approval
                     </div>
                     <p className="text-muted-foreground text-[11px] leading-relaxed">
-                      You will be securely redirected to Shopify to approve catalog & orders read access for AnalyzeUp.
+                      You will be securely redirected to Shopify to review and approve these permissions.
                     </p>
                   </div>
 
@@ -798,12 +831,15 @@ export function ShopifyConnectModal() {
           </Button>
         </DialogFooter>
       </DialogContent>
+    </Dialog>
 
-      {/* Submodal for Schedule & Automation */}
+    {/* Submodal for Schedule & Automation */}
+    {showScheduleModal && (
       <ShopifyScheduleModal
         open={showScheduleModal}
         onOpenChange={setShowScheduleModal}
       />
-    </Dialog>
+    )}
+  </>
   );
 }

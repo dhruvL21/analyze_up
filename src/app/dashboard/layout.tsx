@@ -1,4 +1,3 @@
-
 'use client';
 import { Header } from '@/components/header';
 import { useUser } from '@/firebase';
@@ -169,7 +168,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       >
         <Header />
         <ActiveImportBanner />
-        <main className="flex-1 p-4 sm:p-6 md:p-8 overflow-y-auto relative">
+        <main className="flex-1 p-4 sm:p-6 md:p-8 pb-28 sm:pb-32 overflow-y-auto relative">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={pathname}
@@ -189,7 +188,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {showSubscriptionModal && <SubscriptionModal />}
       {showOnboardingWizard && <SmartOnboardingWizard />}
       {showWelcomeModal && <SmartWelcomeModal />}
-      {showShopifyModal && <ShopifyConnectModal />}
+      <ShopifyConnectModal />
       <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive" />
     </div>
   );

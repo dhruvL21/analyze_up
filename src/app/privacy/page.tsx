@@ -16,12 +16,13 @@ import {
   HelpCircle,
   Server,
   Layers,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy | AnalyzeUp Intelligence Platform',
   description:
-    'Comprehensive Privacy Policy explaining how AnalyzeUp collects, encrypts, isolates, processes, and protects merchant and store data.',
+    'Comprehensive Privacy Policy explaining how AnalyzeUp collects, encrypts, isolates, processes, and protects merchant and store data, including Google Drive and Shopify integrations.',
 };
 
 const TOC = [
@@ -30,15 +31,16 @@ const TOC = [
   { id: 'how-we-use-data', title: '3. How We Process & Utilize Data' },
   { id: 'data-isolation', title: '4. Multi-Tenant Isolation & Cloud Security' },
   { id: 'shopify-merchant-data', title: '5. Shopify Integration & Merchant Data Handling' },
-  { id: 'ai-copilot-privacy', title: '6. AI Copilot, LLMs & Machine Learning Privacy' },
-  { id: 'subprocessors', title: '7. Authorized Third-Party Sub-processors' },
-  { id: 'data-retention-purge', title: '8. Data Retention, Uninstalls & Data Purge' },
-  { id: 'merchant-rights', title: '9. Your Rights: GDPR, CCPA & Data Portability' },
-  { id: 'security-measures', title: '10. Technical & Organizational Security Measures' },
-  { id: 'cookies-telemetry', title: '11. Cookies, Sessions & Telemetry' },
-  { id: 'children', title: "12. Children's Privacy" },
-  { id: 'policy-updates', title: '13. Updates to this Privacy Policy' },
-  { id: 'dpo-contact', title: '14. Data Protection Officer & Privacy Inquiries' },
+  { id: 'google-drive-integration', title: '6. Google Drive Integration & Google API Limited Use Policy' },
+  { id: 'ai-copilot-privacy', title: '7. AI Copilot, LLMs & Machine Learning Privacy' },
+  { id: 'subprocessors', title: '8. Authorized Third-Party Sub-processors' },
+  { id: 'data-retention-purge', title: '9. Data Retention, Uninstalls & Data Purge' },
+  { id: 'merchant-rights', title: '10. Your Rights: GDPR, CCPA & Data Portability' },
+  { id: 'security-measures', title: '11. Technical & Organizational Security Measures' },
+  { id: 'cookies-telemetry', title: '12. Cookies, Sessions & Telemetry' },
+  { id: 'children', title: "13. Children's Privacy" },
+  { id: 'policy-updates', title: '14. Updates to this Privacy Policy' },
+  { id: 'dpo-contact', title: '15. Data Protection Officer & Privacy Inquiries' },
 ];
 
 export default function PrivacyPolicyPage() {
@@ -47,8 +49,8 @@ export default function PrivacyPolicyPage() {
       title="Privacy Policy"
       subtitle="At AnalyzeUp, we believe transparency is the bedrock of merchant trust. This Privacy Policy details the exact mechanisms through which your business data, store orders, inventory records, and user credentials are collected, securely encrypted, strictly isolated, and processed."
       documentType="privacy"
-      lastUpdated="September 8, 2026"
-      effectiveDate="September 8, 2026"
+      lastUpdated="September 9, 2026"
+      effectiveDate="September 9, 2026"
       toc={TOC}
     >
       {/* Executive Summary & Key Descriptions At a Glance */}
@@ -68,11 +70,11 @@ export default function PrivacyPolicyPage() {
           </div>
           <div className="p-3.5 rounded-xl border border-border/40 bg-secondary/20 space-y-1">
             <span className="font-semibold text-foreground">AES-256 Encrypted Token Vault</span>
-            <p className="text-muted-foreground">Shopify access tokens are encrypted with AES-256-GCM and stored only in server-side vaults.</p>
+            <p className="text-muted-foreground">Shopify and Google OAuth access tokens are encrypted with AES-256-GCM and stored only in server-side vaults.</p>
           </div>
           <div className="p-3.5 rounded-xl border border-border/40 bg-secondary/20 space-y-1">
             <span className="font-semibold text-foreground">Automated 48-Hour Data Purge</span>
-            <p className="text-muted-foreground">Uninstalling from Shopify immediately invalidates tokens and schedules full data erasure.</p>
+            <p className="text-muted-foreground">Disconnecting external stores immediately invalidates tokens and schedules full data erasure.</p>
           </div>
         </div>
       </div>
@@ -98,7 +100,7 @@ export default function PrivacyPolicyPage() {
             </p>
           </div>
           <p>
-            This policy applies to all visitors, registered workspace members, and merchants who install our application or connect external platforms (including Shopify, Zoho, Tally, or custom ERP systems).
+            This policy applies to all visitors, registered workspace members, and merchants who install our application or connect external platforms (including Shopify, Google Drive, Zoho, Tally, or custom ERP systems).
           </p>
         </div>
       </section>
@@ -118,35 +120,27 @@ export default function PrivacyPolicyPage() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
             <div className="p-3.5 rounded-xl border border-border/40 bg-card/60 space-y-1.5">
-              <span className="font-semibold text-foreground flex items-center gap-1.5">
-                <Lock className="w-3.5 h-3.5 text-primary" /> Workspace & Account Credentials
-              </span>
+              <span className="font-bold text-foreground block">Product Catalog Data</span>
               <p className="text-muted-foreground">
-                Merchant name, email address, password hash (managed securely via Firebase Auth), company name, billing address, and workspace role assignments.
+                Product titles, descriptions, SKUs, barcodes, variants, categories, weight, vendor names, and inventory tracking IDs.
               </p>
             </div>
             <div className="p-3.5 rounded-xl border border-border/40 bg-card/60 space-y-1.5">
-              <span className="font-semibold text-foreground flex items-center gap-1.5">
-                <RefreshCw className="w-3.5 h-3.5 text-primary" /> Store Catalog & Inventory Data
-              </span>
+              <span className="font-bold text-foreground block">Stock & Warehouse Levels</span>
               <p className="text-muted-foreground">
-                Product SKUs, titles, barcodes, inventory quantities across locations, cost of goods sold (COGS), selling prices, and supplier lead times.
+                Current quantities across physical and digital fulfillment locations, safety stock thresholds, and replenishment lead times.
               </p>
             </div>
             <div className="p-3.5 rounded-xl border border-border/40 bg-card/60 space-y-1.5">
-              <span className="font-semibold text-foreground flex items-center gap-1.5">
-                <FileCheck className="w-3.5 h-3.5 text-primary" /> Transaction & Order Telemetry
-              </span>
+              <span className="font-bold text-foreground block">Order & Sales Telemetry</span>
               <p className="text-muted-foreground">
-                Order timestamps, line items, quantities fulfilled, financial status (paid, refunded), refund amounts, and return lifecycle logs. Customer PII is pseudonymized or minimized.
+                Order IDs, timestamps, line items, quantities purchased, fulfillment statuses, and returned product quantities. We do not store raw customer payment card numbers.
               </p>
             </div>
             <div className="p-3.5 rounded-xl border border-border/40 bg-card/60 space-y-1.5">
-              <span className="font-semibold text-foreground flex items-center gap-1.5">
-                <Server className="w-3.5 h-3.5 text-primary" /> Technical & Audit Logs
-              </span>
+              <span className="font-bold text-foreground block">Supplier & Cost Pricing</span>
               <p className="text-muted-foreground">
-                IP addresses, browser client fingerprints, webhook delivery timestamps, user action audit logs, and diagnostic telemetry for uptime monitoring.
+                Cost of goods sold (COGS), purchase order records, minimum order quantities (MOQ), and supplier vendor contact information.
               </p>
             </div>
           </div>
@@ -164,13 +158,13 @@ export default function PrivacyPolicyPage() {
           3. How We Process & Utilize Data
         </h2>
         <div className="space-y-3 text-muted-foreground leading-relaxed">
-          <p>Your data is processed strictly for legitimate operational purposes:</p>
+          <p>AnalyzeUp processes your data strictly for legitimate commercial purposes:</p>
           <ul className="list-disc pl-5 space-y-1.5 text-xs">
-            <li><strong className="text-foreground">Predictive Stock Forecasting:</strong> Calculating run-out dates, reorder point thresholds, and safety stock requirements based on historical sales velocity.</li>
-            <li><strong className="text-foreground">Dead-Stock Identification:</strong> Flagging dormant inventory capital to optimize working capital efficiency.</li>
-            <li><strong className="text-foreground">Purchase Order Automation:</strong> Auto-generating draft purchase orders directed to designated suppliers when stock breaches reorder thresholds.</li>
-            <li><strong className="text-foreground">Two-Way Inventory Sync:</strong> Reflecting received purchase orders and adjustments back to Shopify locations without infinite loop echoes.</li>
-            <li><strong className="text-foreground">Executive Insights & Alerts:</strong> Dispatching proactive alerts (via in-app drawer or notifications) when critical margin erosion or stockouts are imminent.</li>
+            <li><strong className="text-foreground">Predictive Analytics:</strong> Generating statistical sales velocity models, seasonal demand projections, and stock depletion forecasts.</li>
+            <li><strong className="text-foreground">Dead-Stock Detection:</strong> Highlighting capital locked in non-moving inventory and formulating markdown or liquidation recommendations.</li>
+            <li><strong className="text-foreground">Purchase Order Generation:</strong> Synthesizing reorder thresholds to automatically draft supplier purchase orders.</li>
+            <li><strong className="text-foreground">Return Rate Intelligence:</strong> Identifying SKUs with high defect or return rates to protect gross margins.</li>
+            <li><strong className="text-foreground">Security Auditing:</strong> Recording workspace authentication events, team member modifications, and integration synchronization logs.</li>
           </ul>
         </div>
       </section>
@@ -180,24 +174,24 @@ export default function PrivacyPolicyPage() {
       {/* 4. Multi-Tenant Isolation & Cloud Security */}
       <section id="data-isolation" className="scroll-mt-28 space-y-4">
         <div className="flex items-center gap-2.5 text-primary font-bold text-sm uppercase tracking-wider">
-          <Layers className="w-4 h-4" /> Section 04
+          <Lock className="w-4 h-4" /> Section 04
         </div>
         <h2 className="text-2xl font-extrabold tracking-tight text-foreground">
-          4. Multi-Tenant Isolation & Cloud Security Architecture
+          4. Multi-Tenant Isolation & Cloud Security
         </h2>
         <div className="space-y-3 text-muted-foreground leading-relaxed">
           <p>
-            AnalyzeUp is built with multi-tenant data segregation as an architectural primitive. All cloud storage in Google Cloud Firestore is logically isolated:
+            AnalyzeUp is built on an enterprise multi-tenant cloud architecture. Every merchant workspace is allocated a dedicated, immutable tenant identifier (<code className="font-mono text-primary text-xs">tenantId</code>).
           </p>
           <ul className="list-disc pl-5 space-y-1.5 text-xs">
             <li>
-              Workspace databases enforce partition keys (`users/{'{userId}'}/...`, `shopify_connections/{'{shopDomain}'}`) where tenant ownership is verified at both the database security rule layer and privileged server-side Admin SDK handler layer.
+              <strong className="text-foreground">Database Level Segregation:</strong> All Firestore database rules and server queries require verified session tenant tokens matching the requested document&apos;s tenantId.
             </li>
             <li>
-              No query or background worker can cross tenant boundaries. A user authenticated under Tenant A cannot query, view, or modify products, orders, or sync jobs belonging to Tenant B.
+              <strong className="text-foreground">Zero Cross-Tenant Leakage:</strong> No merchant can view, query, or inadvertently access the inventory figures or sales history of any other merchant on the platform.
             </li>
             <li>
-              Data in transit is encrypted using Transport Layer Security (TLS 1.3), and all data at rest is encrypted using AES-256 standards.
+              <strong className="text-foreground">Encryption Everywhere:</strong> Data in transit is encrypted using Transport Layer Security (TLS 1.3), and all data at rest is encrypted using AES-256 standards.
             </li>
           </ul>
         </div>
@@ -243,13 +237,85 @@ export default function PrivacyPolicyPage() {
 
       <hr className="border-border/40" />
 
-      {/* 6. AI Copilot, LLMs & Machine Learning Privacy */}
-      <section id="ai-copilot-privacy" className="scroll-mt-28 space-y-4">
+      {/* 6. Google Drive Integration & Google API Limited Use Policy */}
+      <section id="google-drive-integration" className="scroll-mt-28 space-y-4">
         <div className="flex items-center gap-2.5 text-primary font-bold text-sm uppercase tracking-wider">
-          <Cpu className="w-4 h-4" /> Section 06
+          <FileSpreadsheet className="w-4 h-4" /> Section 06
         </div>
         <h2 className="text-2xl font-extrabold tracking-tight text-foreground">
-          6. AI Copilot, LLMs & Machine Learning Privacy
+          6. Google Drive Integration & Google API Limited Use Policy
+        </h2>
+        <div className="space-y-3 text-muted-foreground leading-relaxed">
+          <p>
+            AnalyzeUp provides an optional Google Drive integration to enable merchants to import catalog spreadsheets, synchronize supplier purchase orders, and automate stock records directly from their Google cloud storage.
+          </p>
+
+          <div className="p-4 rounded-xl border border-border/40 bg-secondary/20 space-y-2">
+            <span className="font-semibold text-foreground text-xs block">
+              Google OAuth Scopes Requested
+            </span>
+            <p className="text-xs text-muted-foreground">
+              When you connect Google Drive, AnalyzeUp requests only the following minimal permissions:
+            </p>
+            <div className="flex flex-wrap gap-2 pt-1 font-mono text-[11px]">
+              <span className="px-2 py-0.5 rounded bg-background border border-border/50 text-foreground">https://www.googleapis.com/auth/drive.readonly</span>
+              <span className="px-2 py-0.5 rounded bg-background border border-border/50 text-foreground">https://www.googleapis.com/auth/drive.file</span>
+              <span className="px-2 py-0.5 rounded bg-background border border-border/50 text-foreground">https://www.googleapis.com/auth/userinfo.email</span>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-xl border border-emerald-500/25 bg-emerald-500/5 space-y-2">
+            <div className="flex items-center gap-1.5 font-bold text-emerald-400 text-xs">
+              <CheckCircle2 className="w-4 h-4" /> Google API Services User Data Policy Compliance
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              AnalyzeUp&apos;s use and transfer to any other app of information received from Google APIs will adhere to the{' '}
+              <a
+                href="https://developers.google.com/terms/api-services-user-data-policy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary font-semibold hover:underline"
+              >
+                Google API Services User Data Policy
+              </a>
+              , including the Limited Use requirements.
+            </p>
+          </div>
+
+          <ul className="list-disc pl-5 space-y-1.5 text-xs">
+            <li>
+              <strong className="text-foreground">Explicit Merchant Action:</strong> AnalyzeUp only reads, parses, or modifies files that you explicitly select for inventory, PO, or supplier sync. We never scan, index, or access unrelated personal files or folders in your Google Drive.
+            </li>
+            <li>
+              <strong className="text-foreground">Zero AI Model Training:</strong> Data obtained via Google Drive APIs is NEVER used to train, retrain, or fine-tune generalized artificial intelligence (AI) or machine learning (ML) foundation models.
+            </li>
+            <li>
+              <strong className="text-foreground">Zero Advertising or Brokering:</strong> Google user data is never transferred, rented, or sold to third-party data brokers or advertising platforms.
+            </li>
+            <li>
+              <strong className="text-foreground">Revocation of Access:</strong> You may disconnect Google Drive at any time from Dashboard &gt; Integrations, or directly revoke AnalyzeUp&apos;s access in your{' '}
+              <a
+                href="https://myaccount.google.com/permissions"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary font-semibold hover:underline"
+              >
+                Google Account Security Settings
+              </a>.
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <hr className="border-border/40" />
+
+      {/* 7. AI Copilot, LLMs & Machine Learning Privacy */}
+      <section id="ai-copilot-privacy" className="scroll-mt-28 space-y-4">
+        <div className="flex items-center gap-2.5 text-primary font-bold text-sm uppercase tracking-wider">
+          <Cpu className="w-4 h-4" /> Section 07
+        </div>
+        <h2 className="text-2xl font-extrabold tracking-tight text-foreground">
+          7. AI Copilot, LLMs & Machine Learning Privacy
         </h2>
         <div className="space-y-3 text-muted-foreground leading-relaxed">
           <p>
@@ -271,13 +337,13 @@ export default function PrivacyPolicyPage() {
 
       <hr className="border-border/40" />
 
-      {/* 7. Authorized Third-Party Sub-processors */}
+      {/* 8. Authorized Third-Party Sub-processors */}
       <section id="subprocessors" className="scroll-mt-28 space-y-4">
         <div className="flex items-center gap-2.5 text-primary font-bold text-sm uppercase tracking-wider">
-          <Server className="w-4 h-4" /> Section 07
+          <Server className="w-4 h-4" /> Section 08
         </div>
         <h2 className="text-2xl font-extrabold tracking-tight text-foreground">
-          7. Authorized Third-Party Sub-processors
+          8. Authorized Third-Party Sub-processors
         </h2>
         <div className="space-y-3 text-muted-foreground leading-relaxed">
           <p>We work with trusted tier-1 infrastructure providers bound by strict Data Protection Agreements (DPAs):</p>
@@ -293,7 +359,7 @@ export default function PrivacyPolicyPage() {
               <tbody className="divide-y divide-border/30 text-muted-foreground">
                 <tr>
                   <td className="p-3 font-medium text-foreground">Google Cloud Platform / Firebase</td>
-                  <td className="p-3">Cloud hosting, multi-tenant Firestore database, authentication, background compute</td>
+                  <td className="p-3">Cloud hosting, multi-tenant Firestore database, authentication, Google Drive sync</td>
                   <td className="p-3">Global / US / Asia</td>
                 </tr>
                 <tr>
@@ -319,13 +385,13 @@ export default function PrivacyPolicyPage() {
 
       <hr className="border-border/40" />
 
-      {/* 8. Data Retention, Uninstalls & Data Purge */}
+      {/* 9. Data Retention, Uninstalls & Data Purge */}
       <section id="data-retention-purge" className="scroll-mt-28 space-y-4">
         <div className="flex items-center gap-2.5 text-primary font-bold text-sm uppercase tracking-wider">
-          <Trash2 className="w-4 h-4" /> Section 08
+          <Trash2 className="w-4 h-4" /> Section 09
         </div>
         <h2 className="text-2xl font-extrabold tracking-tight text-foreground">
-          8. Data Retention, App Uninstalls & Automated Data Purge
+          9. Data Retention, App Uninstalls & Automated Data Purge
         </h2>
         <div className="space-y-3 text-muted-foreground leading-relaxed">
           <p>
@@ -336,10 +402,10 @@ export default function PrivacyPolicyPage() {
               <Trash2 className="w-4 h-4" /> App Uninstall & Disconnect Lifecycle
             </span>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              When a merchant uninstalls AnalyzeUp from Shopify:
+              When a merchant uninstalls AnalyzeUp or disconnects integrations:
             </p>
             <ol className="list-decimal pl-5 space-y-1 text-xs text-muted-foreground">
-              <li>Our webhook processor immediately receives Shopify&apos;s verified `app/uninstalled` event.</li>
+              <li>Our webhook processor immediately receives platform disconnect events.</li>
               <li>Encrypted offline access tokens are scrubbed from database records immediately.</li>
               <li>Connection status is updated to `UNINSTALLED` and background sync jobs are halted.</li>
               <li>All historical cached order and catalog records are queued for permanent deletion within 48 hours unless a manual export is requested.</li>
@@ -350,13 +416,13 @@ export default function PrivacyPolicyPage() {
 
       <hr className="border-border/40" />
 
-      {/* 9. Your Rights: GDPR, CCPA & Data Portability */}
+      {/* 10. Your Rights: GDPR, CCPA & Data Portability */}
       <section id="merchant-rights" className="scroll-mt-28 space-y-4">
         <div className="flex items-center gap-2.5 text-primary font-bold text-sm uppercase tracking-wider">
-          <FileCheck className="w-4 h-4" /> Section 09
+          <FileCheck className="w-4 h-4" /> Section 10
         </div>
         <h2 className="text-2xl font-extrabold tracking-tight text-foreground">
-          9. Your Rights: GDPR, CCPA & Data Portability
+          10. Your Rights: GDPR, CCPA & Data Portability
         </h2>
         <div className="space-y-3 text-muted-foreground leading-relaxed">
           <p>
@@ -376,13 +442,13 @@ export default function PrivacyPolicyPage() {
 
       <hr className="border-border/40" />
 
-      {/* 10. Technical & Organizational Security Measures */}
+      {/* 11. Technical & Organizational Security Measures */}
       <section id="security-measures" className="scroll-mt-28 space-y-4">
         <div className="flex items-center gap-2.5 text-primary font-bold text-sm uppercase tracking-wider">
-          <Lock className="w-4 h-4" /> Section 10
+          <Lock className="w-4 h-4" /> Section 11
         </div>
         <h2 className="text-2xl font-extrabold tracking-tight text-foreground">
-          10. Technical & Organizational Security Measures
+          11. Technical & Organizational Security Measures
         </h2>
         <div className="space-y-3 text-muted-foreground leading-relaxed">
           <p>AnalyzeUp adheres to comprehensive defense-in-depth security standards:</p>
@@ -397,13 +463,13 @@ export default function PrivacyPolicyPage() {
 
       <hr className="border-border/40" />
 
-      {/* 11. Cookies, Sessions & Telemetry */}
+      {/* 12. Cookies, Sessions & Telemetry */}
       <section id="cookies-telemetry" className="scroll-mt-28 space-y-4">
         <div className="flex items-center gap-2.5 text-primary font-bold text-sm uppercase tracking-wider">
-          <Eye className="w-4 h-4" /> Section 11
+          <Eye className="w-4 h-4" /> Section 12
         </div>
         <h2 className="text-2xl font-extrabold tracking-tight text-foreground">
-          11. Cookies, Sessions & Telemetry
+          12. Cookies, Sessions & Telemetry
         </h2>
         <div className="space-y-3 text-muted-foreground leading-relaxed">
           <p>
@@ -414,13 +480,13 @@ export default function PrivacyPolicyPage() {
 
       <hr className="border-border/40" />
 
-      {/* 12. Children's Privacy */}
+      {/* 13. Children's Privacy */}
       <section id="children" className="scroll-mt-28 space-y-4">
         <div className="flex items-center gap-2.5 text-primary font-bold text-sm uppercase tracking-wider">
-          <ShieldCheck className="w-4 h-4" /> Section 12
+          <ShieldCheck className="w-4 h-4" /> Section 13
         </div>
         <h2 className="text-2xl font-extrabold tracking-tight text-foreground">
-          12. Children&apos;s Privacy
+          13. Children&apos;s Privacy
         </h2>
         <div className="space-y-3 text-muted-foreground leading-relaxed">
           <p>
@@ -431,13 +497,13 @@ export default function PrivacyPolicyPage() {
 
       <hr className="border-border/40" />
 
-      {/* 13. Updates to this Privacy Policy */}
+      {/* 14. Updates to this Privacy Policy */}
       <section id="policy-updates" className="scroll-mt-28 space-y-4">
         <div className="flex items-center gap-2.5 text-primary font-bold text-sm uppercase tracking-wider">
-          <RefreshCw className="w-4 h-4" /> Section 13
+          <RefreshCw className="w-4 h-4" /> Section 14
         </div>
         <h2 className="text-2xl font-extrabold tracking-tight text-foreground">
-          13. Updates to this Privacy Policy
+          14. Updates to this Privacy Policy
         </h2>
         <div className="space-y-3 text-muted-foreground leading-relaxed">
           <p>
@@ -448,13 +514,13 @@ export default function PrivacyPolicyPage() {
 
       <hr className="border-border/40" />
 
-      {/* 14. Data Protection Officer & Privacy Inquiries */}
+      {/* 15. Data Protection Officer & Privacy Inquiries */}
       <section id="dpo-contact" className="scroll-mt-28 space-y-4">
         <div className="flex items-center gap-2.5 text-primary font-bold text-sm uppercase tracking-wider">
-          <HelpCircle className="w-4 h-4" /> Section 14
+          <HelpCircle className="w-4 h-4" /> Section 15
         </div>
         <h2 className="text-2xl font-extrabold tracking-tight text-foreground">
-          14. Data Protection Officer & Privacy Inquiries
+          15. Data Protection Officer & Privacy Inquiries
         </h2>
         <div className="space-y-3 text-muted-foreground leading-relaxed">
           <p>

@@ -29,7 +29,9 @@ import type { ShopifyConnectionRecord } from '@/lib/shopify/types';
  */
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
-  const origin = getShopifyAppUrl(req.headers.get('host') || undefined);
+  const host = req.headers.get('x-forwarded-host') || req.headers.get('host') || undefined;
+  const proto = req.headers.get('x-forwarded-proto') || undefined;
+  const origin = getShopifyAppUrl(host, proto);
 
   const { searchParams } = url;
   const code = searchParams.get('code');
@@ -203,12 +205,16 @@ export async function GET(req: NextRequest) {
       console.warn('[Shopify OAuth] Could not query shop details via GraphQL:', shopErr);
     }
 
-    // 12. Query Shopify locations safely (adaptive)
-    try {
-      const locResult = await queryShopLocations(shop);
-      primaryLocationId = locResult.primaryLocationId;
-    } catch (locErr) {
-      console.warn('[Shopify OAuth] Could not query store locations via GraphQL (using fallback):', locErr);
+    // 12. Query Shopify locations safely (adaptive: only if read_locations scope is granted)
+    if (grantedScopes.includes('read_locations')) {
+      try {
+        const locResult = await queryShopLocations(shop);
+        primaryLocationId = locResult.primaryLocationId;
+      } catch (locErr) {
+        console.warn('[Shopify OAuth] Could not query store locations via GraphQL:', locErr);
+        primaryLocationId = 'primary';
+      }
+    } else {
       primaryLocationId = 'primary';
     }
 
