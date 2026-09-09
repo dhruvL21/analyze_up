@@ -19,6 +19,8 @@ import {
   TrendingDown,
   Coins,
   RefreshCw,
+  AlertTriangle,
+  AlertCircle,
 } from 'lucide-react';
 import {
   Dialog,
@@ -40,6 +42,7 @@ export function DeadStockSection() {
   } | null>(null);
 
   const [applyingId, setApplyingId] = useState<string | null>(null);
+  const [confirmPushItem, setConfirmPushItem] = useState<any | null>(null);
   const [recentLogs, setRecentLogs] = useState<BusinessAuditLog[]>([]);
 
   useEffect(() => {
@@ -239,14 +242,7 @@ export function DeadStockSection() {
                           size="sm"
                           variant="outline"
                           disabled={applyingId === item.id}
-                          onClick={async () => {
-                            setApplyingId(item.id);
-                            try {
-                              await updateProduct(item, { forceShopifySync: true, silentToast: false });
-                            } finally {
-                              setApplyingId(null);
-                            }
-                          }}
+                          onClick={() => setConfirmPushItem(item)}
                           className="rounded-xl text-[11px] h-7 px-3 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 gap-1.5 shrink-0 font-semibold cursor-pointer"
                         >
                           <RefreshCw className={`w-3 h-3 ${applyingId === item.id ? 'animate-spin' : ''}`} />
@@ -321,20 +317,11 @@ export function DeadStockSection() {
                         <Button
                           size="sm"
                           disabled={applyingId === item.id}
-                          onClick={() => executeApplyClearance(item, prediction)}
-                          className="rounded-xl text-xs h-8 bg-emerald-600 hover:bg-emerald-500 text-white font-bold gap-1 px-3.5 shadow-sm shadow-emerald-600/20"
+                          onClick={() => setConfirmItem({ product: item, prediction })}
+                          className="rounded-xl text-xs h-8 bg-emerald-600 hover:bg-emerald-500 text-white font-bold gap-1 px-3.5 shadow-sm shadow-emerald-600/20 cursor-pointer"
                         >
-                          {applyingId === item.id ? (
-                            <>
-                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                              Updating Database...
-                            </>
-                          ) : (
-                            <>
-                              <Tag className="w-3.5 h-3.5" />
-                              Apply {prediction.discountPercent}% Off
-                            </>
-                          )}
+                          <Tag className="w-3.5 h-3.5" />
+                          Apply {prediction.discountPercent}% Off
                         </Button>
                       </div>
                     </div>
@@ -358,63 +345,72 @@ export function DeadStockSection() {
         </CardContent>
       </Card>
 
-      {/* Confirmation Dialog with Full AI Prediction Rationale */}
+      {/* Confirmation Dialog with Full AI Prediction Rationale & Warning */}
       <Dialog
         open={confirmItem !== null}
         onOpenChange={(open) => {
-          if (!open) setConfirmItem(null);
+          if (!open && !applyingId) setConfirmItem(null);
         }}
       >
         <DialogContent className="max-w-md bg-zinc-950/95 border border-emerald-500/30 rounded-3xl ios-glass text-white shadow-2xl p-6">
           <DialogHeader className="space-y-2">
-            <div className="flex items-center gap-2">
-              <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                <Sparkles className="w-5 h-5 text-emerald-400" />
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                <AlertTriangle className="w-5 h-5 text-amber-400" />
               </div>
-              <DialogTitle className="text-base font-bold text-white">AI Clearance Recommendation</DialogTitle>
+              <div>
+                <DialogTitle className="text-base font-bold text-white">Confirm Price Change & Clearance</DialogTitle>
+                <DialogDescription className="text-xs text-zinc-400">
+                  Please review and confirm before modifying your database and Shopify store.
+                </DialogDescription>
+              </div>
             </div>
-            <DialogDescription className="text-xs text-zinc-400">
-              Optimal discount calculated by the product margin & capital elasticity prediction model.
-            </DialogDescription>
           </DialogHeader>
 
           {confirmItem && (
             <div className="py-2 text-xs space-y-3">
-              <div className="p-3.5 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-2.5">
+              <div className="p-3.5 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-zinc-200 font-bold text-sm">{confirmItem.product.name}</span>
-                  <Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold">
+                  <span className="text-zinc-200 font-bold text-sm truncate">{confirmItem.product.name}</span>
+                  <Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold shrink-0">
                     -{confirmItem.prediction.discountPercent}% Clearance
                   </Badge>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-zinc-800">
                   <div>
-                    <span className="text-zinc-400 block">Current Price:</span>
-                    <span className="line-through text-zinc-300 font-bold">{currencySymbol}{confirmItem.prediction.oldPrice}</span>
+                    <span className="text-zinc-400 block">Current Selling Price:</span>
+                    <span className="line-through text-zinc-300 font-bold text-sm">{currencySymbol}{confirmItem.prediction.oldPrice.toLocaleString('en-IN')}</span>
                   </div>
                   <div>
-                    <span className="text-zinc-400 block">Target Clearance Price:</span>
-                    <span className="text-emerald-400 font-extrabold text-sm">{currencySymbol}{confirmItem.prediction.newPrice}</span>
+                    <span className="text-zinc-400 block">New Discounted Price:</span>
+                    <span className="text-emerald-400 font-extrabold text-base">{currencySymbol}{confirmItem.prediction.newPrice.toLocaleString('en-IN')}</span>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2 text-[11px] pt-1 border-t border-zinc-800/80">
                   <div>
-                    <span className="text-zinc-400 block">Post-Promo Margin:</span>
-                    <span className="text-zinc-200 font-semibold">{confirmItem.prediction.grossMarginAfter}%</span>
+                    <span className="text-zinc-400 block">Margin Headroom:</span>
+                    <span className="text-zinc-200 font-semibold">{confirmItem.prediction.grossMarginBefore}% → {confirmItem.prediction.grossMarginAfter}%</span>
                   </div>
                   <div>
-                    <span className="text-zinc-400 block">Cash Unlocked:</span>
+                    <span className="text-zinc-400 block">Capital to Unlock:</span>
                     <span className="text-emerald-300 font-bold">{currencySymbol}{confirmItem.prediction.estimatedCashUnlocked.toLocaleString('en-IN')}</span>
                   </div>
                 </div>
 
                 <div className="p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-[11px] text-zinc-300 leading-relaxed">
                   <span className="text-emerald-400 font-bold block mb-0.5 flex items-center gap-1">
-                    <Sparkles className="w-3 h-3 text-emerald-400" /> AI Pricing Rationale:
+                    <Sparkles className="w-3 h-3 text-emerald-400" /> AI Strategy: {confirmItem.prediction.liquidationStrategy}
                   </span>
                   {confirmItem.prediction.aiRationale}
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200 flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Confirmation Required:</strong> Applying this will immediately write the new price ({currencySymbol}{confirmItem.prediction.newPrice.toLocaleString('en-IN')}) to your Firestore database and sync it to your live Shopify store variants.
+                  </span>
                 </div>
               </div>
             </div>
@@ -423,8 +419,9 @@ export function DeadStockSection() {
           <DialogFooter className="flex flex-row items-center justify-end gap-2 pt-4 border-t border-zinc-800/40">
             <Button
               variant="ghost"
+              disabled={Boolean(applyingId)}
               onClick={() => setConfirmItem(null)}
-              className="rounded-xl text-xs hover:bg-zinc-900 text-zinc-400 hover:text-white px-3"
+              className="rounded-xl text-xs hover:bg-zinc-900 text-zinc-400 hover:text-white px-4"
             >
               Cancel
             </Button>
@@ -435,15 +432,95 @@ export function DeadStockSection() {
                   executeApplyClearance(confirmItem.product, confirmItem.prediction);
                 }
               }}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs px-4 flex items-center gap-1.5"
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs px-4 flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
             >
               {confirmItem && applyingId === confirmItem.product.id ? (
                 <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  Saving to Database...
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1" />
+                  Updating Database...
                 </>
               ) : (
-                'Confirm & Save to Database'
+                <>
+                  <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+                  Confirm & Apply Changes
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmation Dialog for Push to Shopify */}
+      <Dialog
+        open={confirmPushItem !== null}
+        onOpenChange={(open) => {
+          if (!open && !applyingId) setConfirmPushItem(null);
+        }}
+      >
+        <DialogContent className="max-w-md bg-zinc-950/95 border border-emerald-500/30 rounded-3xl ios-glass text-white shadow-2xl p-6">
+          <DialogHeader className="space-y-2">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                <RefreshCw className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <DialogTitle className="text-base font-bold text-white">Confirm Shopify Price Push</DialogTitle>
+                <DialogDescription className="text-xs text-zinc-400">
+                  Verify the price before pushing live to your storefront.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {confirmPushItem && (
+            <div className="py-2 text-xs space-y-3">
+              <div className="p-3.5 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-2.5">
+                <span className="text-zinc-200 font-bold text-sm block truncate">{confirmPushItem.name}</span>
+                <div className="text-xs text-zinc-300">
+                  Target Price: <strong className="text-emerald-400">{currencySymbol}{confirmPushItem.price?.toLocaleString('en-IN')}</strong>
+                  {confirmPushItem.compareAtPrice ? (
+                    <span className="ml-2 text-zinc-500 line-through">
+                      {currencySymbol}{confirmPushItem.compareAtPrice?.toLocaleString('en-IN')}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-zinc-300">
+                  Are you sure you want to push this price override to your live Shopify product variants?
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="flex flex-row items-center justify-end gap-2 pt-4 border-t border-zinc-800/40">
+            <Button
+              variant="ghost"
+              disabled={Boolean(applyingId)}
+              onClick={() => setConfirmPushItem(null)}
+              className="rounded-xl text-xs hover:bg-zinc-900 text-zinc-400 hover:text-white px-4"
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={Boolean(confirmPushItem && applyingId === confirmPushItem.id)}
+              onClick={async () => {
+                if (!confirmPushItem) return;
+                setApplyingId(confirmPushItem.id);
+                try {
+                  await updateProduct(confirmPushItem, { forceShopifySync: true, silentToast: false });
+                  setConfirmPushItem(null);
+                } finally {
+                  setApplyingId(null);
+                }
+              }}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs px-4 flex items-center gap-1.5"
+            >
+              {confirmPushItem && applyingId === confirmPushItem.id ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin mr-1" />
+                  Pushing...
+                </>
+              ) : (
+                'Confirm & Push to Shopify'
               )}
             </Button>
           </DialogFooter>

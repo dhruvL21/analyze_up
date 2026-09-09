@@ -433,8 +433,16 @@ function InventoryPageContent() {
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => { setSellingProduct(product); setIsSellDialogOpen(true); }} className="text-emerald-400 font-medium">Record Sale</DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => deleteProduct(product.id)} className="text-destructive">Delete Product</DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => {
+                                      if (window.confirm(`Are you sure you want to permanently delete "${product.name}"? This action cannot be undone.`)) {
+                                        deleteProduct(product.id);
+                                      }
+                                    }}
+                                    className="text-destructive cursor-pointer"
+                                  >
+                                    Delete Product
+                                  </DropdownMenuItem>
                                 </DropdownMenuContent>
                               </DropdownMenu>
                             </div>
