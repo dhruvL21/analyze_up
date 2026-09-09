@@ -39,6 +39,7 @@ export function DeadStockSection() {
     prediction: ClearancePrediction;
   } | null>(null);
 
+  const [applyingId, setApplyingId] = useState<string | null>(null);
   const [recentLogs, setRecentLogs] = useState<BusinessAuditLog[]>([]);
 
   useEffect(() => {
@@ -56,7 +57,7 @@ export function DeadStockSection() {
     return products.filter((p) => p.stock > 0 && !saleProductIds.has(p.id));
   }, [products, transactions]);
 
-  // Track products that have already had a clearance discount executed
+  // Track products that have already had a clearance discount executed in audit logs
   const discountedProductNames = React.useMemo(() => {
     return new Set(
       recentLogs
@@ -65,40 +66,45 @@ export function DeadStockSection() {
     );
   }, [recentLogs]);
 
+  // Check whether product has already been liquidated in Firestore database or local actions
+  const isItemLiquidated = React.useCallback((item: any) => {
+    return (
+      item.liquidationStatus === 'Liquidated' ||
+      Boolean(item.compareAtPrice && item.compareAtPrice > item.price) ||
+      discountedProductNames.has((item.name || '').toLowerCase())
+    );
+  }, [discountedProductNames]);
+
   // Active items that still need clearance action
   const pendingItems = React.useMemo(() => {
-    return deadStockItems.filter(
-      (item) => !discountedProductNames.has(item.name.toLowerCase())
-    );
-  }, [deadStockItems, discountedProductNames]);
+    return deadStockItems.filter((item) => !isItemLiquidated(item));
+  }, [deadStockItems, isItemLiquidated]);
 
   // Resolved items that already have clearance active
   const resolvedItems = React.useMemo(() => {
-    return deadStockItems.filter((item) =>
-      discountedProductNames.has(item.name.toLowerCase())
-    );
-  }, [deadStockItems, discountedProductNames]);
+    return deadStockItems.filter((item) => isItemLiquidated(item));
+  }, [deadStockItems, isItemLiquidated]);
 
   const totalDeadCapital = React.useMemo(() => {
-    return deadStockItems.reduce(
+    return pendingItems.reduce(
       (acc, p) => acc + (p.stock || 0) * (p.costPrice || (p.price || 500) * 0.6),
       0
     );
-  }, [deadStockItems]);
+  }, [pendingItems]);
 
-  const handleApplyDiscount = async () => {
-    if (!confirmItem) return;
-    const { product, prediction } = confirmItem;
-
+  const executeApplyClearance = async (product: any, prediction: ClearancePrediction) => {
+    setApplyingId(product.id);
     try {
       await updateProduct(
         {
           ...product,
           price: prediction.newPrice,
           compareAtPrice: prediction.oldPrice,
+          discountPercent: prediction.discountPercent,
+          liquidationStatus: 'Liquidated',
           updatedAt: new Date().toISOString(),
         },
-        { silentToast: true, forceShopifySync: true }
+        { silentToast: false, forceShopifySync: true }
       );
 
       logBusinessAction({
@@ -112,12 +118,19 @@ export function DeadStockSection() {
       });
 
       toast({
-        title: `🏷️ ${prediction.discountPercent}% Clearance Promo Applied!`,
-        description: `Price of "${product.name}" optimized to ${currencySymbol}${prediction.newPrice.toLocaleString('en-IN')}. Removed from pending liquidation.`,
+        title: `🏷️ ${prediction.discountPercent}% Clearance Saved to Database!`,
+        description: `Price of "${product.name}" updated to ${currencySymbol}${prediction.newPrice.toLocaleString('en-IN')} in database & live store. Marked as Liquidated.`,
       });
       setConfirmItem(null);
-    } catch (err) {
-      console.error('Error applying clearance:', err);
+    } catch (err: any) {
+      console.error('Error applying clearance to database:', err);
+      toast({
+        variant: 'destructive',
+        title: 'Database Update Notice',
+        description: err?.message || 'Could not update product in database.',
+      });
+    } finally {
+      setApplyingId(null);
     }
   };
 
@@ -225,13 +238,19 @@ export function DeadStockSection() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => {
-                            updateProduct(item, { forceShopifySync: true, silentToast: false });
+                          disabled={applyingId === item.id}
+                          onClick={async () => {
+                            setApplyingId(item.id);
+                            try {
+                              await updateProduct(item, { forceShopifySync: true, silentToast: false });
+                            } finally {
+                              setApplyingId(null);
+                            }
                           }}
                           className="rounded-xl text-[11px] h-7 px-3 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 gap-1.5 shrink-0 font-semibold cursor-pointer"
                         >
-                          <RefreshCw className="w-3 h-3" />
-                          Push to Shopify
+                          <RefreshCw className={`w-3 h-3 ${applyingId === item.id ? 'animate-spin' : ''}`} />
+                          {applyingId === item.id ? 'Syncing...' : 'Push to Shopify'}
                         </Button>
                       </div>
                     ))}
@@ -264,17 +283,25 @@ export function DeadStockSection() {
                           <Badge variant="outline" className="text-[10px] text-rose-400 border-rose-500/30 px-1.5 py-0 font-medium">
                             Zero Sales
                           </Badge>
-                          <Badge
-                            className={`text-[9px] px-1.5 py-0 font-bold ${
-                              prediction.liquidationStrategy === 'Aggressive Velocity'
-                                ? 'bg-purple-500/15 text-purple-400 border-purple-500/30'
-                                : prediction.liquidationStrategy === 'Balanced Markdown'
-                                ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
-                                : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
-                            }`}
+                          <button
+                            type="button"
+                            onClick={() => setConfirmItem({ product: item, prediction })}
+                            title="Click to view AI Pricing Rationale"
+                            className="inline-flex"
                           >
-                            {prediction.liquidationStrategy}
-                          </Badge>
+                            <Badge
+                              className={`text-[9px] px-1.5 py-0 font-bold hover:opacity-80 transition-opacity cursor-pointer flex items-center gap-1 ${
+                                prediction.liquidationStrategy === 'Aggressive Velocity'
+                                  ? 'bg-purple-500/15 text-purple-400 border-purple-500/30'
+                                  : prediction.liquidationStrategy === 'Balanced Markdown'
+                                  ? 'bg-blue-500/15 text-blue-400 border-blue-500/30'
+                                  : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                              }`}
+                            >
+                              {prediction.liquidationStrategy}
+                              <Sparkles className="w-2.5 h-2.5 ml-0.5" />
+                            </Badge>
+                          </button>
                         </div>
                         <p className="text-xs text-muted-foreground">
                           SKU: {item.sku || 'N/A'} • {item.stock} {item.unit || 'units'} in stock • Current: {currencySymbol}{item.price?.toLocaleString('en-IN')} (Margin: {prediction.grossMarginBefore}%)
@@ -293,16 +320,21 @@ export function DeadStockSection() {
 
                         <Button
                           size="sm"
-                          onClick={() =>
-                            setConfirmItem({
-                              product: item,
-                              prediction,
-                            })
-                          }
+                          disabled={applyingId === item.id}
+                          onClick={() => executeApplyClearance(item, prediction)}
                           className="rounded-xl text-xs h-8 bg-emerald-600 hover:bg-emerald-500 text-white font-bold gap-1 px-3.5 shadow-sm shadow-emerald-600/20"
                         >
-                          <Tag className="w-3.5 h-3.5" />
-                          Apply {prediction.discountPercent}% Off
+                          {applyingId === item.id ? (
+                            <>
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              Updating Database...
+                            </>
+                          ) : (
+                            <>
+                              <Tag className="w-3.5 h-3.5" />
+                              Apply {prediction.discountPercent}% Off
+                            </>
+                          )}
                         </Button>
                       </div>
                     </div>
@@ -397,10 +429,22 @@ export function DeadStockSection() {
               Cancel
             </Button>
             <Button
-              onClick={handleApplyDiscount}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs px-4"
+              disabled={Boolean(confirmItem && applyingId === confirmItem.product.id)}
+              onClick={() => {
+                if (confirmItem) {
+                  executeApplyClearance(confirmItem.product, confirmItem.prediction);
+                }
+              }}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs px-4 flex items-center gap-1.5"
             >
-              Confirm & Resolve
+              {confirmItem && applyingId === confirmItem.product.id ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  Saving to Database...
+                </>
+              ) : (
+                'Confirm & Save to Database'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

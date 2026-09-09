@@ -58,6 +58,8 @@ export interface Product {
   shopifyProductId?: string;
   shopifyVariantId?: string;
   compareAtPrice?: number;
+  discountPercent?: number;
+  liquidationStatus?: string;
   customAttributes?: Record<string, string>;
 }
 

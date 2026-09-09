@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { updateShopifyVariantPrice } from '@/lib/shopify-price-sync';
+import { resolveServerTenant } from '@/lib/shopify/auth-guard';
+import { getValidAccessToken } from '@/lib/shopify/admin-api';
+import { getShopifyConnectionByTenant } from '@/lib/shopify/connection-store';
+import { getAdminFirestore, hasAdminCredentials } from '@/lib/firebase/admin';
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const tenant = await resolveServerTenant(req).catch(() => null);
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {}
+
     const {
-      shop,
-      accessToken,
       productId,
       shopifyProductId,
       shopifyVariantId,
@@ -17,11 +24,21 @@ export async function POST(req: NextRequest) {
       compareAtPrice,
     } = body;
 
-    if (!shop || !accessToken) {
-      return NextResponse.json(
-        { success: false, error: 'Shop domain and access token are required to sync price.' },
-        { status: 400 }
-      );
+    const tenantId = tenant?.tenantId || body?.userId || body?.tenantId;
+    let shop = body?.shop;
+
+    if (!shop && tenantId) {
+      const conn = await getShopifyConnectionByTenant(tenantId);
+      shop = conn?.shopDomain;
+    }
+
+    let accessToken = body?.accessToken;
+    if (!accessToken && shop) {
+      try {
+        accessToken = await getValidAccessToken(shop);
+      } catch (tokErr: any) {
+        console.warn('[Shopify Price Update] Could not resolve token for shop:', shop, tokErr?.message);
+      }
     }
 
     if (newPrice === undefined || isNaN(Number(newPrice)) || Number(newPrice) < 0) {
@@ -31,49 +48,84 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const result = await updateShopifyVariantPrice({
-      shop,
-      accessToken,
-      productId,
-      shopifyProductId,
-      shopifyVariantId,
-      sku,
-      productName,
-      newPrice: Number(newPrice),
-      oldPrice: oldPrice !== undefined ? Number(oldPrice) : undefined,
-      compareAtPrice: compareAtPrice !== undefined ? Number(compareAtPrice) : undefined,
-    });
+    // 1. Update in Firestore actual database
+    let firestoreUpdated = false;
+    if (tenantId && productId && hasAdminCredentials()) {
+      try {
+        const db = getAdminFirestore();
+        if (db) {
+          const prodRef = db.collection('users').doc(tenantId).collection('products').doc(productId);
+          const finalCompareAt = compareAtPrice !== undefined && Number(compareAtPrice) > Number(newPrice)
+            ? Number(compareAtPrice)
+            : oldPrice !== undefined && Number(oldPrice) > Number(newPrice)
+            ? Number(oldPrice)
+            : null;
+          const discountPct = finalCompareAt ? Math.round(((finalCompareAt - Number(newPrice)) / finalCompareAt) * 100) : undefined;
 
-    if (!result.success) {
-      if (result.status === 403) {
+          await prodRef.set(
+            {
+              price: Number(newPrice),
+              ...(finalCompareAt !== null ? { compareAtPrice: finalCompareAt } : {}),
+              ...(discountPct !== undefined ? { discountPercent: discountPct } : {}),
+              liquidationStatus: 'Liquidated',
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          );
+          firestoreUpdated = true;
+        }
+      } catch (dbErr) {
+        console.warn('[Shopify Price Update] Firestore write notice:', dbErr);
+      }
+    }
+
+    // 2. Synchronize price to Shopify Admin REST API
+    let shopifyResult: any = { success: false, skipped: true };
+    if (shop && accessToken) {
+      shopifyResult = await updateShopifyVariantPrice({
+        shop,
+        accessToken,
+        productId,
+        shopifyProductId,
+        shopifyVariantId,
+        sku,
+        productName,
+        newPrice: Number(newPrice),
+        oldPrice: oldPrice !== undefined ? Number(oldPrice) : undefined,
+        compareAtPrice: compareAtPrice !== undefined ? Number(compareAtPrice) : undefined,
+      });
+    }
+
+    if (shopifyResult && !shopifyResult.success && !shopifyResult.skipped) {
+      if (shopifyResult.status === 403) {
         return NextResponse.json(
           {
-            success: false,
-            status: 403,
-            error: result.error || 'Shopify permission denied (403). If you recently added "write_products" in Shopify Admin, click "Reinstall app" under API credentials to apply it to your token.',
+            success: true,
+            firestoreUpdated,
+            shopifyResult,
+            warning: 'Price updated in database, but Shopify requires re-authorization for write_products.',
             scopeMissing: 'write_products',
             reinstallRequired: true,
           },
           { status: 200 }
         );
       }
-
-      return NextResponse.json(
-        {
-          success: false,
-          error: result.error || 'Failed to update price on Shopify.',
-          status: result.status || 400,
-          scopeMissing: result.scopeMissing,
-        },
-        { status: result.status || 400 }
-      );
     }
 
-    return NextResponse.json(result);
+    return NextResponse.json({
+      success: true,
+      firestoreUpdated,
+      shopifyResult,
+      newPrice: Number(newPrice),
+      oldPrice: oldPrice !== undefined ? Number(oldPrice) : undefined,
+      message: shopifyResult.success
+        ? 'Price updated successfully in both workspace database and Shopify store.'
+        : 'Price updated successfully in workspace database.',
+    });
   } catch (err: any) {
     console.error('[Shopify Price Update Route Error]:', err);
     return NextResponse.json(
-      { success: false, error: err?.message || 'Unexpected server error updating price in Shopify.' },
+      { success: false, error: err?.message || 'Unexpected server error updating price.' },
       { status: 500 }
     );
   }

@@ -750,10 +750,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
       chunk.forEach(update => {
         const productRef = doc(productsRef, update.id);
-        batch.update(productRef, {
+        batch.set(productRef, cleanObject({
           ...update,
           updatedAt: serverTimestamp(),
-        });
+        }), { merge: true });
       });
 
       await batch.commit().catch((_serverError) => {
@@ -1126,25 +1126,35 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     const { id, ...updateData } = updatedProduct;
     const dataToUpdate = cleanObject({ ...updateData, updatedAt: serverTimestamp() });
 
-    updateDoc(productRef, dataToUpdate).catch((_serverError) => {
+    try {
+      await setDoc(productRef, dataToUpdate, { merge: true });
+    } catch (_serverError) {
+      console.error('[DataContext] Error writing product to Firestore database:', _serverError);
       errorEmitter.emit('permission-error', new FirestorePermissionError({
         path: productRef.path,
         operation: 'update',
         requestResourceData: dataToUpdate,
       }));
-    });
+      throw _serverError;
+    }
 
     const isPriceChanged = Boolean(existingProduct && existingProduct.price !== updatedProduct.price);
     const shop = businessProfile?.shopifyStoreUrl;
     const token = businessProfile?.shopifyAccessToken;
+    const isShopifyProduct = Boolean(
+      updatedProduct.shopifyProductId ||
+      updatedProduct.shopifyVariantId ||
+      updatedProduct.source === 'shopify' ||
+      updatedProduct.source === 'SHOPIFY' ||
+      (typeof updatedProduct.sku === 'string' && updatedProduct.sku.startsWith('SHOPIFY-')) ||
+      (typeof updatedProduct.supplier === 'string' && updatedProduct.supplier.toLowerCase().includes('shopify'))
+    );
     const shouldSyncShopify = Boolean(
       (isPriceChanged || options?.forceShopifySync) &&
-      shop &&
-      token &&
-      (existingProduct || updatedProduct)
+      (shop || isShopifyProduct || Boolean(businessProfile?.shopifyConnected))
     );
 
-    // Automatically synchronize discounted price with Shopify store
+    // Automatically synchronize discounted price with Shopify store & backend database
     if (shouldSyncShopify) {
       const oldPrice =
         updatedProduct.compareAtPrice !== undefined
@@ -1160,58 +1170,72 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           ? oldPrice
           : undefined;
 
-      fetch('/api/shopify/price/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shop,
-          accessToken: token,
-          productId: updatedProduct.id,
-          shopifyProductId: updatedProduct.shopifyProductId,
-          shopifyVariantId: updatedProduct.shopifyVariantId,
-          sku: updatedProduct.sku,
-          productName: updatedProduct.name,
-          newPrice,
-          oldPrice,
-          compareAtPrice,
-        }),
-      })
-        .then(async res => {
-          const data = await res.json();
-          if (res.ok && data.success) {
-            const discountPct = oldPrice > newPrice ? Math.round(((oldPrice - newPrice) / oldPrice) * 100) : 0;
-            const discountTag = discountPct > 0 ? ` (-${discountPct}% Off)` : '';
-            const countMsg = data.updatedVariantsCount && data.updatedVariantsCount > 1
-              ? ` across all ${data.updatedVariantsCount} variants`
-              : '';
+      try {
+        const res = await fetch('/api/shopify/price/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            shop,
+            accessToken: token,
+            userId: user.uid,
+            tenantId: user.uid,
+            productId: updatedProduct.id,
+            shopifyProductId: updatedProduct.shopifyProductId,
+            shopifyVariantId: updatedProduct.shopifyVariantId,
+            sku: updatedProduct.sku,
+            productName: updatedProduct.name,
+            newPrice,
+            oldPrice,
+            compareAtPrice,
+          }),
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+          const discountPct = oldPrice > newPrice ? Math.round(((oldPrice - newPrice) / oldPrice) * 100) : 0;
+          const discountTag = discountPct > 0 ? ` (-${discountPct}% Off)` : '';
+          const countMsg = data.shopifyResult?.updatedVariantsCount && data.shopifyResult.updatedVariantsCount > 1
+            ? ` across all ${data.shopifyResult.updatedVariantsCount} variants`
+            : '';
+          if (!options?.silentToast) {
             toast({
-              title: 'Shopify Price Updated ⚡',
-              description: `"${updatedProduct.name}" price updated to ₹${newPrice.toLocaleString('en-IN')}${discountTag}${countMsg} on your Shopify store.`,
-            });
-          } else if (data.reinstallRequired || data.scopeMissing === 'write_products') {
-            toast({
-              variant: 'destructive',
-              title: 'Shopify: Click "Reinstall App"',
-              description: 'You added write_products in Shopify, but Shopify requires clicking "Reinstall app" (in Shopify Admin > Develop apps > API credentials) to activate it for your token.',
-            });
-          } else {
-            console.warn('[Shopify Price Sync Notice]:', data.error);
-            toast({
-              variant: 'destructive',
-              title: 'Shopify Price Sync Notice',
-              description: data.error || 'Could not update price in Shopify.',
+              title: 'Database & Shopify Synchronized ⚡',
+              description: `"${updatedProduct.name}" price updated to ₹${newPrice.toLocaleString('en-IN')}${discountTag}${countMsg} in database and live store.`,
             });
           }
-        })
-        .catch(err => {
-          console.warn('[Shopify Price Sync Network Error]:', err);
-        });
+        } else if (data.reinstallRequired || data.scopeMissing === 'write_products') {
+          toast({
+            variant: 'destructive',
+            title: 'Database Updated (Shopify Scope Required)',
+            description: 'Price saved to database! To push live to Shopify, please enable write_products in your Shopify app permissions.',
+          });
+        } else if (!data.skipped) {
+          console.warn('[Shopify Price Sync Notice]:', data.error);
+        }
+      } catch (err) {
+        console.warn('[Shopify Price Sync Network Error]:', err);
+      }
     }
 
-    if (!options?.silentToast) {
-      toast({ title: 'Product Updated', description: `${updatedProduct.name} has been updated.` });
+    // Persist and recalculate analytics summary in Firestore
+    const updatedProductsList = products.map(p => p.id === updatedProduct.id ? { ...p, ...updatedProduct } : p);
+    recalculateAndSaveAnalyticsSummary(firestore, user.uid, {
+      products: updatedProductsList,
+      transactions,
+      suppliers,
+      orders,
+      returns,
+    }).catch(console.warn);
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('analyzeup_audit_logged'));
+      window.dispatchEvent(new CustomEvent('analyzeup_tasks_updated'));
     }
-  }, [firestore, user, products, businessProfile, toast]);
+
+    if (!options?.silentToast && !shouldSyncShopify) {
+      toast({ title: 'Product Updated in Database', description: `${updatedProduct.name} has been updated.` });
+    }
+  }, [firestore, user, products, transactions, suppliers, orders, returns, businessProfile, toast]);
 
   const deleteProduct = useCallback(async (productId: string) => {
     if (!firestore || !user) return;

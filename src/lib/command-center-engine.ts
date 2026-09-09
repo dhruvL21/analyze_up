@@ -296,7 +296,7 @@ export function generateActionTasks(
   // Task Group 2: Dead Stock Liquidation (Individual predictive clearance discounts)
   const saleProductIds = new Set(transactions.filter(t => t.type === 'Sale').map(t => t.productId));
   const deadStock = [...products]
-    .filter(p => p && p.name && p.stock > 0 && !saleProductIds.has(p.id))
+    .filter(p => p && p.name && p.stock > 0 && !saleProductIds.has(p.id) && p.liquidationStatus !== 'Liquidated' && !(p.compareAtPrice && p.compareAtPrice > p.price))
     .sort((a, b) => (b.stock * (b.costPrice || b.price * 0.6)) - (a.stock * (a.costPrice || a.price * 0.6)) || (a.name || '').localeCompare(b.name || ''));
 
   deadStock.slice(0, 5).forEach((topDead) => {

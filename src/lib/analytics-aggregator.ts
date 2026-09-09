@@ -181,7 +181,9 @@ export async function recalculateAndSaveAnalyticsSummary(
         (p.name && soldProductNames.has(p.name.toLowerCase())) ||
         (p.sku && soldProductNames.has(p.sku.toLowerCase()));
 
-      if (!isSold) {
+      const isLiquidated = p.liquidationStatus === 'Liquidated' || Boolean(p.compareAtPrice && p.compareAtPrice > p.price);
+
+      if (!isSold && !isLiquidated) {
         deadStockCount++;
         deadStockValuation += stock * (Number(p.costPrice) || (Number(p.price) * 0.6));
       }

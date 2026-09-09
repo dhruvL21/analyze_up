@@ -12,6 +12,9 @@ export interface DomainProduct {
   category: string;
   price: number;
   costPrice: number;
+  compareAtPrice?: number;
+  discountPercent?: number;
+  liquidationStatus?: string;
   stock: number;
   minStock: number;
   maxStock: number;
@@ -170,6 +173,9 @@ export function toDomainProduct(p: any): DomainProduct {
     reorderQuantity: normalizeNumber(p.reorderQuantity, Math.max(10, Math.ceil(averageDailySales * (leadTimeDays + 14) - stock))),
     profitMarginPercent,
     riskLevel,
+    compareAtPrice: p.compareAtPrice !== undefined ? normalizeNumber(p.compareAtPrice) : undefined,
+    discountPercent: p.discountPercent !== undefined ? normalizeNumber(p.discountPercent) : undefined,
+    liquidationStatus: p.liquidationStatus,
     status: p.status || 'Active',
     unit: p.unit || 'Piece',
     description: p.description || '',
