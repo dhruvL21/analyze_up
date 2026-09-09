@@ -408,23 +408,71 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
     const isPartial = (status === 'partial' || urlParams.get('shopify_partial') === 'true') && shopifyConnected !== 'true';
 
     if (shopifyConnected === 'true') {
-      const connectedShop = shopParam || 'Shopify Store';
+      let accessTokenFromOauth: string | undefined;
+      let shopifyData: any = null;
+
+      if (shopifyOauthRaw) {
+        try {
+          const decodedStr = atob(decodeURIComponent(shopifyOauthRaw));
+          shopifyData = JSON.parse(decodedStr);
+          accessTokenFromOauth = shopifyData.accessToken;
+        } catch (e) {
+          console.warn('[Shopify] Error decoding oauth payload:', e);
+        }
+      }
+
+      const connectedShop = shopParam || shopifyData?.shopDomain || 'Shopify Store';
+      const storeName = shopifyData?.storeName || connectedShop.replace('.myshopify.com', '');
+
       toast({
         title: 'Shopify Connected! 🛍️',
         description: `Successfully linked and authenticated "${connectedShop}". Live catalog and order sync initialized.`,
       });
 
-      // Synchronize businessProfile state immediately
+      // 1. Immediately persist to client Firestore with user credentials (works in serverless/Vercel)
+      if (accessTokenFromOauth && user && firestore) {
+        const connectionRef = doc(firestore, 'users', user.uid, 'integrations', 'shopify');
+        setDoc(
+          connectionRef,
+          {
+            userId: user.uid,
+            provider: 'shopify',
+            shopDomain: connectedShop,
+            storeName,
+            accessToken: accessTokenFromOauth,
+            scope: shopifyData?.scope || '',
+            connectionStatus: 'Connected',
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        ).catch(console.warn);
+
+        // Store lookup index
+        const storeLookupRef = doc(firestore, 'shopify_stores', connectedShop);
+        setDoc(
+          storeLookupRef,
+          {
+            userId: user.uid,
+            shopDomain: connectedShop,
+            storeName,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        ).catch(console.warn);
+      }
+
+      // 2. Synchronize businessProfile state immediately
       updateBusinessProfile({
         shopifyConnected: true,
         shopifyStatus: 'Connected',
         shopifyStoreUrl: connectedShop,
-        shopifyStoreName: connectedShop.replace('.myshopify.com', ''),
+        shopifyStoreName: storeName,
         shopifyLastSyncedAt: new Date().toISOString(),
+        ...(accessTokenFromOauth ? { shopifyAccessToken: accessTokenFromOauth } : {}),
       }, true);
 
-      // Ingest live catalog & orders directly into Cloud Firestore via client SDK
-      autoSyncShopifyNow(true).catch(console.warn);
+      // 3. Ingest live catalog & orders directly with the token!
+      autoSyncShopifyNow(true, connectedShop, accessTokenFromOauth).catch(console.warn);
 
       if (user) {
         user.getIdToken().then((idToken) => {

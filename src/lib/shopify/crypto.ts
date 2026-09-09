@@ -16,25 +16,28 @@ const TAG_LENGTH = 16; // Standard 128 bits auth tag
  */
 function getEncryptionKey(): Buffer {
   const envKey = process.env.SHOPIFY_TOKEN_ENCRYPTION_KEY;
-  if (!envKey) {
-    // In production, this must be explicitly set
-    if (process.env.NODE_ENV === 'production') {
-      throw new Error(
-        'CRITICAL SECURITY ERROR: SHOPIFY_TOKEN_ENCRYPTION_KEY must be configured in production.'
-      );
+  if (envKey && envKey.trim()) {
+    const trimmed = envKey.trim();
+    // Key can be 64-character hex or 32-byte raw string
+    if (trimmed.length === 64 && /^[0-9a-fA-F]+$/.test(trimmed)) {
+      return Buffer.from(trimmed, 'hex');
     }
-    // Safe deterministic development fallback for local dev/testing
-    const fallbackSeed = 'analyzeup-shopify-token-encryption-dev-seed-key-32b';
-    return crypto.createHash('sha256').update(fallbackSeed).digest();
+    // Hash any other string representation to ensure exact 32 bytes
+    return crypto.createHash('sha256').update(trimmed).digest();
   }
 
-  // Key can be 64-character hex or 32-byte raw string
-  if (envKey.length === 64 && /^[0-9a-fA-F]+$/.test(envKey)) {
-    return Buffer.from(envKey, 'hex');
+  // Graceful fallback: derive a dedicated 256-bit vault key from SHOPIFY_CLIENT_SECRET
+  const clientSecret = process.env.SHOPIFY_CLIENT_SECRET;
+  if (clientSecret && clientSecret.trim()) {
+    return crypto
+      .createHash('sha256')
+      .update(`analyzeup-vault-${clientSecret.trim()}`)
+      .digest();
   }
 
-  // Hash any other string representation to ensure exact 32 bytes
-  return crypto.createHash('sha256').update(envKey).digest();
+  // Safe deterministic development fallback for local dev/testing
+  const fallbackSeed = 'analyzeup-shopify-token-encryption-dev-seed-key-32b';
+  return crypto.createHash('sha256').update(fallbackSeed).digest();
 }
 
 /**

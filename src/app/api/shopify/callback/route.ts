@@ -250,10 +250,20 @@ export async function GET(req: NextRequest) {
       console.warn('[Shopify OAuth] Background initial sync enqueue notice:', syncErr);
     });
 
-    // 17. Redirect to dashboard with active connection confirmation
-    const successUrl = `${origin}/dashboard/integrations?shopify_connected=true&shop=${encodeURIComponent(
-      shop
-    )}&job_id=${encodeURIComponent(jobId)}`;
+    // 17. Redirect to dashboard with active connection confirmation and base64 encoded payload for serverless client persistence
+    const oauthPayload = Buffer.from(
+      JSON.stringify({
+        shopDomain: shop,
+        storeName,
+        currency,
+        accessToken,
+        scope: grantedScopes.join(','),
+      })
+    ).toString('base64');
+
+    const successUrl = `${origin}/dashboard/integrations?shopify_connected=true&shopify_oauth=${encodeURIComponent(
+      oauthPayload
+    )}&shop=${encodeURIComponent(shop)}&job_id=${encodeURIComponent(jobId)}`;
 
     return NextResponse.redirect(successUrl);
   } catch (err: any) {

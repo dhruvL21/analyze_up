@@ -4,7 +4,7 @@ import { createContext, useContext, useState, ReactNode, useMemo, useCallback, u
 import type { Product, PurchaseOrder, Supplier, Transaction, Category, ProductReturn, CustomAttribute, BusinessProfile, BusinessType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useUser, useFirestore, useDoc } from '@/firebase';
-import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch, setDoc, onSnapshot, getDocs, deleteField } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch, setDoc, onSnapshot, getDocs, getDoc, deleteField } from 'firebase/firestore';
 import { useCollection } from '@/firebase/firestore/use-collection';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -91,7 +91,7 @@ interface DataContextProps {
   refreshAnalytics: () => Promise<void>;
   // Shopify Real-Time & Auto-Sync
   isShopifySyncing: boolean;
-  autoSyncShopifyNow: (showToast?: boolean, shopOverride?: string) => Promise<void>;
+  autoSyncShopifyNow: (showToast?: boolean, shopOverride?: string, tokenOverride?: string) => Promise<void>;
   updateShopifyScheduleSettings: (settings: {
     shopifyAutoSyncEnabled?: boolean;
     shopifyRealtimeSyncEnabled?: boolean;
@@ -2262,9 +2262,27 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const isShopifySyncingRef = useRef(false);
   const [isShopifySyncing, setIsShopifySyncing] = useState(false);
 
-  const autoSyncShopifyNow = useCallback(async (showToast: boolean = true, shopOverride?: string) => {
+  const autoSyncShopifyNow = useCallback(async (showToast: boolean = true, shopOverride?: string, tokenOverride?: string) => {
     let shop = shopOverride || businessProfile?.shopifyStoreUrl || businessProfileRef.current?.shopifyStoreUrl;
-    let token = businessProfile?.shopifyAccessToken || businessProfileRef.current?.shopifyAccessToken;
+    let token = tokenOverride || businessProfile?.shopifyAccessToken || businessProfileRef.current?.shopifyAccessToken;
+
+    // Check client Firestore fallback under users/{uid}/integrations/shopify if token is missing
+    if (!token && user && firestore) {
+      try {
+        const intSnap = await getDoc(doc(firestore, 'users', user.uid, 'integrations', 'shopify'));
+        if (intSnap.exists()) {
+          const intData = intSnap.data();
+          if (intData?.accessToken) {
+            token = intData.accessToken;
+            if (!shop && intData.shopDomain) {
+              shop = intData.shopDomain;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[Shopify] Error reading client integration token:', err);
+      }
+    }
 
     // Check localStorage fallback if state ref is empty
     if (!shop && user) {
