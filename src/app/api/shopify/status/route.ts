@@ -37,8 +37,16 @@ export async function GET(req: NextRequest) {
 
     const isConnected = connection.status === 'ACTIVE' || connection.status === 'SYNCED';
 
+    if (!isConnected) {
+      return NextResponse.json({
+        connected: false,
+        status: connection.status || 'DISCONNECTED',
+        connection: null,
+      });
+    }
+
     return NextResponse.json({
-      connected: isConnected,
+      connected: true,
       shop: connection.shopDomain,
       storeName: connection.storeName || connection.shopDomain.replace('.myshopify.com', ''),
       currency: connection.currency || 'USD',

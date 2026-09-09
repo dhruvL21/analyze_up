@@ -2725,8 +2725,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         shopifyStoreUrl: '',
         shopifyStoreName: '',
         shopifyStatus: 'Disconnected',
-        shopifyAccessToken: undefined,
-        shopifyLastSyncedAt: undefined,
+        shopifyAccessToken: '',
+        shopifyLastSyncedAt: '',
         shopifyAutoSyncEnabled: false,
         shopifyRealtimeSyncEnabled: false,
         shopifySyncFrequency: 'daily',
@@ -2734,6 +2734,21 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       },
       true
     );
+
+    if (firestore && user) {
+      const profileRef = doc(firestore, 'users', uid, 'settings', 'business_profile');
+      await setDoc(profileRef, {
+        shopifyConnected: false,
+        shopifyStoreUrl: '',
+        shopifyStoreName: '',
+        shopifyStatus: 'Disconnected',
+        shopifyAccessToken: deleteField(),
+        shopifyLastSyncedAt: deleteField(),
+        shopifyAutoSyncEnabled: false,
+        shopifyRealtimeSyncEnabled: false,
+        updatedAt: serverTimestamp(),
+      }, { merge: true }).catch(console.error);
+    }
 
     // 4. Notify backend server
     const idToken = user ? await user.getIdToken().catch(() => null) : null;
@@ -2754,11 +2769,23 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     if (typeof window !== 'undefined') {
       try {
         const keysToRemove = Object.keys(localStorage).filter(
-          (k) => k.startsWith('analyzeup_shopify_') || k.includes('shopify_sync')
+          (k) => k.startsWith('analyzeup_shopify_') || k.includes('shopify_sync') || k.includes('shopify_store')
         );
         keysToRemove.forEach((k) => localStorage.removeItem(k));
+
+        const localProf = localStorage.getItem(`analyzeup_profile_${uid}`);
+        if (localProf) {
+          const parsed = JSON.parse(localProf);
+          parsed.shopifyConnected = false;
+          parsed.shopifyStatus = 'Disconnected';
+          parsed.shopifyStoreUrl = '';
+          parsed.shopifyStoreName = '';
+          delete parsed.shopifyAccessToken;
+          delete parsed.shopifyLastSyncedAt;
+          localStorage.setItem(`analyzeup_profile_${uid}`, JSON.stringify(parsed));
+        }
       } catch (e) {
-        console.warn('Error clearing localStorage shopify caches:', e);
+        console.warn('[Shopify Disconnect] LocalStorage cleanup error:', e);
       }
     }
 

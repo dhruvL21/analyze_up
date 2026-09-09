@@ -7,7 +7,6 @@ import { AddProductModal } from '@/components/add-product-modal';
 import { AddSupplierModal } from '@/components/add-supplier-modal';
 import { DeadStockModal } from '@/components/dead-stock-modal';
 import { ImportDialog } from '@/components/import-dialog';
-import { ShopifyConnectModal } from '@/components/shopify-connect-modal';
 import { AuditLogModal } from '@/components/audit-log-modal';
 import {
   PlusCircle,
@@ -107,7 +106,6 @@ export function QuickActionsBar() {
       <DeadStockModal open={isDeadStockOpen} onOpenChange={setIsDeadStockOpen} />
       <ImportDialog open={isImportOpen} onOpenChange={setIsImportOpen} />
       <AuditLogModal open={isAuditModalOpen} onOpenChange={setIsAuditModalOpen} />
-      <ShopifyConnectModal />
     </>
   );
 }

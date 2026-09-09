@@ -64,8 +64,8 @@ export function ShopifyConnectModal() {
   );
 
   const [activeTab, setActiveTab] = useState<'oauth' | 'token'>('oauth');
-  const [storeUrl, setStoreUrl] = useState(businessProfile?.shopifyStoreUrl || '');
-  const [accessToken, setAccessToken] = useState(businessProfile?.shopifyAccessToken || '');
+  const [storeUrl, setStoreUrl] = useState('');
+  const [accessToken, setAccessToken] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isDisconnecting, setIsDisconnecting] = useState(false);
@@ -74,6 +74,20 @@ export function ShopifyConnectModal() {
   const [scopeCheckResult, setScopeCheckResult] = useState<any>(null);
   const [isEditingToken, setIsEditingToken] = useState(false);
   const [newTokenInput, setNewTokenInput] = useState('');
+
+  // Keep modal inputs synchronized: when disconnected, always reset inputs to blank
+  React.useEffect(() => {
+    if (!isConnected) {
+      setStoreUrl('');
+      setAccessToken('');
+      setScopeCheckResult(null);
+      setIsEditingToken(false);
+      setNewTokenInput('');
+    } else {
+      setStoreUrl(businessProfile?.shopifyStoreUrl || '');
+      setAccessToken(businessProfile?.shopifyAccessToken || '');
+    }
+  }, [isConnected, businessProfile?.shopifyStoreUrl, businessProfile?.shopifyAccessToken, showShopifyModal]);
 
   const cleanShopDomain = (input: string): string => {
     let clean = input.trim().toLowerCase();
