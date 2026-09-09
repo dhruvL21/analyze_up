@@ -381,7 +381,7 @@ export function processCopilotQuery(
   const { intent, intentLabel, matchedProduct } = classifyBusinessIntent(query, history, products);
 
   const health = computeBusinessHealth(products, transactions, suppliers, returns);
-  const actionTasks = generateActionTasks(products, transactions, suppliers, orders, businessProfile);
+  const actionTasks = generateActionTasks(products, transactions, suppliers, orders, businessProfile, returns);
   const todayPriorities = generateTodayPriorities(products, transactions, suppliers);
   const risks = detectProcurementRisks(products, suppliers, orders, transactions);
   const savings = calculateProcurementSavings(products, suppliers, orders, transactions);

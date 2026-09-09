@@ -93,6 +93,7 @@ export async function POST(req: NextRequest) {
         newPrice: Number(newPrice),
         oldPrice: oldPrice !== undefined ? Number(oldPrice) : undefined,
         compareAtPrice: compareAtPrice !== undefined ? Number(compareAtPrice) : undefined,
+        updateAllVariants: Boolean(body?.updateAllVariants),
       });
     }
 

@@ -283,6 +283,87 @@ export async function POST(req: NextRequest) {
     }
 
     // -------------------------------------------------------------
+    // HANDLER: Products Lifecycle (products/create, products/update, products/delete)
+    // -------------------------------------------------------------
+    if (topic === 'products/create' || topic === 'products/update') {
+      const prodId = String(payload.id || '');
+      const title = payload.title || 'Untitled Product';
+      const category = payload.product_type || 'General';
+      const vendor = payload.vendor || 'Shopify Vendor';
+      const variants = Array.isArray(payload.variants) && payload.variants.length > 0
+        ? payload.variants
+        : [{ id: prodId, price: 0, inventory_quantity: 0, sku: `SKU-${prodId}` }];
+
+      const activeVariantIds = new Set<string>();
+
+      for (const v of variants) {
+        const varId = String(v.id || prodId);
+        activeVariantIds.add(varId);
+        const docId = `shopify_${prodId}_${varId}`;
+        const prodRef = db.collection('users').doc(tenantId).collection('products').doc(docId);
+        const variantName = variants.length > 1 && v.title && v.title !== 'Default Title'
+          ? `${title} (${v.title})`
+          : title;
+        const price = Number(v.price) || 0;
+        const costPrice = Number(v.cost) || Math.round(price * 0.6);
+        const stock = Math.max(0, Number(v.inventory_quantity !== undefined ? v.inventory_quantity : 0));
+
+        batch.set(prodRef, {
+          id: docId,
+          name: variantName,
+          sku: String(v.sku || `SKU-${prodId}-${varId}`),
+          category,
+          price,
+          costPrice,
+          stock,
+          supplier: vendor,
+          source: 'SHOPIFY',
+          shopifyProductId: prodId,
+          shopifyVariantId: varId,
+          shopifyInventoryItemId: v.inventory_item_id ? String(v.inventory_item_id) : null,
+          ...(v.compare_at_price ? { compareAtPrice: Number(v.compare_at_price) } : {}),
+          userId: tenantId,
+          updatedAt: new Date().toISOString(),
+        }, { merge: true });
+      }
+
+      // If updating a product, prune any variants that were removed in Shopify
+      if (topic === 'products/update' && prodId) {
+        try {
+          const existingVarsSnap = await db.collection('users').doc(tenantId).collection('products')
+            .where('shopifyProductId', '==', prodId)
+            .get();
+
+          for (const d of existingVarsSnap.docs) {
+            const data = d.data();
+            if (data.shopifyVariantId && !activeVariantIds.has(String(data.shopifyVariantId))) {
+              batch.delete(d.ref);
+            }
+          }
+        } catch (pruneErr) {
+          console.warn('[Shopify Webhook] Notice checking removed variants:', pruneErr);
+        }
+      }
+    }
+
+    if (topic === 'products/delete') {
+      const prodId = String(payload.id || '');
+      if (prodId) {
+        try {
+          const prodsSnap = await db.collection('users').doc(tenantId).collection('products')
+            .where('shopifyProductId', '==', prodId)
+            .get();
+
+          for (const d of prodsSnap.docs) {
+            batch.delete(d.ref);
+          }
+        } catch (delErr) {
+          console.warn('[Shopify Webhook] Notice deleting product variants:', delErr);
+        }
+      }
+    }
+
+    // -------------------------------------------------------------
     // HANDLER: Inventory Updates (inventory_levels/update)
     // -------------------------------------------------------------
     if (topic === 'inventory_levels/update') {
@@ -301,6 +382,23 @@ export async function POST(req: NextRequest) {
         availableQuantity: availableQty,
         updatedAt: new Date().toISOString(),
       }, { merge: true });
+
+      // Synchronize available stock directly to matched product catalog item
+      if (invItemId) {
+        try {
+          const matchSnap = await db.collection('users').doc(tenantId).collection('products')
+            .where('shopifyInventoryItemId', '==', invItemId)
+            .get();
+          for (const d of matchSnap.docs) {
+            batch.update(d.ref, {
+              stock: Math.max(0, availableQty),
+              updatedAt: new Date().toISOString(),
+            });
+          }
+        } catch (invMatchErr) {
+          console.warn('[Shopify Webhook] Notice syncing inventory item to product:', invMatchErr);
+        }
+      }
     }
 
     // -------------------------------------------------------------

@@ -32,7 +32,13 @@ import {
 } from '@/components/ui/dialog';
 
 export function DeadStockSection() {
-  const { products = [], transactions = [], updateProduct, businessProfile } = useData();
+  const {
+    products = [],
+    transactions = [],
+    updateProduct,
+    businessProfile,
+    businessBuddyCalibration,
+  } = useData();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -44,6 +50,7 @@ export function DeadStockSection() {
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [confirmPushItem, setConfirmPushItem] = useState<any | null>(null);
   const [recentLogs, setRecentLogs] = useState<BusinessAuditLog[]>([]);
+  const [showItemsPreview, setShowItemsPreview] = useState(false);
 
   useEffect(() => {
     setRecentLogs(getAuditLogs());
@@ -136,6 +143,83 @@ export function DeadStockSection() {
       setApplyingId(null);
     }
   };
+
+  if (businessBuddyCalibration?.status === 'LEARNING') {
+    const { currentDayNumber, targetDays, intelligence } = businessBuddyCalibration;
+    return (
+      <Card className="ios-glass rounded-3xl border-emerald-500/25 p-5 shadow-xl space-y-4 bg-gradient-to-br from-emerald-950/10 via-background to-background">
+        <CardHeader className="p-0 pb-3 border-b border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2.5 rounded-2xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+              <Sparkles className="w-5 h-5 animate-pulse" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <CardTitle className="text-base font-bold text-foreground">
+                  Clearance &amp; Dead Stock: Observing Demand Flow
+                </CardTitle>
+                <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-semibold">
+                  Day {currentDayNumber} of {targetDays} Baseline
+                </Badge>
+              </div>
+              <CardDescription className="text-xs text-muted-foreground mt-0.5">
+                Clearance markdowns are safely on hold to protect brand equity while observing {intelligence.detectedIndustry} purchase cycles.
+              </CardDescription>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowItemsPreview(!showItemsPreview)}
+              className="rounded-xl text-xs gap-1.5 border-border/60 hover:bg-secondary font-semibold"
+            >
+              {showItemsPreview ? 'Hide Preview' : `Preview Catalog Items (${pendingItems.length})`}
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-0 space-y-3">
+          <div className="p-4 rounded-2xl bg-secondary/30 border border-border/30 text-xs space-y-2">
+            <div className="flex items-start gap-2.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-foreground">Why 20-30% markdowns are paused on newly imported inventory:</strong>
+                <p className="text-muted-foreground mt-1 leading-relaxed">
+                  For <strong>{intelligence.detectedIndustry}</strong>, standard category holding window is <strong>{intelligence.holdingPeriodDays} days</strong>. Marking freshly imported products as &quot;dead stock&quot; on Day 1 erodes up to 30% gross profit before buyers have had a natural chance to discover them.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {showItemsPreview && (
+            <div className="space-y-2 pt-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground">Catalog Items Currently In Holding Period ({pendingItems.length})</span>
+                <span>Threshold: {intelligence.holdingPeriodDays} days</span>
+              </div>
+              <div className="divide-y divide-border/30 rounded-2xl border border-border/40 bg-secondary/20 max-h-72 overflow-y-auto">
+                {pendingItems.map((item) => (
+                  <div key={item.id} className="p-3 flex items-center justify-between gap-3 text-xs">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-foreground truncate">{item.name}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Stock: {item.stock} • Price: {currencySymbol}{item.price?.toLocaleString('en-IN')} • Status: Protected in Full-Price Lifecycle
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30 shrink-0">
+                      In Cycle
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <>

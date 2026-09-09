@@ -94,8 +94,8 @@ export default function AIAdvisorPage() {
   }, [products, transactions, suppliers, returns]);
 
   const actionTasks = React.useMemo(() => {
-    return generateActionTasks(products, transactions, suppliers, orders, businessProfile);
-  }, [products, transactions, suppliers, orders, businessProfile]);
+    return generateActionTasks(products, transactions, suppliers, orders, businessProfile, returns);
+  }, [products, transactions, suppliers, orders, businessProfile, returns]);
 
   const isPaid = activePlan !== 'Free Trial';
 

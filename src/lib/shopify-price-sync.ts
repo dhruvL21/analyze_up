@@ -11,6 +11,7 @@ export interface UpdateShopifyPriceParams {
   newPrice: number;
   oldPrice?: number;
   compareAtPrice?: number;
+  updateAllVariants?: boolean;
 }
 
 export interface UpdateShopifyPriceResult {
@@ -239,8 +240,9 @@ export async function updateShopifyVariantPrice(
     const updatedVar = responseData.variant || {};
     let updatedCount = 1;
 
-    // Also update sibling variants of the same product (e.g. all sizes of the same shoe)
-    if (allProductVariantIds.length > 1) {
+    // Only update sibling variants if explicitly requested via updateAllVariants.
+    // By default, price updates strictly target only the selected variant (e.g. specific shoe size) so sibling sizes are not changed.
+    if (params.updateAllVariants && allProductVariantIds.length > 1) {
       const siblingIds = allProductVariantIds.filter(id => id !== targetVariantId);
       for (const sibId of siblingIds) {
         try {

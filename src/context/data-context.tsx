@@ -22,7 +22,14 @@ import {
 import { generateProductDocId, generateTransactionDocId } from '@/lib/import-job-service';
 import { sanitizePlainData } from '@/lib/utils';
 
+import {
+  getBusinessBuddyCalibration,
+  type BusinessBuddyCalibration,
+} from '@/lib/business-buddy-engine';
+
 interface DataContextProps {
+  businessBuddyCalibration: BusinessBuddyCalibration;
+  activateRecommendationsNow: () => Promise<void>;
   products: Product[];
   orders: PurchaseOrder[];
   suppliers: Supplier[];
@@ -609,23 +616,48 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   ) => {
     if (!firestore || !user || !productsRef || !transactionsRef) return { newCount: 0, updateCount: 0, skippedCount: 0 };
 
-    const existingProductSkuMap = new Map(products.map(p => [(p.sku || '').trim().toUpperCase(), p]));
-    const existingProductNameMap = new Map(products.map(p => [(p.name || '').trim().toLowerCase(), p]));
+    const existingProductByIdMap = new Map<string, Product>();
+    const existingProductByVariantMap = new Map<string, Product>();
+    const existingProductByShopifyProdMap = new Map<string, Product>();
+    const existingProductSkuMap = new Map<string, Product>();
+    const existingProductNameMap = new Map<string, Product>();
+
+    products.forEach(p => {
+      if (p.id) existingProductByIdMap.set(p.id, p);
+      if (p.shopifyVariantId) existingProductByVariantMap.set(String(p.shopifyVariantId), p);
+      if (p.shopifyProductId) existingProductByShopifyProdMap.set(String(p.shopifyProductId), p);
+      if (p.sku) existingProductSkuMap.set(p.sku.trim().toUpperCase(), p);
+      if (p.name) existingProductNameMap.set(p.name.trim().toLowerCase(), p);
+    });
+
     let newCount = 0;
     let updateCount = 0;
     let skippedCount = 0;
 
     const operations: Array<
-      | { type: 'create'; data: any }
+      | { type: 'create'; id?: string; data: any }
       | { type: 'update'; id: string; data: any }
     > = [];
 
     productsData.forEach(productData => {
+      const pAny = productData as any;
+      const docId = pAny.id ? String(pAny.id) : '';
+      const shopifyVarId = pAny.shopifyVariantId ? String(pAny.shopifyVariantId) : '';
+      const shopifyProdId = pAny.shopifyProductId ? String(pAny.shopifyProductId) : '';
       const skuUpper = (productData.sku || '').trim().toUpperCase();
       const nameLower = (productData.name || '').trim().toLowerCase();
-      const existingProduct = skuUpper ? existingProductSkuMap.get(skuUpper) : (nameLower ? existingProductNameMap.get(nameLower) : null);
+
+      const existingProduct =
+        (docId && existingProductByIdMap.get(docId)) ||
+        (shopifyVarId && existingProductByVariantMap.get(shopifyVarId)) ||
+        (skuUpper && existingProductSkuMap.get(skuUpper)) ||
+        (shopifyProdId && existingProductByShopifyProdMap.get(shopifyProdId)) ||
+        (nameLower && existingProductNameMap.get(nameLower)) ||
+        null;
 
       if (existingProduct) {
+        const nameChanged = Boolean(productData.name && productData.name !== existingProduct.name);
+        const skuChanged = Boolean(productData.sku && productData.sku !== existingProduct.sku);
         const incomingPrice = productData.price !== undefined && !isNaN(Number(productData.price)) ? Number(productData.price) : existingProduct.price;
         const incomingCost = productData.costPrice !== undefined && !isNaN(Number(productData.costPrice)) ? Number(productData.costPrice) : existingProduct.costPrice;
         const incomingStock = productData.stock !== undefined && !isNaN(Number(productData.stock)) ? Number(productData.stock) : undefined;
@@ -639,8 +671,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         const stockChanged = incomingStock !== undefined && finalStock !== existingProduct.stock;
         const supplierChanged = Boolean(productData.supplier && productData.supplier !== existingProduct.supplier);
         const categoryChanged = Boolean(productData.category && productData.category !== existingProduct.category);
+        const compareAtChanged = pAny.compareAtPrice !== undefined && pAny.compareAtPrice !== existingProduct.compareAtPrice;
+        const shopifyProdIdChanged = Boolean(pAny.shopifyProductId && pAny.shopifyProductId !== existingProduct.shopifyProductId);
+        const shopifyVarIdChanged = Boolean(pAny.shopifyVariantId && pAny.shopifyVariantId !== existingProduct.shopifyVariantId);
 
-        const hasUpdate = priceChanged || costChanged || stockChanged || supplierChanged || categoryChanged;
+        const hasUpdate = nameChanged || skuChanged || priceChanged || costChanged || stockChanged || supplierChanged || categoryChanged || compareAtChanged || shopifyProdIdChanged || shopifyVarIdChanged;
 
         if (!hasUpdate) {
           skippedCount++;
@@ -651,20 +686,29 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           type: 'update',
           id: existingProduct.id,
           data: cleanObject({
+            ...(nameChanged ? { name: productData.name } : {}),
+            ...(skuChanged ? { sku: productData.sku } : {}),
             ...(priceChanged ? { price: incomingPrice } : {}),
             ...(costChanged ? { costPrice: incomingCost } : {}),
             ...(stockChanged ? { stock: finalStock } : {}),
             ...(supplierChanged ? { supplier: productData.supplier, supplierId: productData.supplierId || existingProduct.supplierId } : {}),
             ...(categoryChanged ? { category: productData.category, categoryId: productData.categoryId || existingProduct.categoryId } : {}),
+            ...(compareAtChanged ? { compareAtPrice: pAny.compareAtPrice } : {}),
+            ...(shopifyProdIdChanged ? { shopifyProductId: pAny.shopifyProductId } : {}),
+            ...(shopifyVarIdChanged ? { shopifyVariantId: pAny.shopifyVariantId } : {}),
+            ...(pAny.source ? { source: pAny.source } : {}),
             updatedAt: serverTimestamp(),
           }),
         });
         updateCount++;
       } else {
+        const targetId = pAny.id || undefined;
         operations.push({
           type: 'create',
+          id: targetId,
           data: cleanObject({
             ...productData,
+            ...(targetId ? { id: targetId } : {}),
             userId: user.uid,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
@@ -696,7 +740,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           const productRef = doc(productsRef, op.id);
           batch.update(productRef, op.data);
         } else {
-          const newProductRef = doc(productsRef);
+          const newProductRef = op.id ? doc(productsRef, op.id) : doc(productsRef);
           batch.set(newProductRef, op.data);
 
           if (op.data.stock > 0) {
@@ -725,6 +769,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       await new Promise(r => setTimeout(r, 10));
     }
 
+    if (!businessProfile?.firstImportedAt) {
+      updateBusinessProfile({ firstImportedAt: new Date().toISOString() }, true).catch(console.warn);
+    }
+
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('analyzeup_audit_logged'));
       window.dispatchEvent(new CustomEvent('analyzeup_tasks_updated'));
@@ -738,7 +786,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       });
     }
     return { newCount, updateCount, skippedCount };
-  }, [firestore, user, productsRef, transactionsRef, products, toast]);
+  }, [firestore, user, productsRef, transactionsRef, products, toast, businessProfile, updateBusinessProfile]);
 
   const bulkUpdateProducts = useCallback(async (updates: (Partial<Product> & { id: string })[]) => {
     if (!firestore || !user || !productsRef) return;
@@ -1187,6 +1235,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             newPrice,
             oldPrice,
             compareAtPrice,
+            updateAllVariants: false,
           }),
         });
 
@@ -2442,6 +2491,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       let prodChanges = 0;
       let txChanges = 0;
       let returnChanges = 0;
+      let deletedProdsCount = 0;
 
       if (shopifyProds.length > 0) {
         const pRes = await bulkAddProducts(shopifyProds, true, !showToast);
@@ -2449,6 +2499,56 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           prodChanges = (pRes.newCount || 0) + (pRes.updateCount || 0);
         }
       }
+
+      // Reconcile deleted Shopify products:
+      // If a product previously imported from Shopify is no longer present in Shopify's active catalog, delete it.
+      if (firestore && user) {
+        const activeShopifyDocIds = new Set<string>();
+        const activeShopifyProdIds = new Set<string>();
+        const activeShopifyVariantIds = new Set<string>();
+
+        shopifyProds.forEach((p: any) => {
+          if (p.id) activeShopifyDocIds.add(p.id);
+          if (p.shopifyProductId) activeShopifyProdIds.add(String(p.shopifyProductId));
+          if (p.shopifyVariantId) activeShopifyVariantIds.add(String(p.shopifyVariantId));
+        });
+
+        const deletedShopifyProducts = products.filter(p => {
+          const isFromShopify =
+            p.source === 'SHOPIFY' ||
+            p.source === 'shopify' ||
+            p.id.startsWith('shopify_') ||
+            Boolean(p.shopifyProductId) ||
+            Boolean(p.shopifyVariantId);
+
+          if (!isFromShopify) return false;
+
+          const isStillActive =
+            activeShopifyDocIds.has(p.id) ||
+            (p.shopifyVariantId
+              ? activeShopifyVariantIds.has(String(p.shopifyVariantId))
+              : Boolean(p.shopifyProductId && activeShopifyProdIds.has(String(p.shopifyProductId))));
+
+          return !isStillActive;
+        });
+
+        if (deletedShopifyProducts.length > 0) {
+          const deleteBatch = writeBatch(firestore);
+          deletedShopifyProducts.forEach(dp => {
+            const dpRef = doc(firestore, 'users', user.uid, 'products', dp.id);
+            deleteBatch.delete(dpRef);
+          });
+          await deleteBatch.commit().catch(console.error);
+          deletedProdsCount = deletedShopifyProducts.length;
+          prodChanges += deletedProdsCount;
+
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('analyzeup_audit_logged'));
+            window.dispatchEvent(new CustomEvent('analyzeup_tasks_updated'));
+          }
+        }
+      }
+
       if (shopifyTxs.length > 0) {
         const tRes = await bulkAddTransactions(shopifyTxs, !showToast);
         if (tRes) {
@@ -2469,20 +2569,23 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       await updateBusinessProfile({
         shopifyLastSyncedAt: nowIso,
         shopifyStatus: 'Connected',
+        ...(!businessProfile?.firstImportedAt ? { firstImportedAt: nowIso } : {}),
       }, true);
 
       if (showToast) {
         const returnMsg = (stats?.canonicalReturnsCount || shopifyReturns.length) > 0
           ? `, and ${stats?.canonicalReturnsCount || shopifyReturns.length} returns/refunds`
           : '';
+        const delMsg = deletedProdsCount > 0 ? ` (${deletedProdsCount} deleted removed)` : '';
         toast({
           title: 'Shopify Sync Complete! 🎉',
-          description: `Synchronized ${stats?.canonicalProductsCount || shopifyProds.length} products, ${stats?.canonicalTransactionsCount || shopifyTxs.length} orders${returnMsg}. Insights & predictions updated.`,
+          description: `Synchronized ${stats?.canonicalProductsCount || shopifyProds.length} products${delMsg}, ${stats?.canonicalTransactionsCount || shopifyTxs.length} orders${returnMsg}. Insights & predictions updated.`,
         });
       } else if (prodChanges > 0 || txChanges > 0 || returnChanges > 0) {
+        const delDetail = deletedProdsCount > 0 ? `, ${deletedProdsCount} deleted removed` : '';
         toast({
           title: 'Shopify Auto-Synced ⚡',
-          description: `Auto-sync pulled new updates from Shopify (${prodChanges} product changes, ${txChanges} new orders, ${returnChanges} returns/refunds). Insights refreshed.`,
+          description: `Auto-sync pulled new updates from Shopify (${prodChanges} product changes${delDetail}, ${txChanges} new orders, ${returnChanges} returns/refunds). Insights refreshed.`,
         });
       }
     } catch (err: any) {
@@ -2501,7 +2604,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       isShopifySyncingRef.current = false;
       setIsShopifySyncing(false);
     }
-  }, [businessProfile, bulkAddProducts, bulkAddTransactions, bulkAddReturns, vectorizeAndSyncAiChatbot, updateBusinessProfile, toast]);
+  }, [businessProfile, products, firestore, user, bulkAddProducts, bulkAddTransactions, bulkAddReturns, vectorizeAndSyncAiChatbot, updateBusinessProfile, toast]);
 
   const updateShopifyScheduleSettings = useCallback(async (settings: {
     shopifyAutoSyncEnabled?: boolean;
@@ -2535,31 +2638,57 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     });
   }, [user, firestore, updateBusinessProfile, toast]);
 
-  // Global background runner for Shopify (Scheduled Interval Auto-Sync)
+  // Global background runner for Shopify (Real-time live sync & scheduled interval auto-sync)
   useEffect(() => {
     if (
       !businessProfile?.shopifyConnected ||
-      !businessProfile?.shopifyStoreUrl ||
-      businessProfile?.shopifyAutoSyncEnabled === false
+      !businessProfile?.shopifyStoreUrl
     ) {
       return;
     }
 
-    const checkShopifyBackgroundSync = () => {
-      if (isShopifySyncingRef.current) return;
+    const isRealtime = businessProfile?.shopifyRealtimeSyncEnabled !== false;
+    const isAutoSync = businessProfile?.shopifyAutoSyncEnabled !== false;
+    if (!isRealtime && !isAutoSync) return;
 
-      // Check if scheduled recurring interval or date/time is due
-      if (isShopifyAutoSyncDue(businessProfile)) {
-        console.log('[Shopify Scheduled AutoSync] Schedule is due. Triggering automatic background sync...');
+    let lastTrigger = 0;
+    const checkShopifyBackgroundSync = (force = false) => {
+      if (isShopifySyncingRef.current) return;
+      const now = Date.now();
+      // Minimum 10s cooldown to prevent redundant overlapping calls
+      if (now - lastTrigger < 10000) return;
+
+      if (force || isShopifyAutoSyncDue(businessProfile)) {
+        lastTrigger = now;
+        console.log(`[Shopify Sync] ${force ? 'Instant tab focus/visibility' : 'Live heartbeat'} auto-sync triggered...`);
         autoSyncShopifyNow(false);
       }
     };
 
-    // Evaluate schedule every 60 seconds
-    const intervalId = setInterval(checkShopifyBackgroundSync, 60 * 1000);
+    // 1. Live interval: 15s when Real-Time sync is enabled, 60s for scheduled intervals
+    const intervalMs = isRealtime ? 15000 : 60000;
+    const intervalId = setInterval(() => checkShopifyBackgroundSync(false), intervalMs);
+
+    // 2. Instant tab focus / visibility listener:
+    // When merchant edits, adds, or deletes products in Shopify and returns to AnalyzeUp, fetch immediately!
+    const onWindowActive = () => {
+      if (document.visibilityState === 'visible' && isRealtime) {
+        const lastSync = businessProfile.shopifyLastSyncedAt
+          ? new Date(businessProfile.shopifyLastSyncedAt).getTime()
+          : 0;
+        if (Date.now() - lastSync >= 10000) {
+          checkShopifyBackgroundSync(true);
+        }
+      }
+    };
+
+    window.addEventListener('focus', onWindowActive);
+    document.addEventListener('visibilitychange', onWindowActive);
 
     return () => {
       clearInterval(intervalId);
+      window.removeEventListener('focus', onWindowActive);
+      document.removeEventListener('visibilitychange', onWindowActive);
     };
   }, [businessProfile, autoSyncShopifyNow]);
 
@@ -2797,7 +2926,36 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     };
   }, [firestore, user, businessProfile, products, transactions, returns, suppliers, orders, updateBusinessProfile]);
 
+  const businessBuddyCalibration = useMemo(() => {
+    return getBusinessBuddyCalibration(businessProfile, products, transactions, returns);
+  }, [businessProfile, products, transactions, returns]);
+
+  const activateRecommendationsNow = useCallback(async () => {
+    try {
+      await updateBusinessProfile({
+        buddyCalibrationOverridden: true,
+        calibrationStatus: 'CALIBRATED',
+      });
+      toast({
+        title: 'Recommendations Activated! 🚀',
+        description: 'Your AI Business Buddy has unlocked full automated restock, promotions, and clearance tasks.',
+      });
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('analyzeup_audit_logged'));
+        window.dispatchEvent(new CustomEvent('analyzeup_tasks_updated'));
+      }
+    } catch (err: any) {
+      toast({
+        title: 'Action failed',
+        description: err?.message || 'Failed to activate recommendations.',
+        variant: 'destructive',
+      });
+    }
+  }, [updateBusinessProfile, toast]);
+
   const value = useMemo(() => ({
+    businessBuddyCalibration,
+    activateRecommendationsNow,
     products,
     orders,
     suppliers,
@@ -2868,6 +3026,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     updateShopifyScheduleSettings,
     disconnectShopify,
   }), [
+    businessBuddyCalibration,
+    activateRecommendationsNow,
     products,
     orders,
     suppliers,

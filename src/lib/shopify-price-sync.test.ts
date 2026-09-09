@@ -118,7 +118,59 @@ describe('Shopify Price & Discount Sync Engine', () => {
     expect(res.error).toContain('write_products');
   });
 
-  it('updates all sibling variants when product has multiple variants (e.g. shoe sizes)', async () => {
+  it('does NOT update sibling variants by default (isolating specific shoe size)', async () => {
+    global.fetch = vi.fn().mockImplementation(async (url: string, init?: any) => {
+      if (url.includes('/products/555.json')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            product: {
+              id: 555,
+              variants: [
+                { id: 701, title: 'Size 7', sku: 'SNK-VEL14-07', price: '5899.00' },
+                { id: 702, title: 'Size 8', sku: 'SNK-VEL14-08', price: '5899.00' },
+              ],
+            },
+          }),
+        };
+      }
+      if (url.includes('/variants/701.json') || url.includes('/variants/702.json')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            variant: { id: 701, price: '4188.00', compare_at_price: '5899.00' },
+          }),
+        };
+      }
+      return { ok: false, status: 404 };
+    });
+
+    // Default: updateAllVariants is not passed (or false)
+    const res = await updateShopifyVariantPrice({
+      shop: 'mystore.myshopify.com',
+      accessToken: 'shpat_valid123',
+      shopifyProductId: '555',
+      newPrice: 4188,
+      oldPrice: 5899,
+    });
+
+    expect(res.success).toBe(true);
+    expect(res.updatedVariantsCount).toBe(1);
+    const apiVersion = getShopifyApiVersion();
+    // Only target variant 701 should have been called, NOT sibling 702
+    expect(global.fetch).toHaveBeenCalledWith(
+      `https://mystore.myshopify.com/admin/api/${apiVersion}/variants/701.json`,
+      expect.anything()
+    );
+    expect(global.fetch).not.toHaveBeenCalledWith(
+      `https://mystore.myshopify.com/admin/api/${apiVersion}/variants/702.json`,
+      expect.anything()
+    );
+  });
+
+  it('updates all sibling variants when updateAllVariants is explicitly true', async () => {
     global.fetch = vi.fn().mockImplementation(async (url: string, init?: any) => {
       if (url.includes('/products/555.json')) {
         return {
@@ -153,6 +205,7 @@ describe('Shopify Price & Discount Sync Engine', () => {
       shopifyProductId: '555',
       newPrice: 4188,
       oldPrice: 5899,
+      updateAllVariants: true,
     });
 
     expect(res.success).toBe(true);

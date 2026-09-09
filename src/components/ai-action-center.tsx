@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { logBusinessAction } from '@/lib/audit-store';
 import { AuditLogModal } from '@/components/audit-log-modal';
 import { ThreeTierBadge } from '@/components/three-tier-badge';
+import { BusinessBuddyCard } from '@/components/business-buddy-card';
 import {
   Sparkles,
   ArrowRight,
@@ -52,7 +53,10 @@ export function AIActionCenter() {
     transactions,
     suppliers,
     orders,
+    returns,
     businessProfile,
+    businessBuddyCalibration,
+    activateRecommendationsNow,
     updateProduct,
     addOrder,
   } = useData();
@@ -85,9 +89,9 @@ export function AIActionCenter() {
   } | null>(null);
 
   useEffect(() => {
-    const generated = generateActionTasks(products, transactions, suppliers, orders, businessProfile);
+    const generated = generateActionTasks(products, transactions, suppliers, orders, businessProfile, returns);
     setTasks(generated);
-  }, [products, transactions, suppliers, orders, businessProfile]);
+  }, [products, transactions, suppliers, orders, businessProfile, returns]);
 
   const markTaskCompleted = (taskId: string, title?: string, customRecommendation?: string) => {
     setCompletedTaskIds((prev) => {
@@ -412,6 +416,14 @@ export function AIActionCenter() {
       </div>
     );
   };
+
+  if (businessBuddyCalibration?.status === 'LEARNING') {
+    return (
+      <BusinessBuddyCard
+        calibration={businessBuddyCalibration}
+      />
+    );
+  }
 
   return (
     <>

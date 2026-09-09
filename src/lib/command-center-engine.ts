@@ -2,6 +2,7 @@ import { Product, Transaction, Supplier, PurchaseOrder, ProductReturn, BusinessP
 import { detectProcurementRisks, calculateProcurementSavings } from './supplier-intelligence-engine';
 import { generateBusinessForecastingReport } from './forecasting-engine';
 import { predictOptimalClearanceDiscount } from './ml/clearance-pricing-model';
+import { getBusinessBuddyCalibration } from './business-buddy-engine';
 import {
   toDomainProducts,
   toDomainTransactions,
@@ -233,8 +234,15 @@ export function generateActionTasks(
   rawTransactions: Transaction[] = [],
   rawSuppliers: Supplier[] = [],
   rawOrders: PurchaseOrder[] = [],
-  businessProfile?: BusinessProfile | null
+  businessProfile?: BusinessProfile | null,
+  rawReturns: ProductReturn[] = []
 ): ActionTask[] {
+  // Respect the 3-5 day Business Buddy Calibration learning phase
+  const calibration = getBusinessBuddyCalibration(businessProfile, rawProducts, rawTransactions, rawReturns);
+  if (calibration.status === 'LEARNING') {
+    return [];
+  }
+
   const products = toDomainProducts(rawProducts);
   const transactions = toDomainTransactions(rawTransactions);
   const suppliers = toDomainSuppliers(rawSuppliers);

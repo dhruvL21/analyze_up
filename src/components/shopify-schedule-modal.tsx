@@ -128,15 +128,20 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
       });
 
       // Register webhooks in background if store is connected
-      if (businessProfile?.shopifyStoreUrl && businessProfile?.shopifyAccessToken) {
+      if (businessProfile?.shopifyStoreUrl) {
         fetch('/api/shopify/webhooks/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             shop: businessProfile.shopifyStoreUrl,
-            accessToken: businessProfile.shopifyAccessToken,
+            ...(businessProfile?.shopifyAccessToken ? { accessToken: businessProfile.shopifyAccessToken } : {}),
           }),
         }).catch(console.warn);
+      }
+
+      // If merchant enabled real-time sync, trigger an immediate sync to refresh state
+      if (realtimeEnabled) {
+        autoSyncShopifyNow(false).catch(console.warn);
       }
 
       onOpenChange(false);

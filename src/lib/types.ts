@@ -136,6 +136,10 @@ export interface BusinessProfile {
   logoUrl?: string;
   isOnboardingCompleted?: boolean;
   csvImportedAt?: string;
+  firstImportedAt?: string;
+  buddyCalibrationOverridden?: boolean;
+  buddyCalibrationTargetDays?: number;
+  calibrationStatus?: 'LEARNING' | 'CALIBRATED';
   createdAt?: string | FieldValue;
   updatedAt?: string | FieldValue;
 }
