@@ -209,7 +209,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [showShopifyModal, setShowShopifyModal] = useState<boolean>(false);
   const [hasDemoData, setHasDemoData] = useState<boolean>(false);
 
-  // Load business profile from localStorage
+  // Load business profile from localStorage & Cloud Firestore
   useEffect(() => {
     if (!user) return;
     const localProfile = localStorage.getItem(`analyzeup_profile_${user.uid}`);
@@ -225,7 +225,53 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         console.error("Error parsing business profile:", e);
       }
     }
-  }, [user]);
+
+    // Sync from Cloud Firestore for persistent state across devices & deployments
+    if (firestore) {
+      getDoc(doc(firestore, 'users', user.uid, 'settings', 'business_profile'))
+        .then((snap) => {
+          if (snap.exists()) {
+            const remote = snap.data() as BusinessProfile;
+            setBusinessProfile((prev) => {
+              const merged = { ...(prev || {}), ...remote } as BusinessProfile;
+              businessProfileRef.current = merged;
+              return merged;
+            });
+          }
+        })
+        .catch(console.warn);
+
+      // Check integrations collection for Shopify connection
+      getDoc(doc(firestore, 'users', user.uid, 'integrations', 'shopify'))
+        .then((snap) => {
+          if (snap.exists()) {
+            const intData = snap.data();
+            if (intData?.connectionStatus === 'Connected' || intData?.accessToken) {
+              setBusinessProfile((prev) => {
+                const merged: BusinessProfile = {
+                  ...(prev || {}),
+                  businessName: prev?.businessName || 'My Business',
+                  businessType: prev?.businessType || 'Retail',
+                  industry: prev?.industry || 'General Retail Store',
+                  businessSize: prev?.businessSize || '2-10 Employees',
+                  currency: prev?.currency || 'INR (₹)',
+                  timezone: prev?.timezone || 'Asia/Kolkata (GMT+5:30)',
+                  country: prev?.country || 'India',
+                  shopifyConnected: true,
+                  shopifyStatus: 'Connected',
+                  shopifyStoreUrl: intData.shopDomain || prev?.shopifyStoreUrl,
+                  shopifyStoreName: intData.storeName || prev?.shopifyStoreName,
+                  shopifyAccessToken: intData.accessToken || prev?.shopifyAccessToken,
+                };
+                businessProfileRef.current = merged;
+                return merged;
+              });
+            }
+          }
+        })
+        .catch(console.warn);
+    }
+  }, [user, firestore]);
 
   const updateBusinessProfile = useCallback(async (updates: Partial<BusinessProfile>, silent: boolean = false) => {
     if (!user) return;

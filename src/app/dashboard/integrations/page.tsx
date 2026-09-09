@@ -665,11 +665,30 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
             shopifyStoreName: data.storeName,
             shopifyLastSyncedAt: data.lastSyncAt,
           }, true);
-        } else if (data && data.connected === false && businessProfile?.shopifyConnected) {
-          updateBusinessProfile({
-            shopifyConnected: false,
-            shopifyStatus: 'Disconnected',
-          }, true);
+        } else if (data && data.connected === false) {
+          // Verify with client Firestore before resetting
+          if (firestore && user) {
+            const clientDoc = await getDoc(doc(firestore, 'users', user.uid, 'integrations', 'shopify'));
+            if (clientDoc.exists()) {
+              const cData = clientDoc.data();
+              if (cData?.connectionStatus === 'Connected' || cData?.accessToken) {
+                updateBusinessProfile({
+                  shopifyConnected: true,
+                  shopifyStatus: 'Connected',
+                  shopifyStoreUrl: cData.shopDomain || businessProfile?.shopifyStoreUrl,
+                  shopifyStoreName: cData.storeName || businessProfile?.shopifyStoreName,
+                  shopifyAccessToken: cData.accessToken,
+                }, true);
+                return;
+              }
+            }
+          }
+          if (businessProfile?.shopifyConnected) {
+            updateBusinessProfile({
+              shopifyConnected: false,
+              shopifyStatus: 'Disconnected',
+            }, true);
+          }
         }
       } catch (err) {
         console.warn('Could not fetch Shopify connection status:', err);
