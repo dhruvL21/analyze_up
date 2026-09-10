@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { NextRequest } from 'next/server';
+import { POST as handleShopifySync } from '@/app/api/shopify/sync/route';
 import {
   sanitizeShopDomain,
   getShopifyApiVersion,
@@ -900,6 +902,177 @@ describe('Production Shopify Multi-Tenant Hardening Suite', () => {
       const connA = await getShopifyConnection(shopA);
       expect(connA?.tenantId).toBe('tenantA');
       expect(connA?.tenantId).not.toBe('tenantB');
+    });
+  });
+
+  // ============================================================
+  // 11. Resilient Sync Route with Auto-Refresh & 401 Self-Healing
+  // ============================================================
+  describe('11. Resilient Sync Route with Auto-Refresh & 401 Self-Healing', () => {
+    it('prioritizes server-managed valid token over stale client-passed accessToken', async () => {
+      const shop = 'sync-resilient-store.myshopify.com';
+      await saveShopifyConnection({
+        id: `conn_tenant11_${shop}`,
+        tenantId: 'tenant11',
+        shopDomain: shop,
+        encryptedAccessToken: encryptShopifyToken('valid_server_token_123'),
+        encryptedRefreshToken: null,
+        accessTokenExpiresAt: null,
+        refreshTokenExpiresAt: null,
+        lastTokenRefreshAt: null,
+        status: 'ACTIVE',
+        requestedScopes: ['read_products', 'read_orders'],
+        grantedScopes: ['read_products', 'read_orders'],
+        missingScopes: [],
+        storeName: 'Sync Store',
+        currency: 'USD',
+        primaryLocationId: null,
+        installedAt: new Date().toISOString(),
+        uninstalledAt: null,
+        lastSyncAt: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      let tokenReceivedByShopify = '';
+      global.fetch = vi.fn().mockImplementation(async (url: string, init?: any) => {
+        tokenReceivedByShopify = init?.headers?.['X-Shopify-Access-Token'] || '';
+        if (url.includes('/products.json')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ products: [{ id: 101, title: 'Resilient Product', variants: [] }] }),
+          };
+        }
+        if (url.includes('/orders.json')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ orders: [] }),
+          };
+        }
+        if (url.includes('/graphql.json')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ data: { returns: { nodes: [] } } }),
+          };
+        }
+        return { ok: false, status: 404, text: async () => 'Not found' };
+      });
+
+      // Pass an expired/stale accessToken from client
+      const req = new NextRequest('http://localhost:9002/api/shopify/sync', {
+        method: 'POST',
+        body: JSON.stringify({
+          shop,
+          accessToken: 'shpat_stale_expired_client_token',
+        }),
+      });
+
+      const res = await handleShopifySync(req);
+      const data = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.products.length).toBe(1);
+      expect(data.newAccessToken).toBe('valid_server_token_123');
+      // Server ignored the stale client token and used the valid server token!
+      expect(tokenReceivedByShopify).toBe('valid_server_token_123');
+    });
+
+    it('automatically refreshes token and retries request when Shopify responds with 401', async () => {
+      const shop = 'sync-401-refresh-store.myshopify.com';
+      await saveShopifyConnection({
+        id: `conn_tenant11_${shop}`,
+        tenantId: 'tenant11',
+        shopDomain: shop,
+        encryptedAccessToken: encryptShopifyToken('initial_expired_token'),
+        encryptedRefreshToken: encryptShopifyToken('valid_refresh_token'),
+        accessTokenExpiresAt: new Date(Date.now() + 3600000).toISOString(),
+        refreshTokenExpiresAt: new Date(Date.now() + 86400000).toISOString(),
+        lastTokenRefreshAt: new Date().toISOString(),
+        status: 'ACTIVE',
+        requestedScopes: ['read_products', 'read_orders'],
+        grantedScopes: ['read_products', 'read_orders'],
+        missingScopes: [],
+        storeName: 'Sync 401 Store',
+        currency: 'USD',
+        primaryLocationId: null,
+        installedAt: new Date().toISOString(),
+        uninstalledAt: null,
+        lastSyncAt: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+
+      let fetchCallCount = 0;
+      global.fetch = vi.fn().mockImplementation(async (url: string, init?: any) => {
+        // Token refresh endpoint call
+        if (url.includes('/admin/oauth/access_token')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              access_token: 'newly_refreshed_access_token_456',
+              refresh_token: 'new_refresh_token_789',
+              expires_in: 3600,
+              refresh_token_expires_in: 7776000,
+            }),
+          };
+        }
+
+        if (url.includes('/products.json')) {
+          fetchCallCount++;
+          // First attempt returns 401 with initial_expired_token
+          if (init?.headers?.['X-Shopify-Access-Token'] === 'initial_expired_token') {
+            return {
+              ok: false,
+              status: 401,
+              text: async () => 'Invalid API key or access token (unrecognized login or wrong password)',
+            };
+          }
+          // Retry with refreshed token succeeds
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ products: [{ id: 202, title: 'Retried Product', variants: [] }] }),
+          };
+        }
+
+        if (url.includes('/orders.json')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ orders: [] }),
+          };
+        }
+
+        if (url.includes('/graphql.json')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ data: { returns: { nodes: [] } } }),
+          };
+        }
+
+        return { ok: false, status: 404, text: async () => 'Not found' };
+      });
+
+      const req = new NextRequest('http://localhost:9002/api/shopify/sync', {
+        method: 'POST',
+        body: JSON.stringify({ shop }),
+      });
+
+      const res = await handleShopifySync(req);
+      const data = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.products.length).toBe(1);
+      expect(data.products[0].name).toBe('Retried Product');
+      expect(data.newAccessToken).toBe('newly_refreshed_access_token_456');
+      expect(fetchCallCount).toBe(2); // 1 initial 401 + 1 retry = 2
     });
   });
 });

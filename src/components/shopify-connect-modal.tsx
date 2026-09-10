@@ -304,6 +304,7 @@ export function ShopifyConnectModal() {
       await updateBusinessProfile({
         shopifyLastSyncedAt: new Date().toISOString(),
         shopifyStatus: 'Connected',
+        ...(data.newAccessToken ? { shopifyAccessToken: data.newAccessToken } : {}),
       });
 
       const returnMsg = (stats?.canonicalReturnsCount || returns.length) > 0

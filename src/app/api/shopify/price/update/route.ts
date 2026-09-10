@@ -32,13 +32,19 @@ export async function POST(req: NextRequest) {
       shop = conn?.shopDomain;
     }
 
-    let accessToken = body?.accessToken;
-    if (!accessToken && shop) {
+    let accessToken = '';
+    if (shop) {
       try {
         accessToken = await getValidAccessToken(shop);
       } catch (tokErr: any) {
-        console.warn('[Shopify Price Update] Could not resolve token for shop:', shop, tokErr?.message);
+        if (body?.accessToken) {
+          accessToken = body.accessToken;
+        } else {
+          console.warn('[Shopify Price Update] Could not resolve token for shop:', shop, tokErr?.message);
+        }
       }
+    } else if (body?.accessToken) {
+      accessToken = body.accessToken;
     }
 
     if (newPrice === undefined || isNaN(Number(newPrice)) || Number(newPrice) < 0) {

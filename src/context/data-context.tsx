@@ -2569,6 +2569,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       await updateBusinessProfile({
         shopifyLastSyncedAt: nowIso,
         shopifyStatus: 'Connected',
+        ...(data.newAccessToken ? { shopifyAccessToken: data.newAccessToken } : {}),
         ...(!businessProfile?.firstImportedAt ? { firstImportedAt: nowIso } : {}),
       }, true);
 
@@ -2589,12 +2590,27 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         });
       }
     } catch (err: any) {
-      console.error('[Shopify AutoSync Error]:', err);
+      const isAuthError =
+        err?.message?.includes('401') ||
+        err?.message?.includes('authentication failed') ||
+        err?.message?.includes('Invalid or revoked access token');
+
+      if (isAuthError) {
+        console.warn('[Shopify AutoSync] Store authentication requires attention:', err?.message);
+        updateBusinessProfile({
+          shopifyStatus: 'Disconnected',
+        }, true).catch(() => {});
+      } else if (showToast) {
+        console.error('[Shopify Sync Error]:', err);
+      } else {
+        console.warn('[Shopify Background AutoSync Warning]:', err?.message || err);
+      }
+
       const isTimeout = err?.name === 'TimeoutError' || err?.name === 'AbortError';
       if (showToast) {
         toast({
           variant: 'destructive',
-          title: 'Shopify Sync Failed',
+          title: isAuthError ? 'Shopify Authentication Failed' : 'Shopify Sync Failed',
           description: isTimeout
             ? 'Shopify sync request timed out (25s). Please check your internet connection and try again.'
             : (err?.message || 'Could not fetch data from Shopify.'),

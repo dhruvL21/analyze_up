@@ -29,31 +29,65 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    let token = accessToken ? String(accessToken).trim() : '';
-    if (!token) {
-      try {
-        token = await getValidAccessToken(shop);
-      } catch (err: any) {
-        console.warn(`[Shopify Sync] Could not resolve server access token for ${shop}:`, err?.message || err);
+    let token = '';
+    // Priority 1: Check server-managed connection (with automatic token expiration & refresh handling)
+    try {
+      token = await getValidAccessToken(shop);
+    } catch (tokenErr: any) {
+      // Priority 2: Fall back to client-provided accessToken if server record is not present
+      if (accessToken && String(accessToken).trim()) {
+        token = String(accessToken).trim();
+      } else {
+        console.warn(`[Shopify Sync] Could not resolve server access token for ${shop}:`, tokenErr?.message || tokenErr);
         return NextResponse.json(
-          { success: false, error: `Could not resolve Shopify access token for store "${shop}". Please reconnect your store.` },
+          { success: false, error: `Could not resolve Shopify access token for store "${shop}". Please reconnect your store in Settings.` },
           { status: 401 }
         );
       }
     }
 
     const apiVersion = getShopifyApiVersion();
-    const headers = {
-      'X-Shopify-Access-Token': token,
-      'Content-Type': 'application/json',
+    let currentToken = token;
+
+    // Resilient fetch wrapper with automatic 401 token refresh & retry
+    const fetchWithAuth = async (url: string, init?: RequestInit): Promise<Response> => {
+      let res = await fetch(url, {
+        ...init,
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Shopify-Access-Token': currentToken,
+          ...(init?.headers || {}),
+        },
+      });
+
+      // If 401 Unauthorized, attempt an immediate token refresh and retry once
+      if (res.status === 401) {
+        console.warn(`[Shopify Sync] 401 Unauthorized from Shopify for ${shop}. Attempting token refresh...`);
+        try {
+          const freshToken = await getValidAccessToken(shop, true);
+          currentToken = freshToken;
+          res = await fetch(url, {
+            ...init,
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Shopify-Access-Token': freshToken,
+              ...(init?.headers || {}),
+            },
+          });
+        } catch (refreshErr: any) {
+          console.warn(`[Shopify Sync] Forced token refresh failed for ${shop}:`, refreshErr?.message || refreshErr);
+        }
+      }
+
+      return res;
     };
 
     // 1. Fetch Products & Variants from Shopify Admin API
     let rawProducts: any[] = [];
     try {
-      const productsRes = await fetch(
+      const productsRes = await fetchWithAuth(
         `https://${shop}/admin/api/${apiVersion}/products.json?limit=250`,
-        { method: 'GET', headers, signal: AbortSignal.timeout(15000) }
+        { method: 'GET', signal: AbortSignal.timeout(15000) }
       );
 
       if (productsRes.status === 401) {
@@ -91,9 +125,9 @@ export async function POST(req: NextRequest) {
     // 2. Fetch Orders from Shopify Admin API
     let rawOrders: any[] = [];
     try {
-      const ordersRes = await fetch(
+      const ordersRes = await fetchWithAuth(
         `https://${shop}/admin/api/${apiVersion}/orders.json?status=any&limit=250`,
-        { method: 'GET', headers, signal: AbortSignal.timeout(15000) }
+        { method: 'GET', signal: AbortSignal.timeout(15000) }
       );
 
       if (ordersRes.status === 401) {
@@ -184,9 +218,8 @@ export async function POST(req: NextRequest) {
         }
       `;
 
-      const gqlRes = await fetch(`https://${shop}/admin/api/${apiVersion}/graphql.json`, {
+      const gqlRes = await fetchWithAuth(`https://${shop}/admin/api/${apiVersion}/graphql.json`, {
         method: 'POST',
-        headers,
         body: JSON.stringify({ query: gqlQuery }),
         signal: AbortSignal.timeout(15000),
       });
@@ -218,6 +251,7 @@ export async function POST(req: NextRequest) {
       products: canonicalProducts,
       transactions: canonicalTransactions,
       returns: canonicalReturns,
+      newAccessToken: currentToken,
       stats: {
         rawProductsCount: rawProducts.length,
         canonicalProductsCount: canonicalProducts.length,

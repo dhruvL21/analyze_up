@@ -28,12 +28,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Resolve or verify access token exists
-    let token = accessToken ? String(accessToken).trim() : '';
-    if (!token) {
-      try {
-        token = await getValidAccessToken(shop);
-      } catch (err: any) {
+    // Resolve access token (prioritizing server-managed connection with token refresh)
+    let token = '';
+    try {
+      token = await getValidAccessToken(shop);
+    } catch (err: any) {
+      if (accessToken && String(accessToken).trim()) {
+        token = String(accessToken).trim();
+      } else {
         return NextResponse.json(
           { success: false, error: `Could not resolve Shopify access token for ${shop}: ${err?.message || err}` },
           { status: 401 }
