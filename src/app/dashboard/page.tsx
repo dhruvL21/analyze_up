@@ -7,6 +7,7 @@ import { AIBrief } from '@/components/ai-brief';
 import { BusinessHealthCard } from '@/components/business-health-card';
 import { AIActionCenter } from '@/components/ai-action-center';
 import { ExecutiveKPIGrid } from '@/components/executive-kpi-grid';
+import { InventoryRecommendationsPanel } from '@/components/inventory-recommendations-panel';
 import { RevenueProfitIntelligence } from '@/components/revenue-profit-intelligence';
 import { DeadStockSection } from '@/components/dead-stock-section';
 import { InventoryQualitySnapshot } from '@/components/inventory-quality-snapshot';
@@ -49,6 +50,9 @@ export default function DashboardPage() {
 
       {/* FEATURE 4: Executive KPI Grid (Trend & Interpretation) */}
       <ExecutiveKPIGrid />
+
+      {/* Proactive AI Inventory Recommendations */}
+      <InventoryRecommendationsPanel />
 
       {/* FEATURE 3: AI Action Center */}
       <AIActionCenter />

@@ -8,7 +8,8 @@ import { useData } from '@/context/data-context';
 import { useToast } from '@/hooks/use-toast';
 import { logBusinessAction } from '@/lib/audit-store';
 import { AuditLogModal } from '@/components/audit-log-modal';
-import { Sparkles, ArrowRight, CheckCircle2, TrendingUp, PackagePlus, Tag, ShieldCheck, RefreshCw, History, AlertTriangle } from 'lucide-react';
+import { Sparkles, ArrowRight, CheckCircle2, TrendingUp, PackagePlus, Tag, ShieldCheck, RefreshCw, History, AlertTriangle, Clock } from 'lucide-react';
+import { evaluateSalesHistory } from '@/lib/sales-history-helper';
 import {
   Dialog,
   DialogContent,
@@ -45,6 +46,11 @@ export function InventoryRecommendationsPanel() {
 
   const currencySymbol = businessProfile?.currency?.includes('USD') ? '$' : '₹';
 
+  // Dynamic Sales History Evaluation (verifies at least 1 month of sales history before predicting discounts / price hikes)
+  const salesHistory = React.useMemo(() => {
+    return evaluateSalesHistory(products, transactions);
+  }, [products, transactions]);
+
   const markApplied = (key: string) => {
     setAppliedIds(prev => {
       const next = new Set(prev).add(key);
@@ -66,27 +72,33 @@ export function InventoryRecommendationsPanel() {
     });
   };
 
-  // Memoized Candidate 1: Low Stock Reorder
+  // Candidate 1: Low Stock Reorder (Physical inventory truth: 0 units or stock <= minStock)
   const lowStockProd = React.useMemo(() => {
     return products.find(
       p => p && p.stock <= (p.minStock || 5) && !appliedIds.has(`${p.id}:reorder`)
     );
   }, [products, appliedIds]);
 
-  // Memoized Candidate 2: Dead Stock Clearance
+  // Candidate 2: Dead Stock Clearance
+  // DYNAMIC RULE: Clearance predictions ONLY show instantly if data has at least 1 month (30 days) of sales history
   const deadStockProd = React.useMemo(() => {
-    const saleProductIds = new Set(transactions.filter(t => t.type === 'Sale').map(t => t.productId));
+    if (!salesHistory.hasMinimumHistory) return null;
     return products.find(
-      p => p && p.stock > 0 && !saleProductIds.has(p.id) && !appliedIds.has(`${p.id}:clearance`)
+      p => p && p.stock > 0 && salesHistory.isProductEligibleForDeadStock(p) && !appliedIds.has(`${p.id}:clearance`)
     );
-  }, [products, transactions, appliedIds]);
+  }, [products, salesHistory, appliedIds]);
 
-  // Memoized Candidate 3: Price Increase Optimization
+  // Candidate 3: Price Increase Optimization
+  // DYNAMIC RULE: Price hikes ONLY show instantly if data has >= 30 days of history, product has sustained sales, and is NOT dead stock
   const priceUpProd = React.useMemo(() => {
+    if (!salesHistory.hasMinimumHistory) return null;
     return products.find(
-      p => p && (p.averageDailySales || 0) >= 0.8 && (p.price || 0) > 0 && !appliedIds.has(`${p.id}:price_up`)
+      p => p &&
+        p.id !== deadStockProd?.id &&
+        salesHistory.isProductEligibleForPriceUp(p) &&
+        !appliedIds.has(`${p.id}:price_up`)
     );
-  }, [products, appliedIds]);
+  }, [products, salesHistory, deadStockProd, appliedIds]);
 
   const handleReorder = (prod: any) => {
     const key = `${prod.id}:reorder`;
@@ -223,7 +235,7 @@ export function InventoryRecommendationsPanel() {
     });
   };
 
-  const isAllOptimized = !lowStockProd && !deadStockProd && !priceUpProd;
+  const isAllOptimized = salesHistory.hasMinimumHistory && !lowStockProd && !deadStockProd && !priceUpProd && appliedIds.size > 0;
 
   return (
     <>
@@ -239,6 +251,12 @@ export function InventoryRecommendationsPanel() {
                 {appliedIds.size > 0 && (
                   <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">
                     {appliedIds.size} Applied
+                  </Badge>
+                )}
+                {!salesHistory.hasMinimumHistory && (
+                  <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/30 text-[10px] flex items-center gap-1">
+                    <Clock className="w-3 h-3" />
+                    {salesHistory.historyDays > 0 ? `${salesHistory.historyDays}/30 Days Sales Data` : 'Sales History Baseline'}
                   </Badge>
                 )}
               </CardTitle>
@@ -270,8 +288,8 @@ export function InventoryRecommendationsPanel() {
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {/* Recommendation 1: Reorder */}
-              {lowStockProd && (
+              {/* Column 1: Reorder / Stock Buffer */}
+              {lowStockProd ? (
                 <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex flex-col justify-between space-y-2">
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
@@ -287,7 +305,7 @@ export function InventoryRecommendationsPanel() {
                     size="sm"
                     onClick={() => handleReorder(lowStockProd)}
                     disabled={animatingId === `${lowStockProd.id}:reorder`}
-                    className="w-full rounded-xl text-xs gap-1 bg-amber-600 hover:bg-amber-500 text-white shadow-sm h-8"
+                    className="w-full rounded-xl text-xs gap-1 bg-amber-600 hover:bg-amber-500 text-white shadow-sm h-8 cursor-pointer"
                   >
                     {animatingId === `${lowStockProd.id}:reorder` ? (
                       <>
@@ -300,10 +318,26 @@ export function InventoryRecommendationsPanel() {
                     )}
                   </Button>
                 </div>
+              ) : (
+                <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex flex-col justify-between space-y-2">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-foreground flex items-center gap-1 text-xs">
+                        <PackagePlus className="w-3.5 h-3.5 text-emerald-400" /> Restock Urgently
+                      </span>
+                      <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 text-[10px]">Optimal Buffer</Badge>
+                    </div>
+                    <p className="font-semibold text-foreground text-xs">Stock Levels Healthy</p>
+                    <p className="text-muted-foreground text-[11px]">All catalog items maintain stock above supplier lead-time reorder thresholds.</p>
+                  </div>
+                  <div className="h-8 w-full rounded-xl text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center justify-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Buffer Maintained
+                  </div>
+                </div>
               )}
 
-              {/* Recommendation 2: Clearance */}
-              {deadStockProd && (
+              {/* Column 2: Clearance & Dead Stock */}
+              {deadStockProd ? (
                 <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/25 flex flex-col justify-between space-y-2">
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
@@ -313,13 +347,13 @@ export function InventoryRecommendationsPanel() {
                       <Badge variant="outline" className="text-rose-400 border-rose-500/30 text-[10px]">Clear Capital</Badge>
                     </div>
                     <p className="font-semibold text-foreground text-xs">{deadStockProd.name || deadStockProd.productName}</p>
-                    <p className="text-muted-foreground text-[11px]">{deadStockProd.stock} units sitting unsold. Launch 20% discount to unlock cash flow.</p>
+                    <p className="text-muted-foreground text-[11px]">{deadStockProd.stock} units sitting unsold for 30+ days. Launch 20% discount to unlock cash flow.</p>
                   </div>
                   <Button
                     size="sm"
                     onClick={() => handleClearance(deadStockProd)}
                     disabled={animatingId === `${deadStockProd.id}:clearance`}
-                    className="w-full rounded-xl text-xs gap-1 bg-rose-600 hover:bg-rose-500 text-white shadow-sm h-8"
+                    className="w-full rounded-xl text-xs gap-1 bg-rose-600 hover:bg-rose-500 text-white shadow-sm h-8 cursor-pointer"
                   >
                     {animatingId === `${deadStockProd.id}:clearance` ? (
                       <>
@@ -332,10 +366,49 @@ export function InventoryRecommendationsPanel() {
                     )}
                   </Button>
                 </div>
+              ) : !salesHistory.hasMinimumHistory ? (
+                <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/25 flex flex-col justify-between space-y-2">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-foreground flex items-center gap-1 text-xs">
+                        <Tag className="w-3.5 h-3.5 text-blue-400" /> Liquidate Dead Stock
+                      </span>
+                      <Badge variant="outline" className="text-blue-400 border-blue-500/30 text-[10px]">
+                        {salesHistory.historyDays > 0 ? `${salesHistory.historyDays}/30 Days History` : 'History Needed'}
+                      </Badge>
+                    </div>
+                    <p className="font-semibold text-foreground text-xs">Awaiting 30-Day Sales History</p>
+                    <p className="text-muted-foreground text-[11px]">
+                      Clearance discount predictions require at least 1 month of sales history to protect active stock from premature markdowns.
+                    </p>
+                  </div>
+                  <div className="h-8 w-full rounded-xl text-[11px] font-medium bg-blue-500/15 text-blue-300 border border-blue-500/30 flex items-center justify-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-blue-400" />
+                    <span>Unlocks with 30+ days data</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex flex-col justify-between space-y-2">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-foreground flex items-center gap-1 text-xs">
+                        <Tag className="w-3.5 h-3.5 text-emerald-400" /> Liquidate Dead Stock
+                      </span>
+                      <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 text-[10px]">Catalog Active</Badge>
+                    </div>
+                    <p className="font-semibold text-foreground text-xs">Zero Dead Stock Detected</p>
+                    <p className="text-muted-foreground text-[11px]">
+                      All active catalog SKUs have recorded sales transactions within the 30-day cycle. No clearance required.
+                    </p>
+                  </div>
+                  <div className="h-8 w-full rounded-xl text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center justify-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Healthy Turnover
+                  </div>
+                </div>
               )}
 
-              {/* Recommendation 3: Price Up */}
-              {priceUpProd && (
+              {/* Column 3: Margin & Price Boost */}
+              {priceUpProd ? (
                 <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex flex-col justify-between space-y-2">
                   <div className="space-y-1">
                     <div className="flex items-center justify-between">
@@ -345,13 +418,13 @@ export function InventoryRecommendationsPanel() {
                       <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 text-[10px]">High Demand</Badge>
                     </div>
                     <p className="font-semibold text-foreground text-xs">{priceUpProd.name || priceUpProd.productName}</p>
-                    <p className="text-muted-foreground text-[11px]">Strong velocity. Increase selling price to {currencySymbol}{Math.round((priceUpProd.price || 500) * 1.08)} for margin expansion.</p>
+                    <p className="text-muted-foreground text-[11px]">Strong 30-day velocity. Increase selling price to {currencySymbol}{Math.round((priceUpProd.price || 500) * 1.08)} for margin expansion.</p>
                   </div>
                   <Button
                     size="sm"
                     onClick={() => handlePriceUp(priceUpProd)}
                     disabled={animatingId === `${priceUpProd.id}:price_up`}
-                    className="w-full rounded-xl text-xs gap-1 bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm h-8"
+                    className="w-full rounded-xl text-xs gap-1 bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm h-8 cursor-pointer"
                   >
                     {animatingId === `${priceUpProd.id}:price_up` ? (
                       <>
@@ -363,6 +436,43 @@ export function InventoryRecommendationsPanel() {
                       </>
                     )}
                   </Button>
+                </div>
+              ) : !salesHistory.hasMinimumHistory ? (
+                <div className="p-3.5 rounded-2xl bg-purple-500/10 border border-purple-500/25 flex flex-col justify-between space-y-2">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-foreground flex items-center gap-1 text-xs">
+                        <TrendingUp className="w-3.5 h-3.5 text-purple-400" /> Optimize Margin (+8%)
+                      </span>
+                      <Badge variant="outline" className="text-purple-400 border-purple-500/30 text-[10px]">Observing Velocity</Badge>
+                    </div>
+                    <p className="font-semibold text-foreground text-xs">Awaiting 30-Day Velocity Baseline</p>
+                    <p className="text-muted-foreground text-[11px]">
+                      Price increase recommendations require 30+ days of sustained sales data to verify elasticity without dampening conversions.
+                    </p>
+                  </div>
+                  <div className="h-8 w-full rounded-xl text-[11px] font-medium bg-purple-500/15 text-purple-300 border border-purple-500/30 flex items-center justify-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-purple-400" />
+                    <span>Unlocks with 30+ days data</span>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex flex-col justify-between space-y-2">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-foreground flex items-center gap-1 text-xs">
+                        <TrendingUp className="w-3.5 h-3.5 text-emerald-400" /> Optimize Margin (+8%)
+                      </span>
+                      <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 text-[10px]">Margins Balanced</Badge>
+                    </div>
+                    <p className="font-semibold text-foreground text-xs">Optimal Pricing Across Catalog</p>
+                    <p className="text-muted-foreground text-[11px]">
+                      Current catalog prices match category velocity. No product candidates need immediate price hikes.
+                    </p>
+                  </div>
+                  <div className="h-8 w-full rounded-xl text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center justify-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Margins Optimized
+                  </div>
                 </div>
               )}
             </div>

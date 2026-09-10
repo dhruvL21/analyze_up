@@ -8,6 +8,7 @@ import { useData } from '@/context/data-context';
 import { useToast } from '@/hooks/use-toast';
 import { logBusinessAction, getAuditLogs, BusinessAuditLog } from '@/lib/audit-store';
 import { predictOptimalClearanceDiscount, ClearancePrediction } from '@/lib/ml/clearance-pricing-model';
+import { evaluateSalesHistory } from '@/lib/sales-history-helper';
 import { useRouter } from 'next/navigation';
 import {
   PackageX,
@@ -61,11 +62,16 @@ export function DeadStockSection() {
 
   const currencySymbol = businessProfile?.currency?.includes('USD') ? '$' : '₹';
 
-  // Memoized Products with stock > 0 but zero sales in transaction history
-  const deadStockItems = React.useMemo(() => {
-    const saleProductIds = new Set(transactions.filter((t) => t.type === 'Sale').map((t) => t.productId));
-    return products.filter((p) => p.stock > 0 && !saleProductIds.has(p.id));
+  // Dynamic 30-day Sales History Evaluation
+  const salesHistory = React.useMemo(() => {
+    return evaluateSalesHistory(products, transactions);
   }, [products, transactions]);
+
+  // Dead Stock Items: Only evaluated if dataset has >= 30 days of recorded sales history
+  const deadStockItems = React.useMemo(() => {
+    if (!salesHistory.hasMinimumHistory) return [];
+    return products.filter((p) => p && p.stock > 0 && salesHistory.isProductEligibleForDeadStock(p));
+  }, [products, salesHistory]);
 
   // Track products that have already had a clearance discount executed in audit logs
   const discountedProductNames = React.useMemo(() => {
@@ -144,8 +150,13 @@ export function DeadStockSection() {
     }
   };
 
-  if (businessBuddyCalibration?.status === 'LEARNING') {
-    const { currentDayNumber, targetDays, intelligence } = businessBuddyCalibration;
+  if (businessBuddyCalibration?.status === 'LEARNING' || !salesHistory.hasMinimumHistory) {
+    const currentDayNumber = salesHistory.historyDays || businessBuddyCalibration?.currentDayNumber || 1;
+    const targetDays = 30;
+    const intelligence = businessBuddyCalibration?.intelligence || {
+      detectedIndustry: 'Footwear & Retail',
+      holdingPeriodDays: 30,
+    };
     return (
       <Card className="ios-glass rounded-3xl border-emerald-500/25 p-5 shadow-xl space-y-4 bg-gradient-to-br from-emerald-950/10 via-background to-background">
         <CardHeader className="p-0 pb-3 border-b border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -163,7 +174,7 @@ export function DeadStockSection() {
                 </Badge>
               </div>
               <CardDescription className="text-xs text-muted-foreground mt-0.5">
-                Clearance markdowns are safely on hold to protect brand equity while observing {intelligence.detectedIndustry} purchase cycles.
+                Clearance markdowns are safely on hold to protect brand equity while observing {intelligence.detectedIndustry} purchase cycles (requires 30+ days of sales history).
               </CardDescription>
             </div>
           </div>

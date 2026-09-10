@@ -3,6 +3,7 @@ import { detectProcurementRisks, calculateProcurementSavings } from './supplier-
 import { generateBusinessForecastingReport } from './forecasting-engine';
 import { predictOptimalClearanceDiscount } from './ml/clearance-pricing-model';
 import { getBusinessBuddyCalibration } from './business-buddy-engine';
+import { evaluateSalesHistory } from './sales-history-helper';
 import {
   toDomainProducts,
   toDomainTransactions,
@@ -302,10 +303,15 @@ export function generateActionTasks(
   });
 
   // Task Group 2: Dead Stock Liquidation (Individual predictive clearance discounts)
-  const saleProductIds = new Set(transactions.filter(t => t.type === 'Sale').map(t => t.productId));
-  const deadStock = [...products]
-    .filter(p => p && p.name && p.stock > 0 && !saleProductIds.has(p.id) && p.liquidationStatus !== 'Liquidated' && !(p.compareAtPrice && p.compareAtPrice > p.price))
-    .sort((a, b) => (b.stock * (b.costPrice || b.price * 0.6)) - (a.stock * (a.costPrice || a.price * 0.6)) || (a.name || '').localeCompare(b.name || ''));
+  // Dynamic Rule: Requires at least 30 days of sales history (or founder override)
+  const salesHistory = evaluateSalesHistory(rawProducts, rawTransactions);
+  const deadStock = (salesHistory.hasMinimumHistory || calibration.isOverridden)
+    ? [...products]
+        .filter(p => p && p.name && p.stock > 0 && (calibration.isOverridden ? !transactions.some(t => t.productId === p.id) : salesHistory.isProductEligibleForDeadStock(p)) && p.liquidationStatus !== 'Liquidated' && !(p.compareAtPrice && p.compareAtPrice > p.price))
+        .sort((a, b) => (b.stock * (b.costPrice || b.price * 0.6)) - (a.stock * (a.costPrice || a.price * 0.6)) || (a.name || '').localeCompare(b.name || ''))
+    : [];
+
+  const deadStockIds = new Set(deadStock.map(p => p.id));
 
   deadStock.slice(0, 5).forEach((topDead) => {
     const pName = topDead.name || topDead.productName || 'Product';
@@ -329,9 +335,12 @@ export function generateActionTasks(
   });
 
   // Task Group 3: Pricing Optimization (High Demand & High Margin Expansion)
-  const highDemandProducts = [...products]
-    .filter(p => p && p.name && (p.averageDailySales || 0) >= 0.5 && (p.price || 0) > 0)
-    .sort((a, b) => (b.averageDailySales || 0) - (a.averageDailySales || 0) || (a.name || '').localeCompare(b.name || ''));
+  // Exclude products that are dead stock
+  const highDemandProducts = (salesHistory.hasMinimumHistory || calibration.isOverridden)
+    ? [...products]
+        .filter(p => p && p.name && !deadStockIds.has(p.id) && (p.averageDailySales || 0) >= 0.5 && (p.price || 0) > 0)
+        .sort((a, b) => (b.averageDailySales || 0) - (a.averageDailySales || 0) || (a.name || '').localeCompare(b.name || ''))
+    : [];
 
   highDemandProducts.slice(0, 4).forEach((topDemand) => {
     const pName = topDemand.name || topDemand.productName || 'Product';
