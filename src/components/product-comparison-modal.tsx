@@ -23,7 +23,7 @@ interface ProductComparisonModalProps {
 }
 
 export function ProductComparisonModal({ open, onOpenChange }: ProductComparisonModalProps) {
-  const { products, transactions, returns, businessProfile } = useData();
+  const { products, transactions, returns, businessProfile, capabilities, dataReadiness } = useData();
 
   const [prodIdA, setProdIdA] = useState<string>(products[0]?.id || '');
   const [prodIdB, setProdIdB] = useState<string>(products[1]?.id || products[0]?.id || '');
@@ -33,8 +33,13 @@ export function ProductComparisonModal({ open, onOpenChange }: ProductComparison
   const productA = products.find(p => p.id === prodIdA) || products[0];
   const productB = products.find(p => p.id === prodIdB) || products[1] || products[0];
 
-  const reportA = productA ? computeProductIntelligence(productA, transactions, returns) : null;
-  const reportB = productB ? computeProductIntelligence(productB, transactions, returns) : null;
+  const readinessOpts = {
+    isDeadStockEnabled: capabilities?.deadStockDetection,
+    isVelocityEnabled: capabilities?.trendAnalysis,
+    historicalDays: dataReadiness?.historicalDays,
+  };
+  const reportA = productA ? computeProductIntelligence(productA, transactions, returns, [], readinessOpts) : null;
+  const reportB = productB ? computeProductIntelligence(productB, transactions, returns, [], readinessOpts) : null;
 
   const nameA = productA?.name || productA?.productName || 'Product A';
   const nameB = productB?.name || productB?.productName || 'Product B';

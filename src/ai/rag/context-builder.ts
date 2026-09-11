@@ -1,4 +1,5 @@
 import type { BusinessProfile } from '@/lib/types';
+import type { DataReadiness } from '@/lib/data-readiness-engine';
 import type { AnalyticsResult, SearchResult, QueryIntent, Citation } from './types';
 
 export interface BuiltContext {
@@ -17,7 +18,8 @@ export function buildRAGPromptContext(
   retrievedResults: SearchResult[],
   analytics: AnalyticsResult | null,
   citations: Citation[],
-  profile?: BusinessProfile | null
+  profile?: BusinessProfile | null,
+  dataReadiness?: DataReadiness | null
 ): BuiltContext {
   const currency = '₹';
   const businessName = profile?.businessName || 'Business Workspace';
@@ -141,8 +143,34 @@ You MUST ALWAYS format your entire response using the following clean, executive
 2. **[Operational Optimization]**: [Reorder, stock transfer, or promotion tactic]
 3. **[Strategic Next Step]**: [Longer-term margin or supplier negotiation advice]`;
 
-  // 4. User Prompt with Injected Context
-  const userPrompt = `${analyticsBlock}
+  // 4. Structured Data Readiness & Capabilities Envelope
+  let readinessBlock = '';
+  if (dataReadiness) {
+    const { score, level, capabilities, limitations, historicalDays, totalOrders } = dataReadiness;
+    readinessBlock = `
+=== 🛡️ DATA READINESS & CAPABILITY ENVELOPE ===
+Data Readiness Score: ${score}/100
+Intelligence Level: ${level} (${historicalDays} recorded days, ${totalOrders} orders)
+Permitted Analytical Capabilities:
+• Baseline Sales Analytics: ${capabilities.baselineSalesAnalytics ? 'ENABLED' : 'DISABLED'}
+• Dead Stock Detection: ${capabilities.deadStockDetection ? 'ENABLED' : 'DISABLED (Hold markdowns: protect brand equity)'}
+• Demand Forecasting: ${capabilities.demandForecasting ? 'ENABLED' : 'DISABLED (Insufficient historical depth)'}
+• Clearance Pricing Optimization: ${capabilities.clearancePricing ? 'ENABLED' : 'DISABLED'}
+• Profit Margin Optimization: ${capabilities.marginAnalysis ? 'ENABLED' : 'DISABLED (Missing cost data - frame as sell-through acceleration)'}
+• Safety Stock Modeling: ${capabilities.safetyStockCalculation ? 'ENABLED' : 'DISABLED'}
+• Seasonality Intelligence: ${capabilities.seasonalityDetection ? 'ENABLED' : 'DISABLED'}
+
+Active Data Constraints:
+${limitations.length > 0 ? limitations.map((l) => `• ${l}`).join('\n') : '• None. Data fully qualified.'}
+
+AI OPERATIONAL CONSTRAINTS:
+1. Only make forecasts or risk predictions if the corresponding capability is ENABLED. If DISABLED, state that the store is currently in ${level.replace('_', ' ')} phase and more historical depth is required.
+2. If margin/cost data is absent, do NOT speculate on profit margin or net margins. Frame inventory recommendations strictly as sell-through acceleration.
+`;
+  }
+
+  // 5. User Prompt with Injected Context
+  const userPrompt = `${readinessBlock}${analyticsBlock}
 ${docsBlock}
 
 === 💬 USER QUESTION ===

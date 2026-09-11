@@ -20,14 +20,27 @@ import {
   recalculateAndSaveAnalyticsSummary,
 } from '@/lib/analytics-aggregator';
 import { generateProductDocId, generateTransactionDocId } from '@/lib/import-job-service';
+import {
+  resolveExistingProduct,
+  generateOrderLineItemKey,
+  normalizeOrderNumber,
+  reconcileDuplicateProducts,
+} from '@/lib/ingestion/order-deduplication-engine';
 import { sanitizePlainData } from '@/lib/utils';
 
 import {
   getBusinessBuddyCalibration,
   type BusinessBuddyCalibration,
 } from '@/lib/business-buddy-engine';
+import {
+  evaluateDataReadiness,
+  type DataReadiness,
+  type IntelligenceCapabilities,
+} from '@/lib/data-readiness-engine';
 
 interface DataContextProps {
+  dataReadiness: DataReadiness;
+  capabilities: IntelligenceCapabilities;
   businessBuddyCalibration: BusinessBuddyCalibration;
   activateRecommendationsNow: () => Promise<void>;
   products: Product[];
@@ -63,6 +76,7 @@ interface DataContextProps {
   recordSale: (productId: string, quantity: number) => Promise<void>;
   addReturn: (returnData: Omit<ProductReturn, 'id' | 'createdAt' | 'updatedAt' | 'userId'>) => Promise<void>;
   deleteReturn: (returnId: string) => Promise<void>;
+  updateReturn: (returnId: string, updates: Partial<ProductReturn>) => Promise<void>;
   updateReturnStatus: (returnId: string, refundStatus: string) => Promise<void>;
   bulkAddProducts: (products: Omit<Product, 'id' | 'createdAt' | 'updatedAt' | 'userId'>[], overwriteStock?: boolean, silent?: boolean) => Promise<any>;
   bulkUpdateProducts: (updates: (Partial<Product> & { id: string })[]) => Promise<void>;
@@ -185,7 +199,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   const [activePlan, setActivePlan] = useState<string>(() => {
     if (typeof window === 'undefined') return "Free Trial";
-    return localStorage.getItem("analyzeup_subscription_plan") || "Free Trial";
+    return localStorage.getItem("analyzeup_subscription_plan") || (process.env.NODE_ENV === 'development' ? "Pro Plan" : "Free Trial");
   });
   const [aiQueryCount, setAiQueryCount] = useState<number>(() => {
     if (typeof window === 'undefined') return 0;
@@ -285,6 +299,15 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         .catch(console.warn);
     }
   }, [user, firestore]);
+
+  // Automatically reconcile and purge duplicate products in Firestore (e.g. from phantom CSV imports)
+  useEffect(() => {
+    if (!firestore || !user || !products || products.length === 0) return;
+    const timer = setTimeout(() => {
+      reconcileDuplicateProducts(products, firestore, user.uid).catch(console.warn);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, [firestore, user, products]);
 
   const updateBusinessProfile = useCallback(async (updates: Partial<BusinessProfile>, silent: boolean = false) => {
     if (!user) return;
@@ -682,6 +705,18 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           return;
         }
 
+        const updatedProduct: Product = {
+          ...existingProduct,
+          ...(nameChanged ? { name: productData.name } : {}),
+          ...(skuChanged ? { sku: productData.sku } : {}),
+          ...(priceChanged ? { price: incomingPrice } : {}),
+          ...(costChanged ? { costPrice: incomingCost } : {}),
+          ...(stockChanged ? { stock: finalStock } : {}),
+        };
+        if (existingProduct.id) existingProductByIdMap.set(existingProduct.id, updatedProduct);
+        if (updatedProduct.sku) existingProductSkuMap.set(updatedProduct.sku.trim().toUpperCase(), updatedProduct);
+        if (updatedProduct.name) existingProductNameMap.set(updatedProduct.name.trim().toLowerCase(), updatedProduct);
+
         operations.push({
           type: 'update',
           id: existingProduct.id,
@@ -702,18 +737,30 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         });
         updateCount++;
       } else {
-        const targetId = pAny.id || undefined;
+        const targetId = pAny.id || `prod_${Date.now().toString(36)}_${newCount}`;
+        const newProductRecord: any = {
+          ...productData,
+          id: targetId,
+          userId: user.uid,
+          stock: productData.stock !== undefined && !isNaN(Number(productData.stock)) ? Number(productData.stock) : 0,
+          minStock: productData.minStock !== undefined ? Number(productData.minStock) : 0,
+          averageDailySales: productData.averageDailySales ?? 0,
+          leadTimeDays: productData.leadTimeDays ?? 0,
+        };
+
+        if (targetId) existingProductByIdMap.set(targetId, newProductRecord);
+        if (skuUpper) existingProductSkuMap.set(skuUpper, newProductRecord);
+        if (nameLower) existingProductNameMap.set(nameLower, newProductRecord);
+        if (shopifyVarId) existingProductByVariantMap.set(shopifyVarId, newProductRecord);
+        if (shopifyProdId) existingProductByShopifyProdMap.set(shopifyProdId, newProductRecord);
+
         operations.push({
           type: 'create',
           id: targetId,
           data: cleanObject({
-            ...productData,
-            ...(targetId ? { id: targetId } : {}),
-            userId: user.uid,
+            ...newProductRecord,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
-            averageDailySales: productData.averageDailySales || (Math.floor(Math.random() * 5) + 1),
-            leadTimeDays: productData.leadTimeDays || (Math.floor(Math.random() * 7) + 5),
           }),
         });
         newCount++;
@@ -862,12 +909,25 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       return `${prod}|${date}|${qty}|${rev}|${cust}`;
     };
 
-    const existingMapByOrderNo = new Map<string, Transaction>();
+    const existingMapByLineItemKey = new Map<string, Transaction>();
+    const existingMapByOrderNo = new Map<string, Transaction[]>();
     const existingMapByFingerprint = new Map<string, Transaction>();
 
     transactions.forEach(t => {
-      if (t.orderNumber?.trim()) {
-        existingMapByOrderNo.set(t.orderNumber.trim().toUpperCase(), t);
+      const normOrder = normalizeOrderNumber(t.orderNumber);
+      const lineKey = generateOrderLineItemKey(
+        t.orderNumber,
+        (t as any).sku,
+        t.productName,
+        typeof t.transactionDate === 'string' ? t.transactionDate : undefined,
+        t.quantity
+      );
+      if (lineKey) existingMapByLineItemKey.set(lineKey, t);
+
+      if (normOrder) {
+        const list = existingMapByOrderNo.get(normOrder) || [];
+        list.push(t);
+        existingMapByOrderNo.set(normOrder, list);
       }
       existingMapByFingerprint.set(getTxFingerprint(t), t);
     });
@@ -882,9 +942,34 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     > = [];
 
     transactionsData.forEach(t => {
-      const orderNoUpper = t.orderNumber?.trim().toUpperCase();
+      const normOrder = normalizeOrderNumber(t.orderNumber);
+      const lineKey = generateOrderLineItemKey(
+        t.orderNumber,
+        (t as any).sku,
+        t.productName,
+        typeof t.transactionDate === 'string' ? t.transactionDate : undefined,
+        t.quantity
+      );
       const fingerprint = getTxFingerprint(t);
-      const existing = (orderNoUpper ? existingMapByOrderNo.get(orderNoUpper) : null) || existingMapByFingerprint.get(fingerprint);
+
+      let existing: Transaction | null = null;
+      if (lineKey && existingMapByLineItemKey.has(lineKey)) {
+        existing = existingMapByLineItemKey.get(lineKey)!;
+      } else if (normOrder && existingMapByOrderNo.has(normOrder)) {
+        const matchingOrders = existingMapByOrderNo.get(normOrder)!;
+        const incomingSku = ((t as any).sku || '').trim().toUpperCase();
+        const incomingProd = (t.productName || '').trim().toLowerCase();
+        const found = matchingOrders.find(o => {
+          const oSku = ((o as any).sku || '').trim().toUpperCase();
+          const oProd = (o.productName || '').trim().toLowerCase();
+          if (incomingSku && oSku && incomingSku === oSku) return true;
+          if (incomingProd && oProd && incomingProd === oProd) return true;
+          return false;
+        });
+        if (found) existing = found;
+      } else if (fingerprint && existingMapByFingerprint.has(fingerprint)) {
+        existing = existingMapByFingerprint.get(fingerprint)!;
+      }
 
       if (existing) {
         const isStatusChanged = t.status && t.status !== existing.status;
@@ -906,7 +991,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         });
         updateCount++;
       } else {
-        if (orderNoUpper) existingMapByOrderNo.set(orderNoUpper, t as any);
+        if (lineKey) existingMapByLineItemKey.set(lineKey, t as any);
+        if (normOrder) {
+          const list = existingMapByOrderNo.get(normOrder) || [];
+          list.push(t as any);
+          existingMapByOrderNo.set(normOrder, list);
+        }
         existingMapByFingerprint.set(fingerprint, t as any);
 
         operations.push({
@@ -1014,8 +1104,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         const isStatusChanged = r.refundStatus && r.refundStatus !== existing.refundStatus;
         const isActionChanged = r.actionTaken && r.actionTaken !== existing.actionTaken;
         const isAmountChanged = r.refundAmount !== undefined && r.refundAmount !== existing.refundAmount;
+        const isReasonChanged = r.reason && r.reason !== existing.reason && (existing.reason === 'Other' || !existing.reason);
+        const isProductResolved = r.productId && existing.productId?.startsWith('shopify_order_') && !r.productId.startsWith('shopify_order_');
 
-        if (!isStatusChanged && !isActionChanged && !isAmountChanged) {
+        if (!isStatusChanged && !isActionChanged && !isAmountChanged && !isReasonChanged && !isProductResolved) {
           skippedCount++;
           return;
         }
@@ -1027,6 +1119,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             ...(isStatusChanged ? { refundStatus: r.refundStatus } : {}),
             ...(isActionChanged ? { actionTaken: r.actionTaken } : {}),
             ...(isAmountChanged ? { refundAmount: r.refundAmount } : {}),
+            ...(isReasonChanged ? { reason: r.reason } : {}),
+            ...(isProductResolved ? { productId: r.productId, productName: r.productName, sku: r.sku } : {}),
             updatedAt: serverTimestamp(),
           }),
           rawReturn: { ...existing, ...r },
@@ -1034,20 +1128,36 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         updateCount++;
       } else {
         const returnId = r.id || `ret_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 6)}`;
-        if (r.id) existingMapById.set(r.id, { ...r, id: returnId } as any);
-        existingMapByFingerprint.set(fingerprint, { ...r, id: returnId } as any);
+
+        // Match against existing catalog products if productId is raw or missing
+        const matchedProduct = products.find(p =>
+          p.id === r.productId ||
+          (r.sku && p.sku && p.sku.toLowerCase() === r.sku.toLowerCase()) ||
+          (p.shopifyProductId && r.productId && r.productId.includes(p.shopifyProductId)) ||
+          (p.name && r.productName && p.name.trim().toLowerCase() === r.productName.trim().toLowerCase())
+        );
+
+        const finalProductId = matchedProduct?.id || r.productId;
+        const finalProductName = matchedProduct?.name || r.productName;
+        const finalSku = matchedProduct?.sku || r.sku;
+
+        if (r.id) existingMapById.set(r.id, { ...r, id: returnId, productId: finalProductId, productName: finalProductName, sku: finalSku } as any);
+        existingMapByFingerprint.set(fingerprint, { ...r, id: returnId, productId: finalProductId, productName: finalProductName, sku: finalSku } as any);
 
         operations.push({
           type: 'create',
           id: returnId,
           data: cleanObject({
             ...r,
+            productId: finalProductId,
+            productName: finalProductName,
+            sku: finalSku,
             id: returnId,
             userId: user.uid,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           }),
-          rawReturn: { ...r, id: returnId },
+          rawReturn: { ...r, productId: finalProductId, productName: finalProductName, sku: finalSku, id: returnId },
         });
         newCount++;
       }
@@ -1672,6 +1782,18 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     toast({ title: 'Return Status Updated', description: `Return status updated to ${refundStatus}.` });
   }, [firestore, user, returns, products, transactionsRef, returnsRef, toast]);
 
+  const updateReturn = useCallback(async (returnId: string, updates: Partial<ProductReturn>) => {
+    if (!firestore || !user || !returnsRef) return;
+    const returnRef = doc(firestore, 'users', user.uid, 'returns', returnId);
+    await updateDoc(returnRef, cleanObject({
+      ...updates,
+      updatedAt: serverTimestamp(),
+    })).catch((_serverError) => {
+      console.error("Failed to update return:", _serverError);
+    });
+    toast({ title: 'Return Updated', description: 'Return details updated successfully.' });
+  }, [firestore, user, returnsRef, toast]);
+
   const deleteReturn = useCallback(async (returnId: string) => {
     if (!firestore || !user) return;
     const returnRef = doc(firestore, 'users', user.uid, 'returns', returnId);
@@ -2157,12 +2279,15 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
               const costPrice = parseFloat(String(rawCostPrice).replace(/[^0-9.]/g, '')) || Math.round(price * 0.6);
 
               const rawStock =
-                obj.stock ||
-                obj.inventory_quantity ||
-                rawRow['Stock'] ||
-                rawRow['Current Stock'] ||
-                '25';
-              const stock = parseInt(String(rawStock).replace(/[^0-9]/g, ''), 10) || 25;
+                obj.stock !== undefined && obj.stock !== ''
+                  ? obj.stock
+                  : (obj.inventory_quantity !== undefined && obj.inventory_quantity !== ''
+                      ? obj.inventory_quantity
+                      : (rawRow['Stock'] !== undefined && rawRow['Stock'] !== ''
+                          ? rawRow['Stock']
+                          : (rawRow['Current Stock'] !== undefined && rawRow['Current Stock'] !== '' ? rawRow['Current Stock'] : undefined)));
+              const hasExplicitStock = rawStock !== undefined && !isNaN(parseInt(String(rawStock).replace(/[^0-9]/g, ''), 10));
+              const explicitStockValue = hasExplicitStock ? parseInt(String(rawStock).replace(/[^0-9]/g, ''), 10) : undefined;
 
               const sku = (
                 obj.sku ||
@@ -2171,6 +2296,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                 rawRow['Barcode'] ||
                 `SKU-${name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10)}-${idx + 1}`
               ).toUpperCase();
+
+              const existingProd = resolveExistingProduct(products, sku, name);
+              const finalStock = explicitStockValue !== undefined
+                ? explicitStockValue
+                : (existingProd ? existingProd.stock : 0);
 
               const category = obj.category || rawRow['Category'] || rawRow['Department'] || 'General';
               const supplier = obj.supplier || obj.supplierName || rawRow['Supplier'] || rawRow['Vendor'] || 'Google Drive Vendor';
@@ -2186,8 +2316,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                   name,
                   price,
                   costPrice,
-                  stock,
-                  qty: Math.max(1, Math.min(stock, 4)),
+                  stock: finalStock,
+                  hasExplicitStock,
+                  qty: Math.max(1, Math.min(finalStock > 0 ? finalStock : 1, 4)),
                   sku,
                   category,
                   supplier,
@@ -2229,60 +2360,58 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                 );
               }
 
-              // 3. ALWAYS populate products into Catalog Intelligence & Inventory
-              const productsToImport = validRows.map(r => ({
-                name: r.parsed.name,
-                sku: r.parsed.sku,
-                description: r.parsed.description,
-                categoryId: existingCatMap.get(r.parsed.category.toLowerCase()) || 'cat-general',
-                category: r.parsed.category,
-                supplier: r.parsed.supplier,
-                supplierId: existingSupMap.get(r.parsed.supplier.toLowerCase()) || '',
-                price: r.parsed.price,
-                costPrice: r.parsed.costPrice,
-                stock: r.parsed.stock,
-                minStock: 5,
-                maxStock: Math.max(100, r.parsed.stock * 2),
-                unit: r.parsed.unit,
-                status: 'Active' as const,
-                averageDailySales: 1.5,
-                leadTimeDays: 7,
-              }));
+              // 3. Populate products into Catalog Intelligence & Inventory without fabricated stock
+              const productsToImport = validRows.map(r => {
+                const existingProd = resolveExistingProduct(products, r.parsed.sku, r.parsed.name);
+                const stockVal = r.parsed.hasExplicitStock && r.parsed.stock !== undefined
+                  ? r.parsed.stock
+                  : (existingProd ? existingProd.stock : 0);
+
+                return {
+                  ...(existingProd?.id ? { id: existingProd.id } : {}),
+                  name: r.parsed.name,
+                  sku: r.parsed.sku,
+                  description: r.parsed.description,
+                  categoryId: existingCatMap.get(r.parsed.category.toLowerCase()) || 'cat-general',
+                  category: r.parsed.category,
+                  supplier: r.parsed.supplier,
+                  supplierId: existingSupMap.get(r.parsed.supplier.toLowerCase()) || '',
+                  price: r.parsed.price,
+                  costPrice: r.parsed.costPrice,
+                  stock: stockVal,
+                  minStock: 0,
+                  maxStock: stockVal > 0 ? stockVal * 2 : 0,
+                  unit: r.parsed.unit,
+                  status: 'Active' as const,
+                  averageDailySales: 0,
+                  leadTimeDays: 0,
+                };
+              });
 
               await bulkAddProducts(productsToImport, true);
 
-              // 4. ALWAYS populate sales transactions to drive charts & revenue analytics
-              // Skip rows belonging to products already in the database to prevent repeating historical transactions
-              const existingSkuSet = new Set(products.map(p => (p.sku || '').trim().toUpperCase()).filter(Boolean));
-              const existingNameSet = new Set(products.map(p => (p.name || '').trim().toLowerCase()).filter(Boolean));
-
-              const transactionsToImport = validRows
-                .filter(r => {
-                  const sUpper = (r.parsed.sku || '').trim().toUpperCase();
-                  const nLower = (r.parsed.name || '').trim().toLowerCase();
-                  const isExisting = (sUpper && existingSkuSet.has(sUpper)) || (nLower && existingNameSet.has(nLower));
-                  return !isExisting;
-                })
-                .map((r, idx) => {
-                  return {
-                    type: 'Sale' as const,
-                    productId: `prod-${(r.parsed.sku || r.parsed.name).toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
-                    productName: r.parsed.name,
-                    sku: r.parsed.sku,
-                    quantity: r.parsed.qty || 1,
-                    price: r.parsed.price,
-                    sellingPrice: r.parsed.price,
-                    costPrice: r.parsed.costPrice,
-                    totalRevenue: (r.parsed.price || 0) * (r.parsed.qty || 1),
-                    totalCost: (r.parsed.costPrice || 0) * (r.parsed.qty || 1),
-                    orderNumber: r.parsed.orderNo,
-                    customerName: r.parsed.customer,
-                    supplier: r.parsed.supplier,
-                    transactionDate: r.parsed.date || new Date().toISOString().split('T')[0],
-                    paymentMethod: 'UPI',
-                    status: 'Completed' as const,
-                  };
-                });
+              // 4. Populate sales transactions linked directly to authoritative products
+              const transactionsToImport = validRows.map((r, idx) => {
+                const existingProd = resolveExistingProduct(products, r.parsed.sku, r.parsed.name);
+                return {
+                  type: 'Sale' as const,
+                  productId: existingProd?.id || `prod-${(r.parsed.sku || r.parsed.name).toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+                  productName: r.parsed.name,
+                  sku: r.parsed.sku,
+                  quantity: r.parsed.qty || 1,
+                  price: r.parsed.price,
+                  sellingPrice: r.parsed.price,
+                  costPrice: r.parsed.costPrice,
+                  totalRevenue: (r.parsed.price || 0) * (r.parsed.qty || 1),
+                  totalCost: (r.parsed.costPrice || 0) * (r.parsed.qty || 1),
+                  orderNumber: r.parsed.orderNo,
+                  customerName: r.parsed.customer,
+                  supplier: r.parsed.supplier,
+                  transactionDate: r.parsed.date || new Date().toISOString().split('T')[0],
+                  paymentMethod: 'UPI',
+                  status: 'Completed' as const,
+                };
+              });
 
               if (transactionsToImport.length > 0) {
                 await bulkAddTransactions(transactionsToImport);
@@ -2579,14 +2708,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           : '';
         const delMsg = deletedProdsCount > 0 ? ` (${deletedProdsCount} deleted removed)` : '';
         toast({
-          title: 'Shopify Sync Complete! 🎉',
+          title: 'Shopify Sync Complete',
           description: `Synchronized ${stats?.canonicalProductsCount || shopifyProds.length} products${delMsg}, ${stats?.canonicalTransactionsCount || shopifyTxs.length} orders${returnMsg}. Insights & predictions updated.`,
-        });
-      } else if (prodChanges > 0 || txChanges > 0 || returnChanges > 0) {
-        const delDetail = deletedProdsCount > 0 ? `, ${deletedProdsCount} deleted removed` : '';
-        toast({
-          title: 'Shopify Auto-Synced ⚡',
-          description: `Auto-sync pulled new updates from Shopify (${prodChanges} product changes${delDetail}, ${txChanges} new orders, ${returnChanges} returns/refunds). Insights refreshed.`,
         });
       }
     } catch (err: any) {
@@ -2644,13 +2767,21 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       await setDoc(connRef, cleanedSettings, { merge: true }).catch(console.warn);
     }
 
+    const hasRealtime = Boolean(settings.shopifyRealtimeSyncEnabled);
+    const hasScheduled = Boolean(settings.shopifyAutoSyncEnabled);
+
+    let desc = 'Auto-sync is paused. Manual sync is still available.';
+    if (hasRealtime && hasScheduled) {
+      desc = `Real-time sync is active and scheduled auto-sync is enabled (${settings.shopifySyncFrequency || 'daily'}).`;
+    } else if (hasRealtime) {
+      desc = 'Real-time sync is active. Instant updates enabled via webhooks.';
+    } else if (hasScheduled) {
+      desc = `Scheduled auto-sync is active (${settings.shopifySyncFrequency || 'daily'}).`;
+    }
+
     toast({
-      title: 'Shopify Sync Settings Saved 🛍️',
-      description: settings.shopifyRealtimeSyncEnabled
-        ? 'Real-Time Sync is active. Instant updates enabled via webhooks & scheduled sync.'
-        : settings.shopifyAutoSyncEnabled
-        ? `Scheduled auto-sync is active (${settings.shopifySyncFrequency || 'daily'}).`
-        : 'Auto-sync is paused. Manual sync is still available.',
+      title: 'Shopify Sync Settings Saved',
+      description: desc,
     });
   }, [user, firestore, updateBusinessProfile, toast]);
 
@@ -2946,6 +3077,37 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     return getBusinessBuddyCalibration(businessProfile, products, transactions, returns);
   }, [businessProfile, products, transactions, returns]);
 
+  // Data Readiness & Centralized Feature Capabilities Engine (Section 1-8 & 22-23)
+  const [previousReadiness] = useState<DataReadiness | null>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('analyzeup_data_readiness_snapshot');
+        return stored ? JSON.parse(stored) : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+
+  const dataReadiness = useMemo(() => {
+    const computed = evaluateDataReadiness(products, transactions, {
+      profile: businessProfile,
+      previousReadiness,
+    });
+    // Persist established high-water mark so temporary sync drops never downgrade maturity (Section 23)
+    if (typeof window !== 'undefined' && computed.score >= 25 && !computed.isResiliencePreserved) {
+      try {
+        localStorage.setItem('analyzeup_data_readiness_snapshot', JSON.stringify(computed));
+      } catch {
+        // ignore
+      }
+    }
+    return computed;
+  }, [products, transactions, businessProfile, previousReadiness]);
+
+  const capabilities = useMemo(() => dataReadiness.capabilities, [dataReadiness]);
+
   const activateRecommendationsNow = useCallback(async () => {
     try {
       await updateBusinessProfile({
@@ -2969,7 +3131,37 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [updateBusinessProfile, toast]);
 
+  // Automatic reconciliation of duplicate products sharing identical SKU in Firestore
+  // Purges phantom duplicate product documents (e.g. from legacy CSV imports with fake 25 stock) while preserving authoritative Shopify/catalog products
+  const hasRunReconciliationRef = useRef(false);
+  useEffect(() => {
+    if (!firestore || !user?.uid || products.length === 0 || hasRunReconciliationRef.current) return;
+
+    const skuCountMap = new Map<string, number>();
+    products.forEach(p => {
+      const s = (p.sku || '').trim().toUpperCase();
+      if (s) skuCountMap.set(s, (skuCountMap.get(s) || 0) + 1);
+    });
+
+    const hasDuplicates = Array.from(skuCountMap.values()).some(count => count > 1);
+    if (hasDuplicates) {
+      hasRunReconciliationRef.current = true;
+      reconcileDuplicateProducts(products, firestore, user.uid).then(result => {
+        if (result.purgedCount > 0) {
+          console.log(`[AutoReconcile] Purged ${result.purgedCount} duplicate product documents from Firestore.`);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('analyzeup_audit_logged'));
+          }
+        }
+      }).catch(err => {
+        console.warn('[AutoReconcile] Product reconciliation error:', err);
+      });
+    }
+  }, [firestore, user?.uid, products]);
+
   const value = useMemo(() => ({
+    dataReadiness,
+    capabilities,
     businessBuddyCalibration,
     activateRecommendationsNow,
     products,
@@ -3005,6 +3197,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     recordSale,
     addReturn,
     deleteReturn,
+    updateReturn,
     updateReturnStatus,
     bulkAddProducts,
     bulkUpdateProducts,
@@ -3078,6 +3271,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     recordSale,
     addReturn,
     deleteReturn,
+    updateReturn,
     updateReturnStatus,
     bulkAddProducts,
     bulkUpdateProducts,

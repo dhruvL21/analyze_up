@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { Product, Transaction } from '@/lib/types';
+import type { IntelligenceCapabilities, DataReadiness } from '@/lib/data-readiness-engine';
 
 /* ------------------ SCHEMAS ------------------ */
 
@@ -22,11 +23,17 @@ const AIBriefOutputSchema = z.object({
 
 export type AIBriefOutput = z.infer<typeof AIBriefOutputSchema>;
 
+export interface CalculateDynamicBriefOptions {
+  capabilities?: IntelligenceCapabilities;
+  dataReadiness?: DataReadiness;
+}
+
 /* ------------------ EXPORT ------------------ */
 
 export function calculateDynamicBrief(
   products: Product[],
-  transactions: Transaction[] = []
+  transactions: Transaction[] = [],
+  options?: CalculateDynamicBriefOptions
 ): AIBriefOutput {
   if (!products || products.length === 0) {
     return {
@@ -113,9 +120,19 @@ export function calculateDynamicBrief(
     const costPrice = Number(highestRiskItem.costPrice) || Number(highestRiskItem.price) * 0.6 || 0;
     const estimatedCost = Math.round(reorderQty * costPrice);
 
+    const isStockoutPredictive = options?.capabilities?.stockoutPrediction ?? true;
+    let riskText = 'Adequate stock runway.';
+    if (stock === 0) {
+      riskText = 'Out of stock.';
+    } else if (isStockoutPredictive) {
+      riskText = `Stockout risk in ${runwayDays} days.`;
+    } else if (stock <= (highestRiskItem.minStock || 5)) {
+      riskText = 'Low stock in warehouse.';
+    }
+
     stockoutItem = {
       name: highestRiskItem.name || 'Unnamed Product',
-      riskText: stock === 0 ? 'Out of stock.' : `Stockout risk in ${runwayDays} days.`,
+      riskText,
       reorderText: `Suggested reorder: ${reorderQty} units.`,
       costText: `Estimated cost: ₹${estimatedCost.toLocaleString('en-IN')}`
     };
@@ -135,25 +152,44 @@ export function calculateDynamicBrief(
     const costPrice = Number(worstSlowMovingItem.costPrice) || price * 0.6 || 0;
     const blockedCapital = Math.round(stock * costPrice);
 
-    // Fast check in transactions
-    const targetName = worstSlowMovingItem.name;
-    const targetId = worstSlowMovingItem.id;
-    let hasRecentSale = false;
-    for (let t = 0; t < transactions.length; t++) {
-      const tx = transactions[t];
-      if ((tx.type === 'Sale' || (tx as any).type === 'sale') && (tx.productName === targetName || tx.productId === targetId)) {
-        hasRecentSale = true;
-        break;
-      }
-    }
-    const daysSinceLastSale = hasRecentSale ? 5 : 30;
+    const isPredictiveSlowMover = options?.capabilities?.slowMoverDetection && options?.dataReadiness?.level !== 'LEARNING';
+    const isDiscountEligible = options?.capabilities?.discountRecommendations ?? false;
 
-    slowMovingItem = {
-      name: worstSlowMovingItem.name || 'Unnamed Product',
-      riskText: `Low velocity (${daysSinceLastSale} days).`,
-      costText: `₹${blockedCapital.toLocaleString('en-IN')} blocked.`,
-      actionText: 'Suggested action: 20% Discount'
-    };
+    if (!isPredictiveSlowMover) {
+      const historyDays = options?.dataReadiness?.historicalDays ?? 0;
+      slowMovingItem = {
+        name: worstSlowMovingItem.name || 'Unnamed Product',
+        riskText: `Catalog In Holding Cycle (${historyDays} days observed).`,
+        costText: `₹${blockedCapital.toLocaleString('en-IN')} blocked.`,
+        actionText: 'Action: Monitor Velocity'
+      };
+    } else {
+      // Find actual latest sale timestamp from transactions
+      const targetName = (worstSlowMovingItem.name || '').toLowerCase();
+      const targetId = worstSlowMovingItem.id;
+      let latestSaleDate: number | null = null;
+      const now = Date.now();
+
+      for (let t = 0; t < transactions.length; t++) {
+        const tx = transactions[t];
+        if ((tx.type === 'Sale' || (tx as any).type === 'sale') && ((tx.productName && tx.productName.toLowerCase() === targetName) || tx.productId === targetId)) {
+          const rawDate = tx.transactionDate || (tx as any).createdAt;
+          const ts = typeof rawDate === 'string' ? new Date(rawDate).getTime() : (typeof rawDate === 'number' ? rawDate : null);
+          if (ts && (!latestSaleDate || ts > latestSaleDate)) latestSaleDate = ts;
+        }
+      }
+
+      const daysSinceLastSale = latestSaleDate
+        ? Math.max(1, Math.round((now - latestSaleDate) / (1000 * 60 * 60 * 24)))
+        : Math.min(30, options?.dataReadiness?.historicalDays || 30);
+
+      slowMovingItem = {
+        name: worstSlowMovingItem.name || 'Unnamed Product',
+        riskText: `Low velocity (${daysSinceLastSale} days).`,
+        costText: `₹${blockedCapital.toLocaleString('en-IN')} blocked.`,
+        actionText: isDiscountEligible ? 'Suggested action: 20% Discount' : 'Action: Monitor Velocity'
+      };
+    }
   }
 
   const savingsText = `Cash Locked in Inventory: ₹${Math.round(totalLockedCapital).toLocaleString('en-IN')}`;

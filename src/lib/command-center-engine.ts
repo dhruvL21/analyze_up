@@ -4,6 +4,7 @@ import { generateBusinessForecastingReport } from './forecasting-engine';
 import { predictOptimalClearanceDiscount } from './ml/clearance-pricing-model';
 import { getBusinessBuddyCalibration } from './business-buddy-engine';
 import { evaluateSalesHistory } from './sales-history-helper';
+import { evaluateDataReadiness } from './data-readiness-engine';
 import {
   toDomainProducts,
   toDomainTransactions,
@@ -110,14 +111,21 @@ export function computeBusinessHealth(
   const inStockProducts = products.filter(p => p.stock >= (p.minStock || 5));
   let inventoryHealth = Math.round((inStockProducts.length / products.length) * 100);
 
+  const salesHistory = evaluateSalesHistory(rawProducts, rawTransactions);
+  const isDeadStockActive = salesHistory.hasMinimumHistory;
+
   const saleProductIds = new Set(transactions.filter(t => t.type === 'Sale').map(t => t.productId));
-  const deadStockProducts = products.filter(p => p.stock > 0 && !saleProductIds.has(p.id));
-  let deadStockRatio = Math.round(Math.max(0, 100 - (deadStockProducts.length / products.length) * 100));
+  const deadStockProducts = isDeadStockActive
+    ? products.filter(p => p.stock > 0 && !saleProductIds.has(p.id) && salesHistory.isProductEligibleForDeadStock(p))
+    : [];
+  let deadStockRatio = isDeadStockActive
+    ? Math.round(Math.max(0, 100 - (deadStockProducts.length / products.length) * 100))
+    : 100;
 
   const totalValuation = products.reduce((acc, p) => acc + (p.stock * p.price), 0);
   const deadStockValuation = deadStockProducts.reduce((acc, p) => acc + (p.stock * (p.costPrice || p.price * 0.6)), 0);
   let capitalEfficiency = totalValuation > 0
-    ? Math.round(Math.max(10, 100 - (deadStockValuation / totalValuation) * 100))
+    ? (isDeadStockActive ? Math.round(Math.max(10, 100 - (deadStockValuation / totalValuation) * 100)) : 100)
     : 100;
 
   const productsMap = new Map<string, typeof products[0]>();
@@ -202,7 +210,9 @@ export function computeBusinessHealth(
   }
 
   let summarySentence = 'Operations are stable with good inventory velocity.';
-  if (deadStockProducts.length > 5) {
+  if (!isDeadStockActive) {
+    summarySentence = 'Baseline learning active: observing catalog sales rhythm.';
+  } else if (deadStockProducts.length > 5) {
     summarySentence = `Capital lockup detected: ${deadStockProducts.length} dead stock items require clearance.`;
   } else if (inventoryHealth < 70) {
     summarySentence = `Stockout vulnerability: ${products.length - inStockProducts.length} items running low.`;
@@ -238,9 +248,10 @@ export function generateActionTasks(
   businessProfile?: BusinessProfile | null,
   rawReturns: ProductReturn[] = []
 ): ActionTask[] {
-  // Respect the 3-5 day Business Buddy Calibration learning phase
+  // Respect Data Readiness and Business Buddy learning phase (unless explicitly overridden by founder)
+  const readiness = evaluateDataReadiness(rawProducts, rawTransactions);
   const calibration = getBusinessBuddyCalibration(businessProfile, rawProducts, rawTransactions, rawReturns);
-  if (calibration.status === 'LEARNING') {
+  if (!calibration.isOverridden && (readiness.level === 'LEARNING' || !readiness.capabilities.reorderRecommendations || calibration.status === 'LEARNING')) {
     return [];
   }
 
@@ -589,23 +600,44 @@ export function computeExecutiveKPIs(
   ];
 }
 
+export interface ComputeInventoryQualityOptions {
+  isDeadStockEnabled?: boolean;
+  isVelocityEnabled?: boolean;
+}
+
 // 5. Detailed Inventory Quality Metrics
 export function computeInventoryQuality(
   rawProducts: Product[],
-  rawTransactions: Transaction[] = []
+  rawTransactions: Transaction[] = [],
+  options?: ComputeInventoryQualityOptions
 ): InventoryQualityMetrics {
   const products = toDomainProducts(rawProducts);
   const transactions = toDomainTransactions(rawTransactions);
 
-  const healthyCount = products.filter(p => p.stock > (p.minStock || 5) && p.stock < (p.maxStock || 100)).length;
+  const isDeadStockEnabled = options?.isDeadStockEnabled ?? true;
+  const isVelocityEnabled = options?.isVelocityEnabled ?? true;
+
   const lowStockCount = products.filter(p => p.stock > 0 && p.stock <= (p.minStock || 5)).length;
   const criticalStockCount = products.filter(p => p.stock === 0).length;
 
   const saleProductIds = new Set(transactions.filter(t => t.type === 'Sale').map(t => t.productId));
-  const deadStockCount = products.filter(p => p.stock > 0 && !saleProductIds.has(p.id)).length;
+  const deadStockCount = isDeadStockEnabled
+    ? products.filter(p => p.stock > 0 && !saleProductIds.has(p.id)).length
+    : 0;
 
-  const fastMovingCount = products.filter(p => (p.averageDailySales || 0) >= 1.5).length;
-  const slowMovingCount = products.filter(p => (p.averageDailySales || 0) < 0.5 && p.stock > 0).length;
+  // Products with stock > minStock that are not dead stock are healthy stock
+  const healthyCount = products.filter(p => {
+    if (p.stock <= (p.minStock || 5)) return false;
+    if (isDeadStockEnabled && !saleProductIds.has(p.id)) return false;
+    return true;
+  }).length;
+
+  const fastMovingCount = isVelocityEnabled
+    ? products.filter(p => (p.averageDailySales || 0) >= 1.5).length
+    : 0;
+  const slowMovingCount = isVelocityEnabled
+    ? products.filter(p => (p.averageDailySales || 0) < 0.5 && p.stock > 0).length
+    : 0;
 
   const topValuableProducts = [...products]
     .map(p => ({

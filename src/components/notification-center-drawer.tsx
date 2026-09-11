@@ -125,7 +125,7 @@ export function NotificationCenterDrawer({ open, onOpenChange }: NotificationCen
       router.push(event.actionPayload.targetRoute);
       onOpenChange(false);
       toast({
-        title: `🚀 Executing Action: ${event.title}`,
+        title: `Executing Action: ${event.title}`,
         description: `Navigating to target module.`,
       });
     }

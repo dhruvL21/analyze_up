@@ -387,7 +387,7 @@ export function ShopifyConnectModal() {
       setScopeCheckResult(data);
       if (data.success && data.hasCoreScopes) {
         toast({
-          title: 'Permissions Verified! ⚡',
+          title: 'Permissions Verified!',
           description: 'Catalog, inventory, and order syncing are fully active.',
         });
       } else if (data.success && !data.hasCoreScopes) {
@@ -512,29 +512,40 @@ export function ShopifyConnectModal() {
 
               {scopeCheckResult ? (
                 <div className="space-y-2 pt-1">
-                  <div className="flex items-center justify-between text-[11px] p-2 rounded-xl bg-background/50 border border-border/30">
-                    <span className="font-medium text-foreground">Product Price Sync (write_products):</span>
-                    {scopeCheckResult.permissions?.hasWriteProducts ? (
-                      <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px] gap-1 py-0 font-semibold">
-                        <CheckCircle2 className="w-3 h-3" /> Active & Ready
-                      </Badge>
-                    ) : (
-                      <Badge className="bg-rose-500/20 text-rose-400 border-rose-500/30 text-[10px] gap-1 py-0 font-semibold">
-                        <AlertCircle className="w-3 h-3" /> Not Active on Token
-                      </Badge>
-                    )}
-                  </div>
+                  {(() => {
+                    const hasWriteProducts = Boolean(
+                      scopeCheckResult.permissions?.hasWriteProducts ||
+                      scopeCheckResult.grantedScopes?.includes('write_products') ||
+                      scopeCheckResult.scopes?.includes('write_products')
+                    );
+                    return (
+                      <>
+                        <div className="flex items-center justify-between text-[11px] p-2 rounded-xl bg-background/50 border border-border/30">
+                          <span className="font-medium text-foreground">Product Price Sync (write_products):</span>
+                          {hasWriteProducts ? (
+                            <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px] gap-1 py-0 font-semibold">
+                              <CheckCircle2 className="w-3 h-3" /> Active & Ready
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-rose-500/20 text-rose-400 border-rose-500/30 text-[10px] gap-1 py-0 font-semibold">
+                              <AlertCircle className="w-3 h-3" /> Not Active on Token
+                            </Badge>
+                          )}
+                        </div>
 
-                  {!scopeCheckResult.permissions?.hasWriteProducts && (
-                    <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300 space-y-1">
-                      <p className="font-bold flex items-center gap-1 text-amber-400">
-                        <AlertCircle className="w-3.5 h-3.5" /> Action Required in Shopify:
-                      </p>
-                      <p className="text-[10.5px] leading-relaxed text-amber-200/90">
-                        You added <code>write_products</code>, but Shopify requires clicking <strong>"Reinstall app"</strong> (in Shopify Admin → Apps and sales channels → Develop apps → Click app → <strong>API credentials</strong> tab) to grant it to your token.
-                      </p>
-                    </div>
-                  )}
+                        {!hasWriteProducts && (
+                          <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-300 space-y-1">
+                            <p className="font-bold flex items-center gap-1 text-amber-400">
+                              <AlertCircle className="w-3.5 h-3.5" /> Action Required in Shopify:
+                            </p>
+                            <p className="text-[10.5px] leading-relaxed text-amber-200/90">
+                              You added <code>write_products</code>, but Shopify requires clicking <strong>"Reinstall app"</strong> (in Shopify Admin → Apps and sales channels → Develop apps → Click app → <strong>API credentials</strong> tab) to grant it to your token.
+                            </p>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
 
                   {scopeCheckResult.scopes && scopeCheckResult.scopes.length > 0 && (
                     <div className="space-y-1">

@@ -94,6 +94,7 @@ export async function POST(req: NextRequest) {
     const hasReadInventory = grantedScopes.includes('read_inventory');
     const hasReadLocations = grantedScopes.includes('read_locations');
     const hasWriteInventory = grantedScopes.includes('write_inventory');
+    const hasWriteProducts = grantedScopes.includes('write_products');
 
     return NextResponse.json({
       success: true,
@@ -111,6 +112,7 @@ export async function POST(req: NextRequest) {
         hasReadInventory,
         hasReadLocations,
         hasWriteInventory,
+        hasWriteProducts,
       },
     });
   } catch (err: any) {

@@ -175,6 +175,9 @@ function heuristicDetectFileType(headers: string[]): DetectionResult {
 /**
  * Stage 2 & 3: Smart Semantic Mapping tailored to Detected File Type
  */
+/**
+ * Stage 2 & 3: Smart Semantic Mapping tailored to Detected File Type
+ */
 export async function getSmartMappingForFileType(
   fileType: BusinessFileType,
   externalHeaders: string[],
@@ -184,13 +187,11 @@ export async function getSmartMappingForFileType(
   const targetFieldKeys = targetFields.map(f => f.key);
 
   if (!isOpenAIConfigured()) {
-    const mapping: FieldMapping = {};
-    const confidence: Record<string, number> = {};
-    externalHeaders.forEach(h => {
-      const fuzzy = getFuzzyMatchForFileType(h, targetFields);
-      mapping[h] = fuzzy;
-      confidence[h] = fuzzy !== 'skip' ? 92 : 60;
-    });
+    const { mapping, confidence } = computeDynamicMappingWithCollisionPrevention(
+      externalHeaders,
+      targetFields,
+      sampleRows
+    );
     return { mapping, confidence, isAiPowered: false };
   }
 
@@ -217,7 +218,10 @@ ${JSON.stringify(sampleSnippet, null, 2)}
 
 INSTRUCTIONS:
 1. Map each external header to the MOST RELEVANT target field key listed above.
-2. If a column is irrelevant for this file type, map it to "skip".
+2. CRITICAL RULES:
+   - Do NOT map discount, tax, or numeric surcharge columns (like "Item Discount", "Item Tax", "Discount Amount") to "productName", "name", or "sellingPrice".
+   - If a column contains numbers like 0.00, it is NOT a product name.
+   - If a column does not match standard fields, map it to "customAttribute" so it can be stored directly in the database.
 3. Provide confidence score (0.0 to 1.0) per column.
 
 Respond ONLY with valid JSON.
@@ -244,92 +248,370 @@ Respond ONLY with valid JSON.
     const aiMap = parsed.mappings || {};
     const aiConf = parsed.confidence || {};
 
-    const mapping: FieldMapping = {};
-    const confidence: Record<string, number> = {};
-
-    externalHeaders.forEach(h => {
-      const target = aiMap[h];
-      if (target && targetFieldKeys.includes(target)) {
-        mapping[h] = target;
-        confidence[h] = Math.round((aiConf[h] || 0.92) * 100);
-      } else {
-        const fuzzy = getFuzzyMatchForFileType(h, targetFields);
-        mapping[h] = fuzzy;
-        confidence[h] = fuzzy !== 'skip' ? 88 : 50;
-      }
-    });
+    // Validate and sanitize AI mappings through collision prevention and type checks
+    const { mapping, confidence } = computeDynamicMappingWithCollisionPrevention(
+      externalHeaders,
+      targetFields,
+      sampleRows,
+      aiMap,
+      aiConf
+    );
 
     return { mapping, confidence, isAiPowered: true };
   } catch (error) {
     console.warn('AI Semantic Mapping Fallback:', error);
-    const mapping: FieldMapping = {};
-    const confidence: Record<string, number> = {};
-
-    externalHeaders.forEach(h => {
-      const fuzzy = getFuzzyMatchForFileType(h, targetFields);
-      mapping[h] = fuzzy;
-      confidence[h] = fuzzy !== 'skip' ? 90 : 60;
-    });
-
+    const { mapping, confidence } = computeDynamicMappingWithCollisionPrevention(
+      externalHeaders,
+      targetFields,
+      sampleRows
+    );
     return { mapping, confidence, isAiPowered: false };
   }
 }
 
-function getFuzzyMatchForFileType(header: string, targetFields: TargetFieldDef[]): string {
-  const h = header.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+interface ColumnProfile {
+  header: string;
+  normalized: string;
+  isNumericColumn: boolean;
+  isDateColumn: boolean;
+}
 
-  for (const field of targetFields) {
-    if (field.key === 'skip') continue;
-    const labelLower = field.label.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
-    const keyLower = field.key.toLowerCase();
+function analyzeColumns(headers: string[], sampleRows: Record<string, any>[]): Record<string, ColumnProfile> {
+  const profiles: Record<string, ColumnProfile> = {};
 
-    if (h === keyLower || h === labelLower) return field.key;
+  headers.forEach(h => {
+    let numericCount = 0;
+    let dateCount = 0;
+    let totalNonEmpty = 0;
 
-    // 1. Order Identification & Dates
-    if (field.key === 'orderId' && (h === 'order id' || h.includes('order id') || h.includes('order ref') || h.includes('order identifier'))) return 'orderId';
-    if (field.key === 'orderNumber' && (h.includes('invoice') || h.includes('order no') || h.includes('order id') || h.includes('order number') || h.includes('bill no') || h.includes('bill') || h.includes('receipt') || h.includes('inv no') || h.includes('transaction id'))) return 'orderNumber';
-    if (field.key === 'orderDate' && (h.includes('order date') || h.includes('invoice date') || h.includes('sale date') || h.includes('bill date') || h.includes('date') || h.includes('timestamp') || h.includes('created at'))) return 'orderDate';
-    if (field.key === 'expectedDate' && (h.includes('expected') || h.includes('delivery date') || h.includes('arrival'))) return 'expectedDate';
+    for (const row of sampleRows.slice(0, 15)) {
+      const raw = row[h];
+      if (raw === undefined || raw === null) continue;
+      const str = String(raw).trim();
+      if (!str || str === '—' || str === '-' || str === 'N/A' || str === 'null') continue;
 
-    // 2. Customers & Locations
-    if (field.key === 'customerId' && (h === 'customer id' || h.includes('customer id') || h.includes('client id') || h.includes('cust id') || h.includes('buyer id'))) return 'customerId';
-    if (field.key === 'customerName' && (h.includes('customer name') || h.includes('customer') || h.includes('buyer') || h.includes('client') || h.includes('bill to') || h.includes('sold to') || h.includes('account name'))) return 'customerName';
-    if (field.key === 'city' && (h === 'city' || h.includes('warehouse') || h.includes('city') || h.includes('location') || h.includes('region') || h.includes('destination') || h.includes('town') || h.includes('place') || h.includes('facility') || h.includes('hub') || h.includes('state'))) return 'city';
-    if (field.key === 'address' && (h.includes('address') || h.includes('street') || h.includes('shipping address'))) return 'address';
+      totalNonEmpty++;
+      const cleanNumStr = str.replace(/,/g, '').replace(/[₹$€£%]/g, '').trim();
+      if (!isNaN(Number(cleanNumStr)) && cleanNumStr.length > 0) {
+        numericCount++;
+      }
+      if (/^\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(str) || /^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}/.test(str)) {
+        dateCount++;
+      }
+    }
 
-    // 3. Products & Items
-    if (field.key === 'productName' && (h === 'item name' || h.includes('item name') || h.includes('product name') || h.includes('item title') || h.includes('product') || h.includes('item') || h.includes('article') || h.includes('description'))) return 'productName';
-    if (field.key === 'name' && (h === 'item name' || h.includes('item name') || h.includes('product name') || h.includes('title') || h.includes('product') || h.includes('item') || h.includes('article') || h.includes('part name'))) return 'name';
-    if (field.key === 'sku' && (h === 'sku' || h.includes('sku') || h.includes('barcode') || h.includes('item code') || h.includes('product code') || h.includes('article no') || h.includes('code') || h.includes('upc') || h.includes('ean'))) return 'sku';
-    if (field.key === 'category' && (h.includes('category') || h.includes('department') || h.includes('dept') || h.includes('group') || h.includes('type') || h.includes('segment') || h.includes('collection'))) return 'category';
-    if (field.key === 'brand' && (h.includes('brand') || h.includes('maker') || h.includes('label'))) return 'brand';
+    profiles[h] = {
+      header: h,
+      normalized: h.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim(),
+      isNumericColumn: totalNonEmpty > 0 && (numericCount / totalNonEmpty) >= 0.7,
+      isDateColumn: totalNonEmpty > 0 && (dateCount / totalNonEmpty) >= 0.7,
+    };
+  });
 
-    // 4. Quantities & Inventory
-    if (field.key === 'quantity' && (h.includes('qty') || h.includes('quantity') || h.includes('units sold') || h.includes('units') || h.includes('qty sold') || h.includes('volume') || h.includes('pieces') || h.includes('count'))) return 'quantity';
-    if (field.key === 'stock' && (h === 'current stock' || h.includes('current stock') || h.includes('stock') || h.includes('inventory') || h.includes('available') || h.includes('on hand') || h.includes('units on hand'))) return 'stock';
-    if (field.key === 'safetyStock' && (h === 'safety stock' || h.includes('safety stock') || h.includes('buffer stock'))) return 'safetyStock';
-    if (field.key === 'minStock' && (h.includes('reorder level') || h.includes('reorder point') || h.includes('min stock') || h.includes('safety stock') || h.includes('threshold') || h.includes('minimum'))) return 'minStock';
-    if (field.key === 'leadTimeDays' && (h.includes('lead time') || h.includes('lead days') || h.includes('delivery days') || h.includes('procurement days'))) return 'leadTimeDays';
-    if (field.key === 'unit' && (h.includes('unit') || h.includes('uom') || h.includes('measure') || h.includes('pack'))) return 'unit';
+  return profiles;
+}
 
-    // 5. Pricing & Financials
-    if (field.key === 'sellingPrice' && (h.includes('retail price') || h.includes('selling price') || h.includes('retail') || h.includes('selling') || h.includes('mrp') || h.includes('sale price') || h.includes('unit price') || h.includes('price') || h.includes('rate') || h.includes('amount'))) return 'sellingPrice';
-    if (field.key === 'price' && (h.includes('retail price') || h.includes('selling price') || h.includes('retail') || h.includes('selling') || h.includes('mrp') || h.includes('price') || h.includes('rate'))) return 'price';
-    if (field.key === 'costPrice' && (h.includes('purchase price') || h.includes('cost price') || h.includes('purchase') || h.includes('cost') || h.includes('buy price') || h.includes('buying price') || h.includes('unit cost') || h.includes('cogs'))) return 'costPrice';
-    if (field.key === 'unitCost' && (h.includes('purchase') || h.includes('cost') || h.includes('unit cost') || h.includes('buy price'))) return 'unitCost';
-    if (field.key === 'discount' && (h.includes('discount') || h.includes('disc') || h.includes('offer') || h.includes('rebate') || h.includes('markdown'))) return 'discount';
-    if (field.key === 'tax' && (h.includes('tax') || h.includes('gst') || h.includes('vat') || h.includes('duty') || h.includes('cess'))) return 'tax';
-    if (field.key === 'paymentMode' && (h.includes('payment') || h.includes('pay mode') || h.includes('payment method') || h.includes('mode of payment') || h.includes('tender') || h.includes('gateway'))) return 'paymentMode';
+const PRIMARY_SINGLE_ASSIGNMENT_TARGETS = new Set([
+  'productName',
+  'name',
+  'sellingPrice',
+  'price',
+  'costPrice',
+  'unitCost',
+  'quantity',
+  'stock',
+  'orderNumber',
+  'sku',
+  'discount',
+  'tax',
+  'customerName',
+  'supplier',
+  'supplierName',
+  'category',
+  'orderDate',
+]);
 
-    // 6. Status, Suppliers & Remarks
-    if (field.key === 'supplierId' && (h === 'supplier id' || h.includes('supplier id') || h.includes('vendor id') || h.includes('supplier code') || h.includes('sup id'))) return 'supplierId';
-    if (field.key === 'supplier' && (h.includes('supplier') || h.includes('vendor') || h.includes('wholesaler') || h.includes('distributor') || h.includes('manufacturer') || h.includes('source'))) return 'supplier';
-    if (field.key === 'supplierName' && (h.includes('supplier') || h.includes('vendor') || h.includes('distributor') || h.includes('manufacturer'))) return 'supplierName';
-    if (field.key === 'status' && (h.includes('order status') || h.includes('item status') || h.includes('status') || h.includes('state') || h.includes('delivery status') || h.includes('fulfillment') || h.includes('condition'))) return 'status';
-    if (field.key === 'remarks' && (h.includes('remark') || h.includes('remarks') || h.includes('note') || h.includes('notes') || h.includes('comment') || h.includes('comments') || h.includes('feedback') || h.includes('memo') || h.includes('instruction'))) return 'remarks';
-    if (field.key === 'email' && (h.includes('email') || h.includes('mail'))) return 'email';
-    if (field.key === 'phone' && (h.includes('phone') || h.includes('mobile') || h.includes('contact no') || h.includes('tel'))) return 'phone';
+export function computeDynamicMappingWithCollisionPrevention(
+  externalHeaders: string[],
+  targetFields: TargetFieldDef[],
+  sampleRows: Record<string, any>[] = [],
+  aiSuggestions: Record<string, string> = {},
+  aiConfidence: Record<string, number> = {}
+): { mapping: FieldMapping; confidence: Record<string, number> } {
+  const profiles = analyzeColumns(externalHeaders, sampleRows);
+  const targetFieldKeys = new Set(targetFields.map(f => f.key));
+
+  interface ScoredCandidate {
+    header: string;
+    targetKey: string;
+    score: number;
   }
 
-  return 'skip';
+  const candidates: ScoredCandidate[] = [];
+
+  externalHeaders.forEach(header => {
+    const profile = profiles[header] || {
+      header,
+      normalized: header.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim(),
+      isNumericColumn: false,
+      isDateColumn: false,
+    };
+
+    // If AI provided a suggestion, check if it's safe and doesn't violate type constraints
+    const aiTarget = aiSuggestions[header];
+    if (aiTarget && targetFieldKeys.has(aiTarget)) {
+      // Safety guard: do not allow numeric column to be productName
+      const isDangerousProductName = (aiTarget === 'productName' || aiTarget === 'name') && profile.isNumericColumn;
+      // Safety guard: do not allow discount/tax header to be sellingPrice
+      const isDangerousPrice = (aiTarget === 'sellingPrice' || aiTarget === 'price') && (profile.normalized.includes('discount') || profile.normalized.includes('tax'));
+
+      if (!isDangerousProductName && !isDangerousPrice) {
+        const confScore = Math.round((aiConfidence[header] || 0.94) * 100);
+        candidates.push({
+          header,
+          targetKey: aiTarget,
+          score: Math.max(90, confScore),
+        });
+      }
+    }
+
+    // Evaluate against each schema field
+    for (const field of targetFields) {
+      if (field.key === 'skip') continue;
+      const score = scoreHeaderMatch(profile, field.key, field.label);
+      if (score >= 60) {
+        candidates.push({
+          header,
+          targetKey: field.key,
+          score,
+        });
+      }
+    }
+  });
+
+  // Sort descending by match score
+  candidates.sort((a, b) => b.score - a.score);
+
+  const mapping: FieldMapping = {};
+  const confidence: Record<string, number> = {};
+  const assignedHeaders = new Set<string>();
+  const assignedTargets = new Set<string>();
+
+  // 1. Greedy 1-to-1 assignment of highest scoring matches
+  for (const cand of candidates) {
+    if (assignedHeaders.has(cand.header)) continue;
+    if (PRIMARY_SINGLE_ASSIGNMENT_TARGETS.has(cand.targetKey) && assignedTargets.has(cand.targetKey)) {
+      continue;
+    }
+
+    mapping[cand.header] = cand.targetKey;
+    confidence[cand.header] = cand.score;
+    assignedHeaders.add(cand.header);
+    assignedTargets.add(cand.targetKey);
+  }
+
+  // 2. Fallback for unmapped headers: Map to customAttribute so everything is stored in the database!
+  externalHeaders.forEach(header => {
+    if (!mapping[header]) {
+      mapping[header] = 'customAttribute';
+      confidence[header] = 85;
+    }
+  });
+
+  return { mapping, confidence };
+}
+
+function scoreHeaderMatch(profile: ColumnProfile, targetKey: string, targetLabel: string): number {
+  const h = profile.normalized;
+  const tokens = h.split(' ');
+  const has = (word: string) => tokens.includes(word) || h.includes(word);
+
+  const isDiscount = has('discount') || has('disc') || has('rebate') || has('coupon') || has('promo') || has('markdown') || has('offer');
+  const isTax = has('tax') || has('gst') || has('vat') || has('duty') || has('cess') || has('surcharge');
+  const isCost = has('cost') || has('purchase') || has('buying') || has('cogs') || has('buy price') || has('unit cost');
+  const isPrice = has('price') || has('rate') || has('mrp') || has('selling') || has('retail') || has('sale');
+  const isQty = has('qty') || has('quantity') || has('units') || has('pieces') || has('volume') || has('count');
+  const isOrder = has('invoice') || has('order no') || has('order number') || has('order id') || has('bill no') || has('receipt') || has('inv no') || has('bill');
+  const isCustomer = has('customer') || has('buyer') || has('client') || has('bill to') || has('sold to');
+  const isSupplier = has('supplier') || has('vendor') || has('distributor') || has('wholesaler');
+  const isSku = has('sku') || has('barcode') || has('item code') || has('product code') || has('article no') || has('upc') || has('ean');
+  const isDate = has('date') || has('timestamp') || has('created');
+
+  if (h === targetKey.toLowerCase() || h === targetLabel.toLowerCase()) return 100;
+
+  switch (targetKey) {
+    case 'productName':
+    case 'name': {
+      if (isDiscount || isTax || isCost || isPrice || isQty || isOrder || isCustomer || isSupplier || isSku || isDate || profile.isNumericColumn || profile.isDateColumn) {
+        return 0;
+      }
+      if (h === 'product name' || h === 'product_name' || h === 'item name' || h === 'item_name') return 100;
+      if (h === 'product title' || h === 'item title' || h === 'title') return 95;
+      if (h === 'product' || h === 'item' || h === 'item description') return 90;
+      if (h === 'description' || h === 'part name' || h === 'article') return 85;
+      if (has('product') || has('title') || has('item')) return 75;
+      return 0;
+    }
+
+    case 'sellingPrice':
+    case 'price': {
+      if (isDiscount || isTax || isCost || isQty || isOrder || isCustomer || isDate || profile.isDateColumn) {
+        return 0;
+      }
+      if (h === 'selling price' || h === 'retail price' || h === 'unit price' || h === 'mrp' || h === 'sale price') return 100;
+      if (h === 'price' || h === 'rate') return 95;
+      if (has('selling') || has('retail') || has('mrp') || has('sale price')) return 90;
+      if (h === 'amount' || h === 'unit rate' || h === 'price per unit') return 85;
+      if (has('price') && !isCost && !isDiscount && !isTax) return 80;
+      return 0;
+    }
+
+    case 'costPrice':
+    case 'unitCost': {
+      if (isDiscount || isTax || (isPrice && !isCost)) return 0;
+      if (h === 'cost price' || h === 'purchase price' || h === 'unit cost' || h === 'buying price' || h === 'cogs') return 100;
+      if (has('cost price') || has('purchase price') || has('unit cost') || has('buying price')) return 95;
+      if (h === 'cost' || h === 'purchase') return 90;
+      if (has('cost') || has('purchase')) return 80;
+      return 0;
+    }
+
+    case 'discount': {
+      if (!isDiscount) return 0;
+      if (h === 'discount' || h === 'discount amount' || h === 'item discount' || h === 'disc amount') return 100;
+      if (has('discount') || has('disc') || has('rebate')) return 90;
+      return 70;
+    }
+
+    case 'tax': {
+      if (!isTax) return 0;
+      if (h === 'tax' || h === 'gst' || h === 'vat' || h === 'tax amount' || h === 'item tax') return 100;
+      if (has('tax') || has('gst') || has('vat')) return 90;
+      return 70;
+    }
+
+    case 'quantity': {
+      if (isPrice || isCost || isDiscount || isTax) return 0;
+      if (h === 'qty' || h === 'quantity' || h === 'qty sold' || h === 'units sold' || h === 'units') return 100;
+      if (has('qty') || has('quantity') || has('units sold')) return 90;
+      return 0;
+    }
+
+    case 'stock': {
+      if (isPrice || isCost || isDiscount || isTax) return 0;
+      if (h === 'current stock' || h === 'stock' || h === 'inventory' || h === 'units on hand' || h === 'available stock') return 100;
+      if (has('stock') || has('inventory')) return 90;
+      return 0;
+    }
+
+    case 'sku': {
+      if (isPrice || isCost || isDiscount || isTax || isDate) return 0;
+      if (h === 'sku' || h === 'item code' || h === 'product code' || h === 'barcode' || h === 'upc' || h === 'ean') return 100;
+      if (has('sku') || has('barcode') || has('item code') || has('product code')) return 90;
+      return 0;
+    }
+
+    case 'orderNumber':
+    case 'orderId': {
+      if (!isOrder) return 0;
+      if (h === 'invoice no' || h === 'order no' || h === 'invoice number' || h === 'order number' || h === 'order id' || h === 'bill no') return 100;
+      if (has('invoice') || has('order no') || has('bill no') || has('order id')) return 90;
+      return 70;
+    }
+
+    case 'orderDate':
+    case 'expectedDate': {
+      if (targetKey === 'expectedDate' && (has('expected') || has('delivery') || has('arrival'))) return 95;
+      if (isDate || profile.isDateColumn) {
+        if (h === 'order date' || h === 'invoice date' || h === 'sale date' || h === 'bill date' || h === 'date') return 100;
+        if (has('date') || has('timestamp')) return 90;
+        return 75;
+      }
+      return 0;
+    }
+
+    case 'customerName':
+    case 'customerId': {
+      if (targetKey === 'customerId' && (has('customer id') || has('client id') || has('cust id'))) return 95;
+      if (isCustomer) {
+        if (h === 'customer name' || h === 'client name' || h === 'buyer name' || h === 'customer') return 100;
+        if (has('customer') || has('buyer') || has('client')) return 90;
+      }
+      return 0;
+    }
+
+    case 'supplier':
+    case 'supplierName':
+    case 'supplierId': {
+      if (targetKey === 'supplierId' && (has('supplier id') || has('vendor id') || has('sup id'))) return 95;
+      if (isSupplier) {
+        if (h === 'supplier' || h === 'vendor' || h === 'supplier name' || h === 'vendor name') return 100;
+        if (has('supplier') || has('vendor') || has('distributor')) return 90;
+      }
+      return 0;
+    }
+
+    case 'category': {
+      if (has('category') || has('department') || has('dept') || has('group') || has('product category')) return 95;
+      return 0;
+    }
+
+    case 'brand': {
+      if (has('brand') || has('maker') || has('label')) return 95;
+      return 0;
+    }
+
+    case 'unit': {
+      if (has('unit') || has('uom') || has('measure') || has('pack')) return 95;
+      return 0;
+    }
+
+    case 'city': {
+      if (has('warehouse') || has('city') || has('location') || has('destination') || has('branch')) return 95;
+      return 0;
+    }
+
+    case 'paymentMode': {
+      if (has('payment') || has('tender') || has('pay mode') || has('payment method') || has('gateway')) return 95;
+      return 0;
+    }
+
+    case 'status': {
+      if (has('status') || has('order status') || has('item status') || has('state') || has('fulfillment')) return 95;
+      return 0;
+    }
+
+    case 'remarks': {
+      if (has('remarks') || has('notes') || has('note') || has('comment') || has('comments')) return 95;
+      return 0;
+    }
+
+    case 'minStock':
+    case 'safetyStock': {
+      if (targetKey === 'safetyStock' && has('safety stock')) return 95;
+      if (has('reorder level') || has('reorder point') || has('min stock') || has('safety stock') || has('threshold')) return 90;
+      return 0;
+    }
+
+    case 'leadTimeDays': {
+      if (has('lead time') || has('lead days') || has('procurement days') || has('delivery days')) return 95;
+      return 0;
+    }
+
+    case 'customAttribute': {
+      return 10;
+    }
+
+    default:
+      return 0;
+  }
+}
+
+export function getFuzzyMatchForFileType(
+  header: string,
+  targetFields: TargetFieldDef[],
+  sampleRows: Record<string, any>[] = []
+): string {
+  const result = computeDynamicMappingWithCollisionPrevention([header], targetFields, sampleRows);
+  return result.mapping[header] || 'customAttribute';
 }

@@ -1,7 +1,29 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { PlusCircle, MoreHorizontal, AlertCircle, Search, RotateCcw, Calendar, DollarSign, ClipboardList, Activity, ShieldAlert, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, RefreshCw } from 'lucide-react';
+import {
+  PlusCircle,
+  MoreHorizontal,
+  AlertCircle,
+  Search,
+  RotateCcw,
+  Calendar,
+  DollarSign,
+  ClipboardList,
+  Activity,
+  ShieldAlert,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  RefreshCw,
+  ChevronDown,
+  Check,
+  Sparkles,
+  Package,
+  Link2,
+  Tag,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Card,
@@ -24,6 +46,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -53,6 +78,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useData } from '@/context/data-context';
 import { useToast } from '@/hooks/use-toast';
 import { OperationsSubNav } from '@/components/operations-sub-nav';
+import { determineReturnReason } from '@/lib/ingestion/shopify-adapter';
+import type { ProductReturn } from '@/lib/types';
 
 export default function ReturnsPage() {
   const {
@@ -61,6 +88,7 @@ export default function ReturnsPage() {
     transactions,
     addReturn,
     deleteReturn,
+    updateReturn,
     updateReturnStatus,
     isLoading,
     autoSyncShopifyNow,
@@ -98,6 +126,13 @@ export default function ReturnsPage() {
   const [refundStatus, setRefundStatus] = useState<'Refunded' | 'Store Credit' | 'Pending' | 'Rejected'>('Refunded');
   const [refundAmount, setRefundAmount] = useState(0);
   const [notes, setNotes] = useState('');
+
+  // Assign Product & Classification State
+  const [isAssignProductDialogOpen, setIsAssignProductDialogOpen] = useState(false);
+  const [itemToAssign, setItemToAssign] = useState<ProductReturn | null>(null);
+  const [assignProductId, setAssignProductId] = useState('');
+  const [productSearchQuery, setProductSearchQuery] = useState('');
+  const [isAutoClassifying, setIsAutoClassifying] = useState(false);
 
   // Reset page when filter or search changes
   useEffect(() => {
@@ -285,6 +320,128 @@ export default function ReturnsPage() {
     setRefundAmount(0);
     setNotes('');
   };
+
+  // Count of returns with 'Other' or unassigned reason
+  const otherReturnsCount = React.useMemo(() => {
+    return returns.filter(r => r.reason === 'Other' || !r.reason).length;
+  }, [returns]);
+
+  // Check if a return record is linked to a catalog product
+  const isProductLinked = React.useCallback((item: ProductReturn) => {
+    return products.some(p =>
+      p.id === item.productId ||
+      (item.sku && p.sku && p.sku.toLowerCase() === item.sku.toLowerCase()) ||
+      (p.shopifyProductId && item.productId && item.productId.includes(p.shopifyProductId))
+    );
+  }, [products]);
+
+  const openAssignProductModal = (item: ProductReturn) => {
+    setItemToAssign(item);
+    // If there's an existing matching product in catalog, pre-select it
+    const candidate = products.find(p =>
+      p.id === item.productId ||
+      (item.sku && p.sku && p.sku.toLowerCase() === item.sku.toLowerCase()) ||
+      (p.shopifyProductId && item.productId && item.productId.includes(p.shopifyProductId)) ||
+      (p.name && item.productName && p.name.trim().toLowerCase() === item.productName.trim().toLowerCase())
+    );
+    setAssignProductId(candidate?.id || '');
+    setProductSearchQuery('');
+    setIsAssignProductDialogOpen(true);
+  };
+
+  const handleUpdateReason = async (returnId: string, newReason: ProductReturn['reason']) => {
+    try {
+      await updateReturn(returnId, { reason: newReason });
+      toast({
+        title: 'Reason Updated',
+        description: `Return reason set to "${newReason}".`
+      });
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Update Failed',
+        description: err?.message || 'Could not update return reason.'
+      });
+    }
+  };
+
+  const handleAutoClassifyReasons = async () => {
+    setIsAutoClassifying(true);
+    try {
+      let reclassifiedCount = 0;
+      for (const item of returns) {
+        if (item.reason === 'Other' || !item.reason) {
+          const textToAnalyze = `${item.notes || ''} ${item.productName || ''}`;
+          let newReason = determineReturnReason(
+            textToAnalyze,
+            item.actionTaken === 'Restocked' ? 'return' : undefined,
+            item.actionTaken === 'Restocked'
+          );
+          if (newReason === 'Other') {
+            newReason = 'Unopened / Buyer Remorse';
+          }
+          await updateReturn(item.id, { reason: newReason });
+          reclassifiedCount++;
+        }
+      }
+      if (reclassifiedCount > 0) {
+        toast({
+          title: 'Reasons Assigned',
+          description: `Assigned specific reasons to ${reclassifiedCount} return item(s).`
+        });
+      } else {
+        toast({
+          title: 'Up to Date',
+          description: 'All returns already have specific reasons assigned.'
+        });
+      }
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Classification Failed',
+        description: err?.message || 'Could not auto-assign reasons.'
+      });
+    } finally {
+      setIsAutoClassifying(false);
+    }
+  };
+
+  const handleAssignProduct = async () => {
+    if (!itemToAssign || !assignProductId) return;
+    const targetProduct = products.find(p => p.id === assignProductId);
+    if (!targetProduct) return;
+
+    try {
+      await updateReturn(itemToAssign.id, {
+        productId: targetProduct.id,
+        productName: targetProduct.name,
+        sku: targetProduct.sku || '',
+      });
+      toast({
+        title: 'Product Assigned',
+        description: `Return linked to ${targetProduct.name}.`
+      });
+      setIsAssignProductDialogOpen(false);
+      setItemToAssign(null);
+      setAssignProductId('');
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Assignment Failed',
+        description: err?.message || 'Could not assign product.'
+      });
+    }
+  };
+
+  const filteredCatalogProducts = React.useMemo(() => {
+    const query = productSearchQuery.toLowerCase().trim();
+    if (!query) return products.slice(0, 50);
+    return products.filter(p =>
+      p.name.toLowerCase().includes(query) ||
+      (p.sku && p.sku.toLowerCase().includes(query)) ||
+      (p.category && p.category.toLowerCase().includes(query))
+    ).slice(0, 50);
+  }, [products, productSearchQuery]);
 
   return (
     <>
@@ -545,15 +702,61 @@ export default function ReturnsPage() {
                             </TableCell>
                             <TableCell>
                               <div>
-                                <p className="text-sm font-medium">{item.productName}</p>
-                                <div className="flex items-center gap-1.5 mt-0.5">
-                                  <span className="text-[10px] text-muted-foreground bg-secondary/50 px-1.5 py-0.5 rounded-md">
-                                    {item.reason}
-                                  </span>
-                                  {item.sku && (
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <p className="text-sm font-medium">{item.productName}</p>
+                                  {!isProductLinked(item) && (
+                                    <button
+                                      type="button"
+                                      onClick={() => openAssignProductModal(item)}
+                                      className="text-[10px] text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.5 rounded transition-colors inline-flex items-center gap-1 cursor-pointer"
+                                      title="This return is not linked to an inventory product. Click to assign."
+                                    >
+                                      <Link2 className="h-2.5 w-2.5" />
+                                      <span>Assign Product</span>
+                                    </button>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <button
+                                        type="button"
+                                        className="text-[10px] inline-flex items-center gap-1 font-medium bg-secondary/70 hover:bg-secondary border border-border/50 hover:border-primary/50 px-2 py-0.5 rounded-md transition-colors cursor-pointer group"
+                                        title="Click to reassign return reason"
+                                      >
+                                        <span>{item.reason}</span>
+                                        <ChevronDown className="h-2.5 w-2.5 text-muted-foreground group-hover:text-foreground" />
+                                      </button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="start" className="rounded-xl min-w-[200px] z-50">
+                                      <DropdownMenuLabel className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
+                                        Assign Return Reason
+                                      </DropdownMenuLabel>
+                                      {(['Unopened / Buyer Remorse', 'Defective', 'Wrong Item', 'Damaged in Transit', 'Other'] as const).map((r) => (
+                                        <DropdownMenuItem
+                                          key={r}
+                                          onClick={() => handleUpdateReason(item.id, r)}
+                                          className={`flex items-center justify-between text-xs cursor-pointer ${item.reason === r ? 'bg-primary/10 text-primary font-semibold' : ''}`}
+                                        >
+                                          <span>{r}</span>
+                                          {item.reason === r && <Check className="h-3.5 w-3.5 text-primary ml-2" />}
+                                        </DropdownMenuItem>
+                                      ))}
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+
+                                  {item.sku ? (
                                     <span className="text-[10px] font-mono text-muted-foreground/70">
                                       {item.sku}
                                     </span>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => openAssignProductModal(item)}
+                                      className="text-[10px] text-muted-foreground hover:text-foreground underline decoration-dotted cursor-pointer"
+                                    >
+                                      No SKU (Assign)
+                                    </button>
                                   )}
                                 </div>
                               </div>
@@ -595,24 +798,46 @@ export default function ReturnsPage() {
                                     <span className="sr-only">Toggle menu</span>
                                   </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="rounded-2xl">
+                                <DropdownMenuContent align="end" className="rounded-2xl min-w-[180px]">
                                   <DropdownMenuLabel className="bg-primary/10 text-primary text-[10px] uppercase font-bold text-center py-1 mb-1 rounded-lg">Actions</DropdownMenuLabel>
+                                  <DropdownMenuItem onClick={() => openAssignProductModal(item)} className="text-xs flex items-center gap-2 cursor-pointer">
+                                    <Package className="h-3.5 w-3.5" />
+                                    <span>Assign Product</span>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSub>
+                                    <DropdownMenuSubTrigger className="text-xs cursor-pointer">
+                                      <Tag className="h-3.5 w-3.5 mr-2" />
+                                      <span>Change Reason</span>
+                                    </DropdownMenuSubTrigger>
+                                    <DropdownMenuSubContent className="rounded-xl min-w-[190px]">
+                                      {(['Unopened / Buyer Remorse', 'Defective', 'Wrong Item', 'Damaged in Transit', 'Other'] as const).map((r) => (
+                                        <DropdownMenuItem
+                                          key={r}
+                                          onClick={() => handleUpdateReason(item.id, r)}
+                                          className={`flex items-center justify-between text-xs cursor-pointer ${item.reason === r ? 'bg-primary/10 text-primary font-semibold' : ''}`}
+                                        >
+                                          <span>{r}</span>
+                                          {item.reason === r && <Check className="h-3.5 w-3.5 text-primary ml-2" />}
+                                        </DropdownMenuItem>
+                                      ))}
+                                    </DropdownMenuSubContent>
+                                  </DropdownMenuSub>
                                   {item.refundStatus === 'Pending' && (
                                     <>
-                                      <DropdownMenuItem onClick={() => updateReturnStatus(item.id, 'Refunded')} className="text-primary font-medium">
+                                      <DropdownMenuItem onClick={() => updateReturnStatus(item.id, 'Refunded')} className="text-primary font-medium text-xs">
                                         Issue Refund
                                       </DropdownMenuItem>
-                                      <DropdownMenuItem onClick={() => updateReturnStatus(item.id, 'Store Credit')}>
+                                      <DropdownMenuItem onClick={() => updateReturnStatus(item.id, 'Store Credit')} className="text-xs">
                                         Issue Store Credit
                                       </DropdownMenuItem>
-                                      <DropdownMenuItem onClick={() => updateReturnStatus(item.id, 'Rejected')} className="text-destructive">
+                                      <DropdownMenuItem onClick={() => updateReturnStatus(item.id, 'Rejected')} className="text-destructive text-xs">
                                         Reject Refund
                                       </DropdownMenuItem>
                                     </>
                                   )}
                                   <AlertDialog>
                                     <AlertDialogTrigger asChild>
-                                      <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive">
+                                      <DropdownMenuItem onSelect={(e) => e.preventDefault()} className="text-destructive text-xs">
                                         Delete Log
                                       </DropdownMenuItem>
                                     </AlertDialogTrigger>
@@ -703,8 +928,25 @@ export default function ReturnsPage() {
           <Card className="ios-glass rounded-3xl border-border/50 shadow-xl overflow-hidden flex flex-col justify-between">
             <div>
               <CardHeader className="border-b border-border/40 pb-4">
-                <CardTitle className="text-base font-bold">Return Reasons Breakdown</CardTitle>
-                <CardDescription className="text-xs">Weekly return volume breakdown by reason.</CardDescription>
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <CardTitle className="text-base font-bold">Return Reasons Breakdown</CardTitle>
+                    <CardDescription className="text-xs">Weekly return volume breakdown by reason.</CardDescription>
+                  </div>
+                  {otherReturnsCount > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAutoClassifyReasons}
+                      disabled={isAutoClassifying}
+                      className="h-7 px-2.5 text-xs gap-1.5 border-primary/40 hover:bg-primary/10 text-primary font-medium rounded-xl shrink-0"
+                      title="Auto-assign specific return reasons to unclassified items"
+                    >
+                      <Sparkles className={`h-3.5 w-3.5 ${isAutoClassifying ? 'animate-spin' : ''}`} />
+                      <span>Auto-Assign ({otherReturnsCount})</span>
+                    </Button>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="p-6 space-y-5">
                 {returns.length === 0 ? (
@@ -714,20 +956,32 @@ export default function ReturnsPage() {
                     <p className="text-[11px] text-muted-foreground max-w-[200px]">Return reasons and volume breakdown will appear here once returns are recorded.</p>
                   </div>
                 ) : (
-                  reasonBreakdown.map((item, index) => (
-                    <div key={index} className="space-y-1.5">
-                      <div className="flex justify-between text-xs font-semibold">
-                        <span className="truncate">{item.name}</span>
-                        <span className="text-muted-foreground">{item.qty} units ({item.percentage}%)</span>
+                  reasonBreakdown.map((item, index) => {
+                    const isOther = item.name === 'Other';
+                    return (
+                      <div key={index} className="space-y-1.5">
+                        <div className="flex justify-between text-xs font-semibold">
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate">{item.name}</span>
+                            {isOther && item.qty > 0 && (
+                              <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.2 rounded font-normal">
+                                Needs reason
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-muted-foreground">{item.qty} units ({item.percentage}%)</span>
+                        </div>
+                        <div className="h-2.5 w-full bg-secondary/60 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-500 shadow-sm ${
+                              isOther && item.qty > 0 ? 'bg-amber-500/70' : 'bg-primary'
+                            }`}
+                            style={{ width: `${item.percentage}%` }}
+                          />
+                        </div>
                       </div>
-                      <div className="h-2.5 w-full bg-secondary/60 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-primary rounded-full transition-all duration-500 shadow-sm"
-                          style={{ width: `${item.percentage}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </CardContent>
             </div>
@@ -864,6 +1118,117 @@ export default function ReturnsPage() {
               <Button type="submit">Log Return</Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+      {/* Assign Product Dialog */}
+      <Dialog
+        open={isAssignProductDialogOpen}
+        onOpenChange={(isOpen) => {
+          setIsAssignProductDialogOpen(isOpen);
+          if (!isOpen) {
+            setItemToAssign(null);
+            setAssignProductId('');
+            setProductSearchQuery('');
+          }
+        }}
+      >
+        <DialogContent className="w-[95vw] sm:max-w-md rounded-2xl ios-glass">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Package className="h-5 w-5 text-primary" />
+              <span>Assign Return to Catalog Product</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Link this return record to an item from your catalog to ensure accurate inventory and quality metrics.
+            </DialogDescription>
+          </DialogHeader>
+
+          {itemToAssign && (
+            <div className="space-y-4 py-2">
+              <div className="bg-secondary/40 rounded-xl p-3 text-xs space-y-1.5 border border-border/50">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Current Item:</span>
+                  <span className="font-semibold text-foreground truncate max-w-[200px]">{itemToAssign.productName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Customer:</span>
+                  <span>{itemToAssign.customerName}</span>
+                </div>
+                {itemToAssign.orderNumber && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Order:</span>
+                    <span className="font-mono text-muted-foreground">{itemToAssign.orderNumber}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Refund Amount:</span>
+                  <span className="font-semibold text-emerald-400">₹{itemToAssign.refundAmount.toLocaleString('en-IN')}</span>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold">Select Catalog Product</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input
+                    placeholder="Search product name, SKU, or category..."
+                    value={productSearchQuery}
+                    onChange={(e) => setProductSearchQuery(e.target.value)}
+                    className="pl-8 h-8 text-xs rounded-xl"
+                  />
+                </div>
+
+                <div className="max-h-52 overflow-y-auto rounded-xl border border-border/60 divide-y divide-border/40">
+                  {filteredCatalogProducts.length === 0 ? (
+                    <div className="p-4 text-center text-xs text-muted-foreground">
+                      No matching products in catalog.
+                    </div>
+                  ) : (
+                    filteredCatalogProducts.map(p => (
+                      <div
+                        key={p.id}
+                        onClick={() => setAssignProductId(p.id)}
+                        className={`p-2.5 flex items-center justify-between hover:bg-secondary/50 cursor-pointer transition-colors text-xs ${
+                          assignProductId === p.id ? 'bg-primary/10 border-l-2 border-primary font-medium' : ''
+                        }`}
+                      >
+                        <div className="min-w-0 pr-2">
+                          <p className="truncate font-medium">{p.name}</p>
+                          <p className="text-[10px] text-muted-foreground font-mono">
+                            SKU: {p.sku || 'N/A'} • Stock: {p.stock} • ₹{p.price}
+                          </p>
+                        </div>
+                        {assignProductId === p.id && (
+                          <Check className="h-4 w-4 text-primary shrink-0 ml-2" />
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsAssignProductDialogOpen(false)}
+              className="rounded-xl text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!assignProductId}
+              onClick={handleAssignProduct}
+              className="rounded-xl text-xs font-medium"
+            >
+              Assign Product
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

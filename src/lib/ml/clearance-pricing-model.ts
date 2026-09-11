@@ -16,6 +16,7 @@ export interface ClearancePrediction {
   newPrice: number;
   oldPrice: number;
   costPrice: number;
+  hasCostPrice: boolean;
   grossMarginBefore: number;
   grossMarginAfter: number;
   estimatedCashUnlocked: number;
@@ -38,14 +39,13 @@ export function predictOptimalClearanceDiscount(
   totalCatalogDeadCapital?: number
 ): ClearancePrediction {
   const safePrice = Math.max(50, product.price || 500);
-  const cost = product.costPrice && product.costPrice > 0 
-    ? product.costPrice 
-    : Math.round(safePrice * 0.6);
+  const hasCostPrice = Boolean(product.costPrice && product.costPrice > 0);
+  const cost = hasCostPrice ? product.costPrice! : Math.round(safePrice * 0.6);
   const stock = Math.max(1, product.stock || 1);
   const tiedCapital = stock * cost;
   
   // 1. Calculate Gross Margin Headroom
-  const currentMargin = Math.max(0, (safePrice - cost) / safePrice);
+  const currentMargin = hasCostPrice ? Math.max(0, (safePrice - cost) / safePrice) : 0.35;
   
   // 2. Category Elasticity Index
   const categoryLower = (product.category || product.name || '').toLowerCase();
@@ -68,7 +68,11 @@ export function predictOptimalClearanceDiscount(
   let rawDiscountPercent: number;
   let strategy: ClearancePrediction['liquidationStrategy'];
 
-  if (currentMargin >= 0.50) {
+  if (!hasCostPrice) {
+    // If margin is unavailable, calibrate around sell-through opportunity rather than profit-maximizing discount (Section 9 & 16)
+    rawDiscountPercent = 15;
+    strategy = 'Balanced Markdown';
+  } else if (currentMargin >= 0.50) {
     // High margin (> 50%): We can discount 28% - 38%
     const base = 28 + (currentMargin - 0.50) * 25;
     rawDiscountPercent = Math.round(base * categoryElasticity * Math.min(1.15, capitalExposureRatio));
@@ -89,18 +93,22 @@ export function predictOptimalClearanceDiscount(
     strategy = 'Capital Preservation';
   }
 
-  // Clamp discount percent: Minimum 8%, Maximum 40%, and never sell below cost
-  const maxAllowableDiscountByCost = Math.max(5, Math.floor(((safePrice - cost * 0.98) / safePrice) * 100));
+  // Clamp discount percent: Minimum 8%, Maximum 40%, and never sell below cost if known
+  const maxAllowableDiscountByCost = hasCostPrice
+    ? Math.max(5, Math.floor(((safePrice - cost * 0.98) / safePrice) * 100))
+    : 35;
   const finalDiscountPercent = Math.max(8, Math.min(40, Math.min(rawDiscountPercent, maxAllowableDiscountByCost)));
 
   const newPrice = Math.round(safePrice * (1 - finalDiscountPercent / 100));
-  const grossMarginAfter = Math.round(((newPrice - cost) / newPrice) * 100);
-  const unitProfitRetained = newPrice - cost;
+  const grossMarginAfter = hasCostPrice ? Math.round(((newPrice - cost) / newPrice) * 100) : 0;
+  const unitProfitRetained = hasCostPrice ? newPrice - cost : 0;
   const estimatedCashUnlocked = Math.round(stock * newPrice);
 
   // Generate detailed statistical AI rationale
   let aiRationale = '';
-  if (strategy === 'Aggressive Velocity') {
+  if (!hasCostPrice) {
+    aiRationale = `Margin impact cannot be estimated because product cost data is unavailable. Recommended ${finalDiscountPercent}% promotional test is calibrated for sell-through acceleration to free working capital.`;
+  } else if (strategy === 'Aggressive Velocity') {
     aiRationale = `Aggressive ${finalDiscountPercent}% clearance derived from strong ${(currentMargin * 100).toFixed(0)}% gross margin cushion. Rapidly unfreezes ₹${estimatedCashUnlocked.toLocaleString('en-IN')} cash while maintaining ${(grossMarginAfter)}% profit.`;
   } else if (strategy === 'Balanced Markdown') {
     aiRationale = `Optimized ${finalDiscountPercent}% discount calibrated to ${categoryLower.includes('shoe') || categoryLower.includes('boost') ? 'footwear' : 'apparel'} price elasticity. Stimulates conversion while preserving ₹${Math.max(0, unitProfitRetained).toLocaleString('en-IN')}/unit profit.`;
@@ -115,7 +123,8 @@ export function predictOptimalClearanceDiscount(
     newPrice,
     oldPrice: safePrice,
     costPrice: cost,
-    grossMarginBefore: Math.round(currentMargin * 100),
+    hasCostPrice,
+    grossMarginBefore: hasCostPrice ? Math.round(currentMargin * 100) : 0,
     grossMarginAfter,
     estimatedCashUnlocked,
     unitProfitRetained,

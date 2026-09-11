@@ -7,6 +7,7 @@ import {
   convertShopifyToCanonicalReturns,
   convertShopifyGraphQLReturnsToCanonical,
   mergeAndDeduplicateReturns,
+  determineReturnReason,
 } from './shopify-adapter';
 
 describe('Shopify Adapter & Ingestion Engine', () => {
@@ -382,6 +383,46 @@ describe('Shopify Adapter & Ingestion Engine', () => {
     // Should deduplicate since both refer to #1001 and SKU-HEAD-BLK
     expect(merged.length).toBe(1);
     expect(merged[0].id).toBe('ret_shopify_gql_9901_8801');
+  });
+
+  describe('determineReturnReason classification', () => {
+    it('classifies defective keywords accurately', () => {
+      expect(determineReturnReason('Product has a defect')).toBe('Defective');
+      expect(determineReturnReason('Broken on arrival')).toBe('Defective');
+      expect(determineReturnReason('Item malfunctioning')).toBe('Defective');
+      expect(determineReturnReason('Poor quality fabric torn')).toBe('Defective');
+    });
+
+    it('classifies shipping and transit damage accurately', () => {
+      expect(determineReturnReason('Box crushed in transit')).toBe('Damaged in Transit');
+      expect(determineReturnReason('Delivery courier damaged the package')).toBe('Damaged in Transit');
+      expect(determineReturnReason('Arrived damaged')).toBe('Damaged in Transit');
+    });
+
+    it('classifies wrong item, sizing, and mismatch accurately', () => {
+      expect(determineReturnReason('Wrong size sent, too large')).toBe('Wrong Item');
+      expect(determineReturnReason('Color mismatch, wanted blue')).toBe('Wrong Item');
+      expect(determineReturnReason('Not as described in pictures')).toBe('Wrong Item');
+    });
+
+    it('classifies customer remorse, accidental order, and cancellations', () => {
+      expect(determineReturnReason('Customer changed mind')).toBe('Unopened / Buyer Remorse');
+      expect(determineReturnReason('Accidental purchase, no longer needed')).toBe('Unopened / Buyer Remorse');
+      expect(determineReturnReason('Buyer remorse unopened')).toBe('Unopened / Buyer Remorse');
+    });
+
+    it('infers reason from restock status when note is missing or generic', () => {
+      // Restocked returns are resalable -> Unopened / Buyer Remorse
+      expect(determineReturnReason('', 'return', true)).toBe('Unopened / Buyer Remorse');
+      expect(determineReturnReason(undefined, 'cancel', true)).toBe('Unopened / Buyer Remorse');
+
+      // Discarded / written-off returns without note -> Defective
+      expect(determineReturnReason('', 'no_restock', false)).toBe('Defective');
+
+      // Generic unclassified returns default to Unopened / Buyer Remorse instead of Other
+      expect(determineReturnReason('Shopify return #1234')).toBe('Unopened / Buyer Remorse');
+      expect(determineReturnReason('')).toBe('Unopened / Buyer Remorse');
+    });
   });
 });
 

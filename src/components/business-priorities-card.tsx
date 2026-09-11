@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { generateTodayPriorities } from '@/lib/command-center-engine';
 import { useData } from '@/context/data-context';
 import { useRouter } from 'next/navigation';
-import { CheckSquare, ArrowRight } from 'lucide-react';
+import { CheckSquare, ArrowRight, Sparkles } from 'lucide-react';
 
 export function BusinessPrioritiesCard() {
   const { products, transactions, suppliers } = useData();
@@ -24,17 +24,18 @@ export function BusinessPrioritiesCard() {
               <CheckSquare className="w-5 h-5 text-primary" />
             </div>
             <div>
-              <CardTitle className="text-base font-bold">Today's Business Priorities</CardTitle>
+              <CardTitle className="text-base font-bold text-foreground">Founder Focus List</CardTitle>
               <CardDescription className="text-xs">Short, high-impact focus list for busy founders (Max 5)</CardDescription>
             </div>
           </div>
           <Badge 
             variant="outline" 
             onClick={() => window.dispatchEvent(new CustomEvent('analyzeup_open_copilot', { detail: { query: 'What should I focus on today?' } }))}
-            className="text-primary border-primary/30 text-xs font-bold cursor-pointer hover:bg-primary/20 hover:border-primary/50 transition-all active:scale-95"
+            className="text-primary border-primary/30 text-xs font-bold cursor-pointer hover:bg-primary/20 hover:border-primary/50 transition-all active:scale-95 flex items-center gap-1"
             title="Open Focus Mode AI Copilot"
           >
-            Focus Mode ✨
+            <Sparkles className="w-3 h-3 text-primary" />
+            Focus Mode
           </Badge>
         </CardHeader>
 

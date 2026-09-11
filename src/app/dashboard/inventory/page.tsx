@@ -62,7 +62,7 @@ import { OperationsSubNav } from '@/components/operations-sub-nav';
 
 function InventoryPageContent() {
   const searchParams = useSearchParams();
-  const { products, addProduct, updateProduct, deleteProduct, recordSale, isLoading, categories, suppliers, addCategory, addSupplier, transactions, returns, businessProfile } = useData();
+  const { products, addProduct, updateProduct, deleteProduct, recordSale, isLoading, categories, suppliers, addCategory, addSupplier, transactions, returns, businessProfile, capabilities, dataReadiness } = useData();
 
   const [isFormDialogOpen, setIsFormDialogOpen] = useState(false);
   const [isSellDialogOpen, setIsSellDialogOpen] = useState(false);
@@ -138,7 +138,48 @@ function InventoryPageContent() {
 
   // 1. High-Performance Memoized Filter (runs only on debounced changes)
   const filteredProducts = useMemo(() => {
-    return filterProductsByNaturalLanguage(products, transactions, debouncedSearchQuery);
+    // Unify duplicate entries sharing identical SKU, prioritizing authentic/integrated products
+    const uniqueProductsMap = new Map<string, Product>();
+    const withoutSkuProducts: Product[] = [];
+
+    products.forEach(p => {
+      const skuKey = (p.sku || '').trim().toUpperCase();
+      if (!skuKey) {
+        withoutSkuProducts.push(p);
+        return;
+      }
+
+      if (!uniqueProductsMap.has(skuKey)) {
+        uniqueProductsMap.set(skuKey, p);
+      } else {
+        const existing = uniqueProductsMap.get(skuKey)!;
+        const existingIsShopify = Boolean(
+          existing.shopifyProductId ||
+          existing.shopifyVariantId ||
+          existing.id?.startsWith('shopify_') ||
+          existing.source === 'SHOPIFY' ||
+          existing.source === 'shopify'
+        );
+        const currentIsShopify = Boolean(
+          p.shopifyProductId ||
+          p.shopifyVariantId ||
+          p.id?.startsWith('shopify_') ||
+          p.source === 'SHOPIFY' ||
+          p.source === 'shopify'
+        );
+
+        if (currentIsShopify && !existingIsShopify) {
+          uniqueProductsMap.set(skuKey, p);
+        } else if (!currentIsShopify && !existingIsShopify) {
+          if ((p.stock || 0) > 0 && (existing.stock || 0) === 0) {
+            uniqueProductsMap.set(skuKey, p);
+          }
+        }
+      }
+    });
+
+    const unifiedProducts = [...Array.from(uniqueProductsMap.values()), ...withoutSkuProducts];
+    return filterProductsByNaturalLanguage(unifiedProducts, transactions, debouncedSearchQuery);
   }, [products, transactions, debouncedSearchQuery]);
 
   // 2. Pagination Calculations
@@ -181,10 +222,14 @@ function InventoryPageContent() {
     return paginatedProducts.map(p => {
       const pTx = transactionsByProduct.get(p.id) || transactionsByProduct.get(p.sku || '') || [];
       const pRet = returnsByProduct.get(p.id) || [];
-      const report = computeProductIntelligence(p, pTx, pRet, suppliers);
+      const report = computeProductIntelligence(p, pTx, pRet, suppliers, {
+        isDeadStockEnabled: capabilities?.deadStockDetection,
+        isVelocityEnabled: capabilities?.trendAnalysis,
+        historicalDays: dataReadiness?.historicalDays,
+      });
       return { product: p, report };
     });
-  }, [paginatedProducts, transactionsByProduct, returnsByProduct, suppliers]);
+  }, [paginatedProducts, transactionsByProduct, returnsByProduct, suppliers, capabilities, dataReadiness]);
 
   const handleSellSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();

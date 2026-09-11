@@ -22,7 +22,7 @@ describe('Shopify Sync Helper Utilities', () => {
         shopifyRealtimeSyncEnabled: true,
         shopifyAutoSyncEnabled: false,
       })
-    ).toBe('⚡ Real-Time (Instant on Event)');
+    ).toBe('Real-Time (Instant on Event)');
 
     expect(
       formatShopifyScheduleSummary({
@@ -31,7 +31,7 @@ describe('Shopify Sync Helper Utilities', () => {
         shopifySyncFrequency: 'daily',
         shopifySyncTime: '09:00',
       })
-    ).toBe('⚡ Real-Time + Daily at 9:00 AM');
+    ).toBe('Real-Time + Daily at 9:00 AM');
 
     expect(
       formatShopifyScheduleSummary({
@@ -76,7 +76,7 @@ describe('Shopify Sync Helper Utilities', () => {
       getNextShopifySyncDisplay({
         shopifyRealtimeSyncEnabled: true,
       })
-    ).toContain('⚡ Live Active');
+    ).toContain('Live Active');
 
     expect(
       getNextShopifySyncDisplay({

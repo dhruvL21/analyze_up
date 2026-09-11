@@ -19,7 +19,7 @@ export function formatShopifyScheduleSummary(profile?: any): string {
   if (!profile) return 'Manual Sync Only';
 
   const hasRealtime = Boolean(profile.shopifyRealtimeSyncEnabled);
-  const hasScheduled = profile.shopifyAutoSyncEnabled !== false;
+  const hasScheduled = Boolean(profile.shopifyAutoSyncEnabled);
 
   const freq = profile.shopifySyncFrequency || 'daily';
   const time = formatTime12h(profile.shopifySyncTime || '09:00');
@@ -75,11 +75,11 @@ export function formatShopifyScheduleSummary(profile?: any): string {
   }
 
   if (hasRealtime && hasScheduled && freq !== 'realtime') {
-    return `⚡ Real-Time + ${scheduledText}`;
+    return `Real-Time + ${scheduledText}`;
   }
 
   if (hasRealtime) {
-    return '⚡ Real-Time (Instant on Event)';
+    return 'Real-Time (Instant on Event)';
   }
 
   if (!hasScheduled) {
@@ -94,7 +94,7 @@ export function getNextShopifySyncDisplay(profile?: any): string {
 
   const hasRealtime = Boolean(profile.shopifyRealtimeSyncEnabled);
   if (hasRealtime) {
-    return '⚡ Live Active (Checking every 15s + on change)';
+    return 'Live Active (Checking every 15s + on change)';
   }
 
   if (profile.shopifyAutoSyncEnabled === false) {
@@ -116,7 +116,7 @@ export function getNextShopifySyncDisplay(profile?: any): string {
   }
 
   if (freq === 'realtime') {
-    return '⚡ Live Active (Checking every 15s)';
+    return 'Live Active (Checking every 15s)';
   }
   if (freq === '1_min') {
     return 'Within 1 minute';
@@ -209,8 +209,9 @@ export function isShopifyAutoSyncDue(profile?: any): boolean {
   }
 
   const isRealtimeActive = Boolean(profile.shopifyRealtimeSyncEnabled) || profile.shopifySyncFrequency === 'realtime';
+  const isScheduledActive = profile.shopifyAutoSyncEnabled === false ? false : Boolean(profile.shopifyAutoSyncEnabled);
 
-  if (!isRealtimeActive && profile.shopifyAutoSyncEnabled === false) {
+  if (!isRealtimeActive && !isScheduledActive) {
     return false;
   }
 
@@ -223,6 +224,11 @@ export function isShopifyAutoSyncDue(profile?: any): boolean {
   // 15-second minimum cooldown between auto-sync runs
   if (elapsedMs < 15 * 1000) {
     return false;
+  }
+
+  // If scheduled auto-sync is disabled, only real-time checks apply
+  if (!isScheduledActive && isRealtimeActive) {
+    return !lastSync || elapsedMs >= 15 * 1000;
   }
 
   // 1. Pure Real-Time live sync mode (checks every 15s or immediately if never synced)

@@ -98,6 +98,7 @@ export interface RAGQueryRequest {
   orders?: any[];
   returns?: any[];
   businessProfile?: any | null;
+  dataReadiness?: any;
   options?: {
     topK?: number;
     threshold?: number;

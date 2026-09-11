@@ -21,11 +21,16 @@ export const CanonicalProductSchema = z.object({
   brand: z.string().default(''),
   barcode: z.string().default(''),
   description: z.string().default(''),
+  custom_attributes: z.record(z.any()).optional().default({}),
+  raw_attributes: z.record(z.any()).optional().default({}),
   created_at: z.string().default(() => new Date().toISOString()),
   updated_at: z.string().default(() => new Date().toISOString()),
 });
 
-export type CanonicalProduct = z.infer<typeof CanonicalProductSchema>;
+export type CanonicalProduct = Omit<z.infer<typeof CanonicalProductSchema>, 'custom_attributes' | 'raw_attributes'> & {
+  custom_attributes?: Record<string, any>;
+  raw_attributes?: Record<string, any>;
+};
 
 export const CanonicalSaleSchema = z.object({
   sale_id: z.string().default(''),
@@ -39,15 +44,24 @@ export const CanonicalSaleSchema = z.object({
   cost_per_unit: z.number().nonnegative().default(0),
   revenue: z.number().nonnegative().default(0),
   total_cost: z.number().nonnegative().default(0),
+  discount: z.number().nonnegative().optional().default(0),
+  tax: z.number().nonnegative().optional().default(0),
   customer_name: z.string().default('Retail Customer'),
   supplier_name: z.string().default(''),
   sale_date: z.string().default(() => new Date().toISOString().split('T')[0]),
   payment_method: z.string().default('UPI'),
   status: z.string().default('Completed'),
+  custom_attributes: z.record(z.any()).optional().default({}),
+  raw_attributes: z.record(z.any()).optional().default({}),
   created_at: z.string().default(() => new Date().toISOString()),
 });
 
-export type CanonicalSale = z.infer<typeof CanonicalSaleSchema>;
+export type CanonicalSale = Omit<z.infer<typeof CanonicalSaleSchema>, 'custom_attributes' | 'raw_attributes' | 'discount' | 'tax'> & {
+  custom_attributes?: Record<string, any>;
+  raw_attributes?: Record<string, any>;
+  discount?: number;
+  tax?: number;
+};
 
 export const CanonicalSupplierSchema = z.object({
   supplier_id: z.string().default(''),

@@ -12,63 +12,169 @@ import {
   Coins,
   ChevronLeft,
   ChevronRight,
+  Activity,
+  ShieldCheck,
+  Clock,
+  TrendingUp,
 } from 'lucide-react';
+import { computeBusinessHealth } from '@/lib/command-center-engine';
+import { evaluateSalesHistory } from '@/lib/sales-history-helper';
 
 export function InventoryInsightsTicker() {
-  const { products, transactions, suppliers, businessProfile } = useData();
+  const { products, transactions, suppliers, returns = [], businessProfile, capabilities, businessBuddyCalibration } = useData();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
 
   const currencySymbol = businessProfile?.currency?.includes('USD') ? '$' : '₹';
 
+  // Compute live Business Health Score
+  const health = React.useMemo(() => {
+    return computeBusinessHealth(products, transactions, suppliers, returns);
+  }, [products, transactions, suppliers, returns]);
+
+  // Evaluate dynamic sales history duration
+  const salesHistory = React.useMemo(() => {
+    return evaluateSalesHistory(products, transactions);
+  }, [products, transactions]);
+
+  // Capability status for dead stock detection (requires >= 30 days of history unless overridden)
+  const isDeadStockActive = capabilities
+    ? capabilities.deadStockDetection
+    : (businessBuddyCalibration?.status !== 'LEARNING' && salesHistory.hasMinimumHistory);
+
   const insights = React.useMemo(() => {
     const list = [];
 
-    const lowCount = products.filter((p) => p.stock <= (p.minStock || 5)).length;
-    if (lowCount > 0) {
+    // 1. Primary Dynamic Brand Health Score Insight
+    if (products.length > 0) {
       list.push({
-        id: 'ins-1',
-        icon: <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />,
-        text: `${lowCount} products entered critical stock threshold — Reorder required to prevent stockout gaps.`,
-        tag: 'Critical Stock',
-        badgeClass: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+        id: 'ins-brand-score',
+        icon: <Activity className="w-3.5 h-3.5 shrink-0 animate-pulse" style={{ color: health.color }} />,
+        text: `Business Health Score: ${health.score}/100 (${health.category}) — ${health.summarySentence}`,
+        tag: 'Brand Health',
+        badgeClass: health.badgeClass,
       });
     }
 
+    // 2. Dead Stock Insight (Calibrated by Brand Score / Sales History)
+    if (!isDeadStockActive) {
+      // During learning phase (<30 days history, e.g. 4 days), do NOT accuse products of being dead stock
+      list.push({
+        id: 'ins-dead-stock-learning',
+        icon: <Clock className="w-3.5 h-3.5 text-amber-400 shrink-0" />,
+        text: `Baseline learning active (${salesHistory.historyDays ?? 0} days recorded) — Dead stock algorithms calibrate after 30 days.`,
+        tag: 'Calibrating',
+        badgeClass: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+      });
+    } else {
+      const saleProductIds = new Set(transactions.filter((t) => t.type === 'Sale').map((t) => t.productId));
+      const deadProducts = products.filter(
+        (p) => p.stock > 0 && !saleProductIds.has(p.id) && salesHistory.isProductEligibleForDeadStock(p)
+      );
+      if (deadProducts.length > 0) {
+        list.push({
+          id: 'ins-dead-stock',
+          icon: <PackageX className="w-3.5 h-3.5 text-rose-400 shrink-0" />,
+          text: `${deadProducts.length} products identified as dead stock — Apply clearance discounts to unlock working capital.`,
+          tag: 'Dead Stock',
+          badgeClass: 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+        });
+      }
+    }
+
+    // 3. Stockout & Inventory Vitality
+    const zeroStockProducts = products.filter((p) => p.stock === 0);
+    const lowStockCount = products.filter((p) => p.stock > 0 && p.stock <= (p.minStock || 5)).length;
+
+    if (zeroStockProducts.length > 0) {
+      // True Critical Stockout: 0 units remaining
+      list.push({
+        id: 'ins-stockout',
+        icon: <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0" />,
+        text: `${zeroStockProducts.length} product${zeroStockProducts.length > 1 ? 's' : ''} currently out of stock (0 units remaining) — Reorder required.`,
+        tag: 'Stockout',
+        badgeClass: 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+      });
+    }
+
+    if (lowStockCount > 0) {
+      if (!isDeadStockActive) {
+        // In learning mode (<30 days), don't trigger false critical stock alarms if vitality is high
+        if (health.factors.inventoryHealth >= 75) {
+          list.push({
+            id: 'ins-inv-vitality',
+            icon: <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />,
+            text: `Catalog inventory vitality holds strong at ${health.factors.inventoryHealth}% — ${lowStockCount} items monitored near safety buffer.`,
+            tag: 'Inventory Vitality',
+            badgeClass: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
+          });
+        } else {
+          list.push({
+            id: 'ins-inv-watch',
+            icon: <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />,
+            text: `${lowStockCount} products approaching safety threshold — Monitoring velocity to establish reorder runway.`,
+            tag: 'Inventory Watch',
+            badgeClass: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+          });
+        }
+      } else {
+        list.push({
+          id: 'ins-low-stock',
+          icon: <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />,
+          text: `${lowStockCount} products entered low stock threshold — Reorder required to protect lead-time runway.`,
+          tag: 'Low Stock',
+          badgeClass: 'bg-amber-500/15 text-amber-400 border-amber-500/30',
+        });
+      }
+    }
+
+    // 4. Catalog Valuation
     const totalValuation = products.reduce((sum, p) => sum + p.stock * p.price, 0);
     list.push({
-      id: 'ins-2',
+      id: 'ins-valuation',
       icon: <Coins className="w-3.5 h-3.5 text-emerald-400 shrink-0" />,
       text: `Total active catalog asset valuation holds at ${currencySymbol}${Math.round(totalValuation).toLocaleString('en-IN')}.`,
       tag: 'Valuation',
       badgeClass: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
     });
 
-    const saleProductIds = new Set(transactions.filter((t) => t.type === 'Sale').map((t) => t.productId));
-    const deadCount = products.filter((p) => p.stock > 0 && !saleProductIds.has(p.id)).length;
-    if (deadCount > 0) {
+    // 5. Margin Index Insight
+    if (health.factors.marginHealth > 0) {
+      const isHealthyMargin = health.factors.marginHealth >= 70;
       list.push({
-        id: 'ins-3',
-        icon: <PackageX className="w-3.5 h-3.5 text-rose-400 shrink-0" />,
-        text: `${deadCount} products identified as dead stock — Apply clearance discounts to unlock working capital.`,
-        tag: 'Dead Stock',
-        badgeClass: 'bg-rose-500/15 text-rose-400 border-rose-500/30',
+        id: 'ins-margin',
+        icon: isHealthyMargin ? (
+          <TrendingUp className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+        ) : (
+          <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+        ),
+        text: isHealthyMargin
+          ? `Profit margin index strong at ${health.factors.marginHealth}% benchmark efficiency.`
+          : `Profit margin index at ${health.factors.marginHealth}% — Opportunity to review cost of goods & retail pricing.`,
+        tag: 'Margin Index',
+        badgeClass: isHealthyMargin
+          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+          : 'bg-amber-500/15 text-amber-400 border-amber-500/30',
       });
     }
 
+    // 6. Supplier Performance Insight
     if (suppliers.length > 0) {
+      const avgLead = Math.round(
+        products.reduce((acc, p) => acc + (p.leadTimeDays || 7), 0) / (products.length || 1)
+      );
       list.push({
-        id: 'ins-4',
+        id: 'ins-suppliers',
         icon: <Truck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />,
-        text: `Linked with ${suppliers.length} active suppliers. Average lead time buffer is 7.2 days.`,
+        text: `Linked with ${suppliers.length} active suppliers. Supplier performance score is ${health.factors.supplierPerformance}% (Avg lead: ${avgLead}d).`,
         tag: 'Suppliers',
         badgeClass: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30',
       });
     }
 
     return list;
-  }, [products, transactions, suppliers, currencySymbol]);
+  }, [products, transactions, suppliers, currencySymbol, health, salesHistory, isDeadStockActive]);
 
   const checkScrollability = useCallback(() => {
     const el = scrollContainerRef.current;

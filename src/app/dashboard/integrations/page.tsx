@@ -43,6 +43,11 @@ import {
 import { ImportDialog } from '@/components/import-dialog';
 import { findMatchingImportProfile } from '@/lib/import-profile-store';
 import { logBusinessAction } from '@/lib/audit-store';
+import {
+  resolveExistingProduct,
+  generateOrderLineItemKey,
+  normalizeOrderNumber,
+} from '@/lib/ingestion/order-deduplication-engine';
 import Papa from 'papaparse';
 import {
   ShoppingBag,
@@ -926,9 +931,9 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
             sku: obj.sku || `SKU-${idx + 1}`,
             category: obj.category || 'General',
             supplier: obj.supplier || 'Google Drive Vendor',
-            stock: obj.stock !== undefined ? parseInt((obj.stock || '25').replace(/[^0-9]/g, ''), 10) : undefined,
-            minStock: obj.minStock !== undefined ? parseInt((obj.minStock || '5').replace(/[^0-9]/g, ''), 10) : 5,
-            leadTimeDays: obj.leadTimeDays !== undefined ? parseInt((obj.leadTimeDays || '7').replace(/[^0-9]/g, ''), 10) : 7,
+            stock: obj.stock !== undefined ? parseInt((obj.stock || '0').replace(/[^0-9]/g, ''), 10) : undefined,
+            minStock: obj.minStock !== undefined ? parseInt((obj.minStock || '0').replace(/[^0-9]/g, ''), 10) : 0,
+            leadTimeDays: obj.leadTimeDays !== undefined ? parseInt((obj.leadTimeDays || '0').replace(/[^0-9]/g, ''), 10) : 0,
           };
         } else if (fileType === 'INVENTORY_MASTER' || fileType === 'WAREHOUSE_STOCK') {
           const name = obj.name || obj.productName || '';
@@ -1015,13 +1020,13 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
             supplierId: existingSupMap.get((r.parsed.supplier || '').toLowerCase()) || '',
             price: r.parsed.price || 499,
             costPrice: r.parsed.costPrice && r.parsed.costPrice > 0 ? r.parsed.costPrice : Math.round((r.parsed.price || 499) * 0.6),
-            stock: r.parsed.stock !== undefined && r.parsed.stock > 0 ? r.parsed.stock : 25,
-            minStock: r.parsed.minStock !== undefined ? r.parsed.minStock : 5,
-            maxStock: Math.max(100, (r.parsed.stock || 25) * 2),
+            stock: r.parsed.stock !== undefined && r.parsed.stock > 0 ? r.parsed.stock : 0,
+            minStock: r.parsed.minStock !== undefined ? r.parsed.minStock : 0,
+            maxStock: r.parsed.stock ? r.parsed.stock * 2 : 0,
             unit: r.parsed.unit || 'Piece',
             status: 'Active' as const,
-            averageDailySales: 1.5,
-            leadTimeDays: r.parsed.leadTimeDays || 7,
+            averageDailySales: 0,
+            leadTimeDays: r.parsed.leadTimeDays || 0,
           });
         }
       });
@@ -1045,56 +1050,42 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
       await bulkAddProducts(productsToImport, true); // overwriteStock = true
 
       if (fileType === 'SALES_REPORT' || validRows.some(r => r.parsed.orderNo)) {
-        // Build set of existing order numbers and composite fingerprints
-        const existingOrderNos = new Set(transactions.map(t => (t.orderNumber || '').trim().toUpperCase()).filter(Boolean));
-        const existingTxFingerprints = new Set(transactions.map(t => {
-          const prod = (t.productName || t.productId || '').trim().toLowerCase();
-          const date = typeof t.transactionDate === 'string' ? t.transactionDate.trim() : '';
-          const qty = Number(t.quantity || 1);
-          const rev = Number(t.totalRevenue || t.price || 0);
-          const cust = (t.customerName || '').trim().toLowerCase();
-          return `${prod}|${date}|${qty}|${rev}|${cust}`;
-        }));
+        // Build set of existing order numbers and composite line-item keys
+        const existingLineKeys = new Set<string>();
+        transactions.forEach(t => {
+          const lKey = generateOrderLineItemKey(
+            t.orderNumber,
+            (t as any).sku,
+            t.productName,
+            typeof t.transactionDate === 'string' ? t.transactionDate : undefined,
+            t.quantity
+          );
+          if (lKey) existingLineKeys.add(lKey);
+        });
 
-        const seenOrderNosInBatch = new Set<string>();
-        const seenFpInBatch = new Set<string>();
+        const seenLineKeysInBatch = new Set<string>();
         const transactionsToImport: any[] = [];
 
         validRows.forEach((r, idx) => {
-          const skuUpper = (r.parsed.sku || '').trim().toUpperCase();
-          const nameLower = (r.parsed.name || '').trim().toLowerCase();
-          const isExistingProduct = (skuUpper && existingProductSkuMap.has(skuUpper)) || (nameLower && existingProductNameMap.has(nameLower));
-
-          // If product was already added from earlier file, do NOT duplicate historical transactions!
-          if (isExistingProduct) {
-            return;
-          }
-
           const orderNo = r.parsed.orderNo || `INV-${(r.parsed.sku || r.parsed.name || 'ITEM').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8)}-${idx + 1}`;
-          const orderNoUpper = orderNo.trim().toUpperCase();
+          const existingProduct = resolveExistingProduct(products, r.parsed.sku, r.parsed.name);
+          const orderLineKey = generateOrderLineItemKey(orderNo, r.parsed.sku, r.parsed.name, r.parsed.date, r.parsed.qty);
 
-          if (existingOrderNos.has(orderNoUpper) || seenOrderNosInBatch.has(orderNoUpper)) {
-            return;
+          if (orderLineKey && (existingLineKeys.has(orderLineKey) || seenLineKeysInBatch.has(orderLineKey))) {
+            return; // Skip duplicate order item
           }
-
-          const fp = `${(r.parsed.name || '').trim().toLowerCase()}|${(r.parsed.date || '').trim()}|${Number(r.parsed.qty || 1)}|${(r.parsed.price || 499) * (r.parsed.qty || 1)}|${(r.parsed.customer || '').trim().toLowerCase()}`;
-          if (existingTxFingerprints.has(fp) || seenFpInBatch.has(fp)) {
-            return;
-          }
-
-          seenOrderNosInBatch.add(orderNoUpper);
-          seenFpInBatch.add(fp);
+          if (orderLineKey) seenLineKeysInBatch.add(orderLineKey);
 
           transactionsToImport.push({
             type: 'Sale' as const,
-            productId: `prod-${(r.parsed.sku || r.parsed.name).toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+            productId: existingProduct?.id || `prod-${(r.parsed.sku || r.parsed.name).toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
             productName: r.parsed.name,
             sku: r.parsed.sku,
             quantity: r.parsed.qty || 1,
-            price: r.parsed.price || 499,
-            totalRevenue: (r.parsed.price || 499) * (r.parsed.qty || 1),
-            costPerUnit: r.parsed.costPrice && r.parsed.costPrice > 0 ? r.parsed.costPrice : Math.round((r.parsed.price || 499) * 0.6),
-            totalCost: (r.parsed.costPrice && r.parsed.costPrice > 0 ? r.parsed.costPrice : Math.round((r.parsed.price || 499) * 0.6)) * (r.parsed.qty || 1),
+            price: r.parsed.price || 0,
+            totalRevenue: (r.parsed.price || 0) * (r.parsed.qty || 1),
+            costPerUnit: r.parsed.costPrice && r.parsed.costPrice > 0 ? r.parsed.costPrice : Math.round((r.parsed.price || 0) * 0.6),
+            totalCost: (r.parsed.costPrice && r.parsed.costPrice > 0 ? r.parsed.costPrice : Math.round((r.parsed.price || 0) * 0.6)) * (r.parsed.qty || 1),
             customerName: r.parsed.customer || 'Retail Customer',
             customerCity: r.parsed.city || '',
             transactionDate: r.parsed.date || new Date().toISOString().split('T')[0],
@@ -1725,7 +1716,7 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
                         >
                           <span className={cn(
                             "w-2 h-2 rounded-full shrink-0",
-                            (businessProfile?.shopifyRealtimeSyncEnabled !== false) ? "bg-emerald-400 animate-pulse" : "bg-muted-foreground/60"
+                            Boolean(businessProfile?.shopifyRealtimeSyncEnabled) ? "bg-emerald-400 animate-pulse" : "bg-muted-foreground/60"
                           )} />
                           <span className="truncate">{formatShopifyScheduleSummary(businessProfile)}</span>
                           <Pencil className="w-3 h-3 opacity-60 group-hover:opacity-100 shrink-0" />
@@ -1757,12 +1748,11 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
                             onClick={async () => {
                               await updateShopifyScheduleSettings({
                                 shopifyRealtimeSyncEnabled: true,
-                                shopifyAutoSyncEnabled: true,
                               });
                             }}
                             className="h-6 px-2.5 text-[10px] rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold cursor-pointer"
                           >
-                            ⚡ Enable Real-Time
+                            Enable Real-Time
                           </Button>
                         </div>
                       )}
@@ -1783,26 +1773,14 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
 
                 <div className="flex flex-wrap sm:flex-nowrap gap-2 mt-auto pt-2">
                   {isShopifyConnected && (
-                    <>
-                      <Button
-                        onClick={() => autoSyncShopifyNow(true, businessProfile?.shopifyStoreUrl)}
-                        disabled={isShopifySyncing || isShopifyDisconnecting}
-                        className="flex-1 rounded-2xl text-xs font-bold gap-2 bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20 h-10 cursor-pointer"
-                      >
-                        <RefreshCw className={cn("w-3.5 h-3.5", isShopifySyncing && "animate-spin")} />
-                        {isShopifySyncing ? 'Syncing...' : 'Sync Now'}
-                      </Button>
-                      <Button
-                        onClick={() => setShowShopifyScheduleModal(true)}
-                        disabled={isShopifySyncing || isShopifyDisconnecting}
-                        variant="outline"
-                        title="Configure Auto-Sync Schedule & Real-Time Sync"
-                        className="rounded-2xl text-xs font-bold gap-1.5 h-10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 px-3 cursor-pointer"
-                      >
-                        <Clock className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Schedule</span>
-                      </Button>
-                    </>
+                    <Button
+                      onClick={() => autoSyncShopifyNow(true, businessProfile?.shopifyStoreUrl)}
+                      disabled={isShopifySyncing || isShopifyDisconnecting}
+                      className="flex-1 rounded-2xl text-xs font-bold gap-2 bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20 h-10 cursor-pointer"
+                    >
+                      <RefreshCw className={cn("w-3.5 h-3.5", isShopifySyncing && "animate-spin")} />
+                      {isShopifySyncing ? 'Syncing...' : 'Sync Now'}
+                    </Button>
                   )}
                   <Button
                     onClick={() => setShowShopifyModal(true)}

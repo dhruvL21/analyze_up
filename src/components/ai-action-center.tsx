@@ -11,7 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { logBusinessAction } from '@/lib/audit-store';
 import { AuditLogModal } from '@/components/audit-log-modal';
 import { ThreeTierBadge } from '@/components/three-tier-badge';
-import { BusinessBuddyCard } from '@/components/business-buddy-card';
+import { ImportDialog } from '@/components/import-dialog';
 import {
   Sparkles,
   ArrowRight,
@@ -27,6 +27,7 @@ import {
   ChevronUp,
   Target,
   ExternalLink,
+  Clock,
 } from 'lucide-react';
 import {
   Dialog,
@@ -59,10 +60,16 @@ export function AIActionCenter() {
     activateRecommendationsNow,
     updateProduct,
     addOrder,
+    capabilities,
+    dataReadiness,
   } = useData();
   const { toast } = useToast();
   const router = useRouter();
 
+  const hasNoData = (products?.length || 0) === 0 && (transactions?.length || 0) === 0;
+  const isLearning = dataReadiness?.level === 'LEARNING' || businessBuddyCalibration?.status === 'LEARNING';
+
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [tasks, setTasks] = useState<ActionTask[]>([]);
   const [activeTab, setActiveTab] = useState<'all' | 'top' | 'other' | 'done'>('all');
@@ -417,13 +424,6 @@ export function AIActionCenter() {
     );
   };
 
-  if (businessBuddyCalibration?.status === 'LEARNING') {
-    return (
-      <BusinessBuddyCard
-        calibration={businessBuddyCalibration}
-      />
-    );
-  }
 
   return (
     <>
@@ -437,9 +437,15 @@ export function AIActionCenter() {
             <div>
               <CardTitle className="text-base font-bold flex items-center gap-2">
                 AI Action Center
-                <Badge className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 font-bold">
-                  {activeTasks.length} Pending
-                </Badge>
+                {isLearning ? (
+                  <Badge className="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] px-2 py-0.5 font-bold">
+                    In Learning Stage
+                  </Badge>
+                ) : (
+                  <Badge className="bg-emerald-600 text-white text-[10px] px-2 py-0.5 font-bold">
+                    {activeTasks.length} Pending
+                  </Badge>
+                )}
               </CardTitle>
               <CardDescription className="text-xs">
                 Proactive business task assignments & daily execution engine
@@ -469,7 +475,7 @@ export function AIActionCenter() {
               Audit Log
             </Button>
 
-            {completedTasks.length > 0 && (
+            {!isLearning && completedTasks.length > 0 && (
               <Badge
                 variant="outline"
                 onClick={() => setActiveTab(activeTab === 'done' ? 'all' : 'done')}
@@ -481,59 +487,153 @@ export function AIActionCenter() {
           </div>
         </CardHeader>
 
-        {/* Filter / View Tabs */}
-        <div className="flex items-center gap-1.5 p-1 bg-secondary/30 rounded-2xl border border-border/40 w-fit text-xs font-semibold overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('all')}
-            className={`px-3 py-1.5 rounded-xl transition-all ${
-              activeTab === 'all'
-                ? 'bg-primary text-primary-foreground shadow-xs'
-                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
-            }`}
-          >
-            All Pending ({activeTasks.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('top')}
-            className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1 ${
-              activeTab === 'top'
-                ? 'bg-amber-500 text-black font-bold shadow-xs'
-                : 'text-amber-400/90 hover:text-amber-400 hover:bg-amber-500/10'
-            }`}
-          >
-            <Flame className="w-3 h-3" />
-            Today's Top Focus ({topPriorityTasks.length})
-          </button>
-          {otherTasks.length > 0 && (
+        {/* Filter / View Tabs: Only visible once past learning stage */}
+        {!isLearning && (
+          <div className="flex items-center gap-1.5 p-1 bg-secondary/30 rounded-2xl border border-border/40 w-fit text-xs font-semibold overflow-x-auto">
             <button
-              onClick={() => setActiveTab('other')}
+              onClick={() => setActiveTab('all')}
               className={`px-3 py-1.5 rounded-xl transition-all ${
-                activeTab === 'other'
+                activeTab === 'all'
                   ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
               }`}
             >
-              Other Actions ({otherTasks.length})
+              All Pending ({activeTasks.length})
             </button>
-          )}
-          {completedTasks.length > 0 && (
             <button
-              onClick={() => setActiveTab('done')}
+              onClick={() => setActiveTab('top')}
               className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1 ${
-                activeTab === 'done'
-                  ? 'bg-emerald-600 text-white font-bold shadow-xs'
-                  : 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10'
+                activeTab === 'top'
+                  ? 'bg-amber-500 text-black font-bold shadow-xs'
+                  : 'text-amber-400/90 hover:text-amber-400 hover:bg-amber-500/10'
               }`}
             >
-              <Check className="w-3 h-3" />
-              Done Today ({completedTasks.length})
+              <Flame className="w-3 h-3" />
+              Today's Top Focus ({topPriorityTasks.length})
             </button>
-          )}
-        </div>
+            {otherTasks.length > 0 && (
+              <button
+                onClick={() => setActiveTab('other')}
+                className={`px-3 py-1.5 rounded-xl transition-all ${
+                  activeTab === 'other'
+                    ? 'bg-primary text-primary-foreground shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+                }`}
+              >
+                Other Actions ({otherTasks.length})
+              </button>
+            )}
+            {completedTasks.length > 0 && (
+              <button
+                onClick={() => setActiveTab('done')}
+                className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1 ${
+                  activeTab === 'done'
+                    ? 'bg-emerald-600 text-white font-bold shadow-xs'
+                    : 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10'
+                }`}
+              >
+                <Check className="w-3 h-3" />
+                Done Today ({completedTasks.length})
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Content Area */}
         <CardContent className="p-0 space-y-6">
-          {activeTasks.length === 0 && activeTab !== 'done' ? (
+          {hasNoData ? (
+            <div className="p-8 text-center rounded-2xl bg-zinc-900/50 border border-border/40 space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center mx-auto">
+                <Layers className="w-6 h-6 text-emerald-400" />
+              </div>
+              <div className="space-y-1.5 max-w-md mx-auto">
+                <h4 className="text-base font-bold text-foreground">Action Center Awaiting Business Data</h4>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  No products or transaction records are currently imported. Connect your store or upload a CSV / Excel catalog to activate the Action Center, generate automated restock recommendations, and unlock AI intelligence.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-lg mx-auto pt-2 text-left">
+                <div className="p-3 rounded-xl bg-secondary/20 border border-border/30 space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground block">Sales History</span>
+                  <p className="text-sm font-bold text-foreground font-mono">
+                    0 / 14 Days
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">Awaiting data</p>
+                </div>
+
+                <div className="p-3 rounded-xl bg-secondary/20 border border-border/30 space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground block">Customer Orders</span>
+                  <p className="text-sm font-bold text-foreground font-mono">
+                    0 / 40 Orders
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">Awaiting data</p>
+                </div>
+
+                <div className="p-3 rounded-xl bg-secondary/20 border border-border/30 space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground block">Readiness Score</span>
+                  <p className="text-sm font-bold text-muted-foreground font-mono">
+                    0 / 100
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">No records loaded</p>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-center gap-3 pt-2 flex-wrap">
+                <Button
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="rounded-xl text-xs bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5 font-bold shadow-sm shadow-emerald-600/20"
+                >
+                  <Sparkles className="w-3.5 h-3.5" /> Import Business Data
+                </Button>
+                <Button
+                  onClick={() => router.push('/dashboard/integrations')}
+                  variant="outline"
+                  className="rounded-xl text-xs gap-1.5 border-border/60 hover:bg-secondary/40"
+                >
+                  Connect Shopify Store <ArrowRight className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+          ) : isLearning ? (
+            <div className="p-8 text-center rounded-2xl bg-zinc-900/50 border border-amber-500/25 space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center mx-auto">
+                <Clock className="w-6 h-6 animate-pulse text-amber-400" />
+              </div>
+              <div className="space-y-1.5 max-w-md mx-auto">
+                <h4 className="text-base font-bold text-foreground">Action Center is in Learning Stage</h4>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  AnalyzeUp is observing your catalog&apos;s sales rhythm. Proactive restocking assignments, purchase order recommendations, and supplier optimizations will automatically unlock once baseline transactions accumulate (Early Insights tier).
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-lg mx-auto pt-2 text-left">
+                <div className="p-3 rounded-xl bg-secondary/20 border border-border/30 space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground block">Sales History</span>
+                  <p className="text-sm font-bold text-foreground font-mono">
+                    {dataReadiness?.historicalDays ?? 0} / 14 Days
+                  </p>
+                  <p className="text-[10px] text-amber-400">Baseline calibrating</p>
+                </div>
+
+                <div className="p-3 rounded-xl bg-secondary/20 border border-border/30 space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground block">Customer Orders</span>
+                  <p className="text-sm font-bold text-foreground font-mono">
+                    {dataReadiness?.totalOrders ?? 0} / 40 Orders
+                  </p>
+                  <p className="text-[10px] text-amber-400">Building volume</p>
+                </div>
+
+                <div className="p-3 rounded-xl bg-secondary/20 border border-border/30 space-y-1">
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground block">Readiness Score</span>
+                  <p className="text-sm font-bold text-emerald-400 font-mono">
+                    {dataReadiness?.score ?? 0} / 100
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">Level 1 • Learning</p>
+                </div>
+              </div>
+            </div>
+          ) : activeTasks.length === 0 && activeTab !== 'done' ? (
             <div className="p-8 text-center rounded-2xl bg-emerald-500/5 border border-emerald-500/20 space-y-3">
               <ShieldCheck className="w-10 h-10 text-emerald-400 mx-auto animate-bounce" />
               <h4 className="text-base font-bold text-foreground">All Today&apos;s Priority Actions Completed!</h4>
@@ -778,6 +878,8 @@ export function AIActionCenter() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ImportDialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen} />
     </>
   );
 }

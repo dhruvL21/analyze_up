@@ -43,6 +43,7 @@ export const INVENTORY_FIELDS: TargetFieldDef[] = [
   { key: 'status', label: 'Item Status / Order Status', required: false, description: 'Active, Inactive, Discontinued' },
   { key: 'remarks', label: 'Remarks / Notes', required: false, description: 'Product notes or remarks' },
   { key: 'description', label: 'Description', required: false, description: 'Product specifications or details' },
+  { key: 'customAttribute', label: 'Custom Attribute / Store in Database', required: false, description: 'Store column directly in database as custom field' },
   { key: 'skip', label: '— Skip / Ignore Column —', required: false, description: 'Do not import this column' },
 ];
 
@@ -71,6 +72,7 @@ export const SALES_FIELDS: TargetFieldDef[] = [
   { key: 'supplierId', label: 'Supplier ID', required: false, description: 'Supplier unique code' },
   { key: 'city', label: 'Warehouse / Region / Location', required: false, description: 'Warehouse or delivery destination' },
   { key: 'remarks', label: 'Remarks / Notes', required: false, description: 'Order remarks or delivery notes' },
+  { key: 'customAttribute', label: 'Custom Attribute / Store in Database', required: false, description: 'Store column directly in database as custom field' },
   { key: 'skip', label: '— Skip / Ignore Column —', required: false, description: 'Do not import this column' },
 ];
 

@@ -34,7 +34,7 @@ interface ProductIntelligenceDrawerProps {
 }
 
 export function ProductIntelligenceDrawer({ product, open, onOpenChange }: ProductIntelligenceDrawerProps) {
-  const { products, transactions, returns, suppliers, updateProduct, addOrder, businessProfile } = useData();
+  const { products, transactions, returns, suppliers, updateProduct, addOrder, businessProfile, capabilities, dataReadiness } = useData();
   const { toast } = useToast();
 
   const [confirmData, setConfirmData] = React.useState<{
@@ -58,7 +58,11 @@ export function ProductIntelligenceDrawer({ product, open, onOpenChange }: Produ
   const liveProduct = products.find((p) => p.id === product.id || (p.sku && product.sku && p.sku === product.sku)) || product;
 
   const currencySymbol = businessProfile?.currency?.includes('USD') ? '$' : '₹';
-  const report = computeProductIntelligence(liveProduct, transactions, returns, suppliers);
+  const report = computeProductIntelligence(liveProduct, transactions, returns, suppliers, {
+    isDeadStockEnabled: capabilities?.deadStockDetection,
+    isVelocityEnabled: capabilities?.trendAnalysis,
+    historicalDays: dataReadiness?.historicalDays,
+  });
 
   const hasRecentlyOptimizedPrice = recentLogs.some(
     (log) => log.productName.toLowerCase() === liveProduct.name.toLowerCase() && (log.actionType === 'price_up' || log.actionType === 'discount')

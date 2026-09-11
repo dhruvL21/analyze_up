@@ -9,6 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { logBusinessAction, getAuditLogs, BusinessAuditLog } from '@/lib/audit-store';
 import { predictOptimalClearanceDiscount, ClearancePrediction } from '@/lib/ml/clearance-pricing-model';
 import { evaluateSalesHistory } from '@/lib/sales-history-helper';
+import { analyzeDeadStockRisk, DeadStockAnalysisItem } from '@/lib/dead-stock-risk-engine';
 import { useRouter } from 'next/navigation';
 import {
   PackageX,
@@ -22,6 +23,7 @@ import {
   RefreshCw,
   AlertTriangle,
   AlertCircle,
+  Info,
 } from 'lucide-react';
 import {
   Dialog,
@@ -39,6 +41,8 @@ export function DeadStockSection() {
     updateProduct,
     businessProfile,
     businessBuddyCalibration,
+    dataReadiness,
+    capabilities,
   } = useData();
   const { toast } = useToast();
   const router = useRouter();
@@ -46,6 +50,7 @@ export function DeadStockSection() {
   const [confirmItem, setConfirmItem] = useState<{
     product: any;
     prediction: ClearancePrediction;
+    analysis?: DeadStockAnalysisItem;
   } | null>(null);
 
   const [applyingId, setApplyingId] = useState<string | null>(null);
@@ -67,11 +72,29 @@ export function DeadStockSection() {
     return evaluateSalesHistory(products, transactions);
   }, [products, transactions]);
 
-  // Dead Stock Items: Only evaluated if dataset has >= 30 days of recorded sales history
+  // Dead stock capability status
+  const isDeadStockActive = capabilities
+    ? capabilities.deadStockDetection
+    : (businessBuddyCalibration?.status !== 'LEARNING' && salesHistory.hasMinimumHistory);
+
+  // Multi-factor dead stock risk report
+  const deadStockAnalysis = React.useMemo(() => {
+    return analyzeDeadStockRisk(products, transactions, {
+      isDeadStockEnabled: isDeadStockActive,
+      historicalDays: dataReadiness?.historicalDays,
+    });
+  }, [products, transactions, isDeadStockActive, dataReadiness?.historicalDays]);
+
+  // Dead Stock Items: Only evaluated if dataset readiness unlocks dead stock detection
   const deadStockItems = React.useMemo(() => {
-    if (!salesHistory.hasMinimumHistory) return [];
+    if (!isDeadStockActive) return [];
+    if (deadStockAnalysis.items.length > 0) {
+      return deadStockAnalysis.items
+        .filter((item) => item.riskLevel === 'CRITICAL' || item.riskLevel === 'HIGH' || item.riskLevel === 'MEDIUM')
+        .map((item) => item.product);
+    }
     return products.filter((p) => p && p.stock > 0 && salesHistory.isProductEligibleForDeadStock(p));
-  }, [products, salesHistory]);
+  }, [isDeadStockActive, deadStockAnalysis, products, salesHistory]);
 
   // Track products that have already had a clearance discount executed in audit logs
   const discountedProductNames = React.useMemo(() => {
@@ -102,11 +125,14 @@ export function DeadStockSection() {
   }, [deadStockItems, isItemLiquidated]);
 
   const totalDeadCapital = React.useMemo(() => {
+    if (deadStockAnalysis.totalDeadCapital > 0) {
+      return deadStockAnalysis.totalDeadCapital;
+    }
     return pendingItems.reduce(
       (acc, p) => acc + (p.stock || 0) * (p.costPrice || (p.price || 500) * 0.6),
       0
     );
-  }, [pendingItems]);
+  }, [deadStockAnalysis, pendingItems]);
 
   const executeApplyClearance = async (product: any, prediction: ClearancePrediction) => {
     setApplyingId(product.id);
@@ -134,7 +160,7 @@ export function DeadStockSection() {
       });
 
       toast({
-        title: `🏷️ ${prediction.discountPercent}% Clearance Saved to Database!`,
+        title: `${prediction.discountPercent}% Clearance Saved to Database!`,
         description: `Price of "${product.name}" updated to ${currencySymbol}${prediction.newPrice.toLocaleString('en-IN')} in database & live store. Marked as Liquidated.`,
       });
       setConfirmItem(null);
@@ -150,9 +176,11 @@ export function DeadStockSection() {
     }
   };
 
-  if (businessBuddyCalibration?.status === 'LEARNING' || !salesHistory.hasMinimumHistory) {
-    const currentDayNumber = salesHistory.historyDays || businessBuddyCalibration?.currentDayNumber || 1;
+  if (!isDeadStockActive || businessBuddyCalibration?.status === 'LEARNING') {
+    const currentDayNumber = dataReadiness?.historicalDays || salesHistory.historyDays || businessBuddyCalibration?.currentDayNumber || 1;
     const targetDays = 30;
+    const readinessScore = dataReadiness?.score ?? 20;
+    const levelLabel = dataReadiness?.level ? dataReadiness.level.replace('_', ' ') : 'LEARNING';
     const intelligence = businessBuddyCalibration?.intelligence || {
       detectedIndustry: 'Footwear & Retail',
       holdingPeriodDays: 30,
@@ -170,11 +198,11 @@ export function DeadStockSection() {
                   Clearance &amp; Dead Stock: Observing Demand Flow
                 </CardTitle>
                 <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-semibold">
-                  Day {currentDayNumber} of {targetDays} Baseline
+                  Readiness {readinessScore}/100 • {levelLabel}
                 </Badge>
               </div>
               <CardDescription className="text-xs text-muted-foreground mt-0.5">
-                Clearance markdowns are safely on hold to protect brand equity while observing {intelligence.detectedIndustry} purchase cycles (requires 30+ days of sales history).
+                Clearance markdowns are safely paused to protect brand equity while observing {intelligence.detectedIndustry} purchase cycles (requires established sales velocity).
               </CardDescription>
             </div>
           </div>
@@ -362,6 +390,7 @@ export function DeadStockSection() {
                   const costPrice = item.costPrice || (item.price || 500) * 0.6;
                   const tiedCapital = (item.stock || 0) * costPrice;
                   const prediction = predictOptimalClearanceDiscount(item, totalDeadCapital);
+                  const analysis = deadStockAnalysis.items.find((i) => i.productId === item.id);
 
                   return (
                     <div
@@ -371,12 +400,32 @@ export function DeadStockSection() {
                       <div className="space-y-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-bold text-foreground text-sm truncate">{item.name}</span>
-                          <Badge variant="outline" className="text-[10px] text-rose-400 border-rose-500/30 px-1.5 py-0 font-medium">
-                            Zero Sales
-                          </Badge>
+                          {analysis ? (
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] px-1.5 py-0 font-bold ${
+                                analysis.riskLevel === 'CRITICAL'
+                                  ? 'text-rose-400 border-rose-500/40 bg-rose-500/10'
+                                  : analysis.riskLevel === 'HIGH'
+                                  ? 'text-amber-400 border-amber-500/40 bg-amber-500/10'
+                                  : 'text-yellow-400 border-yellow-500/40 bg-yellow-500/10'
+                              }`}
+                            >
+                              {analysis.riskLevel} Risk
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-[10px] text-rose-400 border-rose-500/30 px-1.5 py-0 font-medium">
+                              Zero Sales
+                            </Badge>
+                          )}
+                          {analysis?.stockCoverageDays ? (
+                            <Badge variant="outline" className="text-[10px] text-muted-foreground border-border/50 px-1.5 py-0">
+                              ~{analysis.stockCoverageDays}d coverage
+                            </Badge>
+                          ) : null}
                           <button
                             type="button"
-                            onClick={() => setConfirmItem({ product: item, prediction })}
+                            onClick={() => setConfirmItem({ product: item, prediction, analysis })}
                             title="Click to view AI Pricing Rationale"
                             className="inline-flex"
                           >
@@ -395,7 +444,8 @@ export function DeadStockSection() {
                           </button>
                         </div>
                         <p className="text-xs text-muted-foreground">
-                          SKU: {item.sku || 'N/A'} • {item.stock} {item.unit || 'units'} in stock • Current: {currencySymbol}{item.price?.toLocaleString('en-IN')} (Margin: {prediction.grossMarginBefore}%)
+                          SKU: {item.sku || 'N/A'} • {item.stock} {item.unit || 'units'} in stock • Current: {currencySymbol}{item.price?.toLocaleString('en-IN')}
+                          {prediction.hasCostPrice ? ` (Margin: ${prediction.grossMarginBefore}%)` : ` (Est. Cost)`}
                         </p>
                       </div>
 
@@ -412,7 +462,7 @@ export function DeadStockSection() {
                         <Button
                           size="sm"
                           disabled={applyingId === item.id}
-                          onClick={() => setConfirmItem({ product: item, prediction })}
+                          onClick={() => setConfirmItem({ product: item, prediction, analysis })}
                           className="rounded-xl text-xs h-8 bg-emerald-600 hover:bg-emerald-500 text-white font-bold gap-1 px-3.5 shadow-sm shadow-emerald-600/20 cursor-pointer"
                         >
                           <Tag className="w-3.5 h-3.5" />
@@ -494,12 +544,26 @@ export function DeadStockSection() {
                   </div>
                 </div>
 
+                {confirmItem.analysis?.whyExplanation && (
+                  <div className="p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-[11px] text-zinc-300 leading-relaxed">
+                    <span className="text-zinc-200 font-bold block mb-0.5">Why this is flagged:</span>
+                    {confirmItem.analysis.whyExplanation}
+                  </div>
+                )}
+
                 <div className="p-2.5 rounded-xl bg-zinc-950/80 border border-zinc-800 text-[11px] text-zinc-300 leading-relaxed">
                   <span className="text-emerald-400 font-bold block mb-0.5 flex items-center gap-1">
                     <Sparkles className="w-3 h-3 text-emerald-400" /> AI Strategy: {confirmItem.prediction.liquidationStrategy}
                   </span>
                   {confirmItem.prediction.aiRationale}
                 </div>
+
+                {!confirmItem.prediction.hasCostPrice && (
+                  <div className="p-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-[11px] text-blue-200 flex items-center gap-1.5">
+                    <Info className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                    <span><strong>Margin Transparency:</strong> Product cost is not provided. This recommendation is calculated as a sell-through acceleration test.</span>
+                  </div>
+                )}
 
                 <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-200 flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />

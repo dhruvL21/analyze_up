@@ -326,8 +326,14 @@ function NavContent({ isMobile = false }: { isMobile?: boolean }) {
     if (label === 'Insights & Health') {
       return 'right-0';
     }
+    if (label === 'Executive') {
+      return 'right-0 xl:right-auto xl:left-1/2 xl:-translate-x-1/2 2xl:left-1/2 2xl:-translate-x-1/2';
+    }
     if (label === 'Connect') {
-      return 'right-0 lg:right-auto lg:left-1/2 lg:-translate-x-1/2';
+      return 'right-0 xl:right-auto xl:left-1/2 xl:-translate-x-1/2';
+    }
+    if (label === 'Suppliers') {
+      return 'left-0 xl:left-1/2 xl:-translate-x-1/2';
     }
     if (label === 'Operations') {
       return 'left-0';
@@ -336,7 +342,7 @@ function NavContent({ isMobile = false }: { isMobile?: boolean }) {
   };
 
   return (
-    <nav className="hidden md:flex items-center gap-0.5 lg:gap-1.5 text-xs lg:text-sm font-semibold whitespace-nowrap">
+    <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1.5 text-xs xl:text-sm font-semibold whitespace-nowrap max-w-full overflow-x-auto scrollbar-none py-1">
       {navItems.map((item) => {
         const active = isItemActive(item);
         const hasChildren = Boolean(item.children && item.children.length > 0);
@@ -345,36 +351,57 @@ function NavContent({ isMobile = false }: { isMobile?: boolean }) {
         return (
           <div
             key={item.href}
-            className="relative"
+            className="relative shrink-0"
             onMouseEnter={() => hasChildren && handleMouseEnter(item.label)}
             onMouseLeave={hasChildren ? handleMouseLeave : undefined}
           >
-            <Link
-              href={item.href}
-              data-tour={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
-              onClick={(e) => handleNavClick(e, item.href)}
-              className={cn(
-                "group flex items-center gap-1 transition-all duration-200 hover:text-foreground/90 px-2.5 lg:px-3.5 py-1.5 rounded-full cursor-pointer relative whitespace-nowrap shrink-0",
-                active ? "text-accent-foreground font-bold" : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <span>{item.label}</span>
-              {hasChildren && (
-                <ChevronDown
-                  className={cn(
-                    "w-3 h-3 transition-transform duration-200 opacity-60 group-hover:opacity-100",
-                    isHovered && "rotate-180 text-primary opacity-100"
+            <div className="flex items-center">
+              <Link
+                href={item.href}
+                data-tour={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
+                onClick={(e) => handleNavClick(e, item.href)}
+                className={cn(
+                  "group flex items-center gap-1 transition-all duration-200 hover:text-foreground/90 px-2 xl:px-3.5 py-1.5 rounded-full cursor-pointer relative whitespace-nowrap shrink-0",
+                  active ? "text-accent-foreground font-bold" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <span>
+                  {item.label === 'Insights & Health' ? (
+                    <>
+                      Insights<span className="hidden xl:inline"> & Health</span>
+                    </>
+                  ) : (
+                    item.label
                   )}
-                />
+                </span>
+                {active && (
+                  <motion.span
+                    layoutId="active-nav-link"
+                    className="absolute inset-0 bg-black/20 dark:bg-white/10 backdrop-blur-sm rounded-full -z-10 border border-border/40 shadow-sm"
+                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                  />
+                )}
+              </Link>
+              {hasChildren && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setHoveredLabel(isHovered ? null : item.label);
+                  }}
+                  aria-label={`Toggle ${item.label} menu`}
+                  className="p-1 -ml-1 rounded-full hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                >
+                  <ChevronDown
+                    className={cn(
+                      "w-3 h-3 transition-transform duration-200 opacity-60 hover:opacity-100",
+                      isHovered && "rotate-180 text-primary opacity-100"
+                    )}
+                  />
+                </button>
               )}
-              {active && (
-                <motion.span
-                  layoutId="active-nav-link"
-                  className="absolute inset-0 bg-black/20 dark:bg-white/10 backdrop-blur-sm rounded-full -z-10 border border-border/40 shadow-sm"
-                  transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                />
-              )}
-            </Link>
+            </div>
 
             {/* Hover Dropdown Menu */}
             {hasChildren && (
@@ -390,7 +417,7 @@ function NavContent({ isMobile = false }: { isMobile?: boolean }) {
                       getDropdownAlignmentClass(item.label)
                     )}
                   >
-                    <div className="w-72 lg:w-80 rounded-2xl ios-glass border border-border/50 shadow-2xl p-2 bg-background/95 backdrop-blur-xl space-y-1">
+                    <div className="w-[calc(100vw-2rem)] sm:w-72 lg:w-80 max-w-[calc(100vw-2rem)] rounded-2xl ios-glass border border-border/50 shadow-2xl p-2 bg-background/95 backdrop-blur-xl space-y-1">
                       <div className="px-2.5 py-1 text-[10px] uppercase font-bold tracking-wider text-muted-foreground/80 border-b border-border/30 pb-1.5 mb-1">
                         <span>{item.label} Modules</span>
                       </div>

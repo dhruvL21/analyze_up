@@ -1016,6 +1016,35 @@ export function processCopilotQuery(
 
   // 7. FORECASTING ANALYSIS INTENT
   if (intent === 'FORECASTING_ANALYSIS') {
+    if (forecastReport.overallConfidence === 'INSUFFICIENT') {
+      const what = 'AnalyzeUp is currently observing your catalog in the Level 1 Baseline Learning Stage.';
+      const why = forecastReport.confidenceReason;
+      const actionText = 'Continue processing customer orders to build historical depth. 30-Day demand forecasts unlock after 30 days of sales history or 80+ customer orders.';
+      const answerMarkdown = `### 🕒 DEMAND FORECASTING: LEARNING STAGE ACTIVE\n\n` +
+        `- **Status:** Baseline Calibrating\n` +
+        `- **Notice:** Speculative 30-day demand and revenue forecasts are suppressed during early baseline observation to protect profit margins.\n` +
+        `- **Target Milestone:** 30 recorded sales days or 80+ customer orders.\n\n` +
+        `**Next Steps:** ${actionText}`;
+
+      return {
+        intent,
+        intentLabel,
+        answerMarkdown,
+        what,
+        why,
+        actionText,
+        confidence: 'LOW' as const,
+        supportingData: [
+          { label: 'Status', value: 'Baseline Calibrating' },
+          { label: 'Requirement', value: '30 Days / 80 Orders' },
+        ],
+        suggestedFollowUps: [
+          'What is our current data readiness score?',
+          'How many products are currently tracked?',
+        ],
+      };
+    }
+
     const projRev = forecastReport.totalProjected30DayRevenue;
     const projProf = forecastReport.totalProjected30DayProfit;
     const criticals = forecastReport.stockoutProjections.filter(s => s.stockoutRiskLevel === 'HIGH');

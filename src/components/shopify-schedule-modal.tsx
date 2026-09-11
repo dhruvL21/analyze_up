@@ -53,10 +53,14 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
   } = useData();
 
   const [realtimeEnabled, setRealtimeEnabled] = useState(
-    businessProfile?.shopifyRealtimeSyncEnabled ?? true
+    businessProfile?.shopifyRealtimeSyncEnabled !== undefined
+      ? Boolean(businessProfile.shopifyRealtimeSyncEnabled)
+      : false
   );
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(
-    businessProfile?.shopifyAutoSyncEnabled ?? true
+    businessProfile?.shopifyAutoSyncEnabled !== undefined
+      ? Boolean(businessProfile.shopifyAutoSyncEnabled)
+      : false
   );
   const [scheduleType, setScheduleType] = useState<'recurring' | 'custom_datetime'>(
     businessProfile?.shopifySyncFrequency === 'custom_datetime' ? 'custom_datetime' : 'recurring'
@@ -90,8 +94,16 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
   // Sync state whenever modal opens or businessProfile changes
   useEffect(() => {
     if (open && businessProfile) {
-      setRealtimeEnabled(businessProfile.shopifyRealtimeSyncEnabled ?? true);
-      setAutoSyncEnabled(businessProfile.shopifyAutoSyncEnabled ?? true);
+      setRealtimeEnabled(
+        businessProfile.shopifyRealtimeSyncEnabled !== undefined
+          ? Boolean(businessProfile.shopifyRealtimeSyncEnabled)
+          : false
+      );
+      setAutoSyncEnabled(
+        businessProfile.shopifyAutoSyncEnabled !== undefined
+          ? Boolean(businessProfile.shopifyAutoSyncEnabled)
+          : false
+      );
       if (businessProfile.shopifySyncFrequency === 'custom_datetime') {
         setScheduleType('custom_datetime');
       } else {
@@ -353,7 +365,7 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
                           <SelectValue placeholder="Select Frequency" />
                         </SelectTrigger>
                         <SelectContent className="rounded-xl">
-                          <SelectItem value="1_min">⚡ Every 1 Minute (Fast Auto-Sync & Testing)</SelectItem>
+                          <SelectItem value="1_min">Every 1 Minute (Fast Auto-Sync & Testing)</SelectItem>
                           <SelectItem value="5_mins">Every 5 Minutes</SelectItem>
                           <SelectItem value="15_mins">Every 15 Minutes</SelectItem>
                           <SelectItem value="30_mins">Every 30 Minutes</SelectItem>

@@ -4,15 +4,16 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useData } from '@/context/data-context';
 import { useUser, useFirestore, useDoc } from '@/firebase';
 import { doc, setDoc } from 'firebase/firestore';
-import { Sparkles, AlertTriangle, Coins, Loader2, RefreshCw, Lock, ArrowRight } from 'lucide-react';
+import { Sparkles, AlertTriangle, Coins, Loader2, RefreshCw, Lock, ArrowRight, Clock, CheckCircle2 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
+import { Badge } from '@/components/ui/badge';
 import { calculateDynamicBrief, type AIBriefOutput } from '@/ai/flows/ai-brief-generator';
 import { ThreeTierBadge } from '@/components/three-tier-badge';
 import { serializePlainData } from '@/lib/utils';
 import type { Product, Transaction } from '@/lib/types';
 
 export function AIBrief() {
-  const { products, transactions, activePlan, setShowSubscriptionModal, returns = [], isLoading } = useData();
+  const { products, transactions, activePlan, setShowSubscriptionModal, returns = [], isLoading, capabilities, dataReadiness } = useData();
   const { user } = useUser();
   const firestore = useFirestore();
 
@@ -24,8 +25,8 @@ export function AIBrief() {
 
   // Real-time dynamic brief calculated strictly from current live products & transactions
   const dynamicBrief = useMemo(() => {
-    return calculateDynamicBrief(products, transactions);
-  }, [products, transactions]);
+    return calculateDynamicBrief(products, transactions, { capabilities, dataReadiness });
+  }, [products, transactions, capabilities, dataReadiness]);
 
   // Check if persisted brief from Firestore matches the current live product catalog
   const isPersistedBriefValid = useMemo(() => {
@@ -90,7 +91,7 @@ export function AIBrief() {
     
     setIsRefreshing(true);
     // Instant local computation (< 1ms)
-    const result = calculateDynamicBrief(products, transactions);
+    const result = calculateDynamicBrief(products, transactions, { capabilities, dataReadiness });
     setBrief(result);
 
     // Save to Firestore asynchronously in background without blocking UI
@@ -103,7 +104,7 @@ export function AIBrief() {
     setTimeout(() => {
       setIsRefreshing(false);
     }, 150);
-  }, [products, transactions, isPaid, firestore, user, briefRef, setShowSubscriptionModal]);
+  }, [products, transactions, capabilities, dataReadiness, isPaid, firestore, user, briefRef, setShowSubscriptionModal]);
 
   const getHealthColor = (score: number) => {
     if (score >= 80) return 'bg-emerald-500';
@@ -211,68 +212,131 @@ export function AIBrief() {
       <div className="relative flex-1 flex flex-col justify-between gap-4">
         {/* Content grid */}
         <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3.5 flex-1 transition-all duration-300 ${!isPaid ? 'blur-[5px] select-none pointer-events-none opacity-40' : (isRefreshing ? 'opacity-75 transition-opacity' : 'opacity-100')}`}>
-          {/* Left Column: Stockout Risk */}
-          <div className="relative group flex p-4 rounded-2xl border border-rose-500/20 bg-zinc-900/60 hover:bg-zinc-900/90 hover:border-rose-500/40 transition-all duration-200 flex-1 flex-col justify-between shadow-sm">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-1 flex-wrap pb-2 border-b border-border/30">
-                <div className="flex items-center gap-1.5">
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-rose-500/15 text-rose-400">
-                    <AlertTriangle className="h-3.5 w-3.5" />
+          {Boolean(dataReadiness?.level === 'LEARNING' || (!capabilities?.stockoutPrediction && !capabilities?.slowMoverDetection)) ? (
+            /* Left 2 Columns: Learning Stage Card for Predictive Stockout & Velocity */
+            <div className="sm:col-span-2 relative group flex p-4 rounded-2xl border border-amber-500/25 bg-zinc-900/60 hover:bg-zinc-900/90 transition-all duration-200 flex-col justify-between shadow-sm space-y-3">
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between gap-1 flex-wrap pb-2 border-b border-border/30">
+                  <div className="flex items-center gap-2">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
+                      <Clock className="h-3.5 w-3.5" />
+                    </div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
+                      Stockout & Velocity Intelligence: Learning Stage
+                    </span>
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-rose-400">Stockout Risk</span>
+                  <Badge variant="outline" className="bg-amber-500/15 text-amber-300 border-amber-500/30 text-[10px] font-semibold">
+                    Calibrating Baseline
+                  </Badge>
                 </div>
-                <ThreeTierBadge tier="MODEL_2_PREDICTION" size="sm" />
-              </div>
-              <h4 className="font-bold text-sm text-zinc-100 leading-snug line-clamp-2 pt-0.5">{activeBrief.stockoutItem.name}</h4>
-              <div className="space-y-1 text-xs">
-                <p className="text-rose-400 font-semibold flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse shrink-0"></span>
-                  {activeBrief.stockoutItem.riskText}
-                </p>
-                <p className="text-zinc-400">{activeBrief.stockoutItem.reorderText}</p>
-              </div>
-            </div>
-            <div className="pt-2.5 mt-2 border-t border-border/30 flex items-center justify-between text-xs">
-              <span className="text-zinc-400">Est. Reorder Cost</span>
-              <span className="font-bold text-zinc-100 font-mono text-sm">{activeBrief.stockoutItem.costText.replace('Estimated cost: ', '')}</span>
-            </div>
-          </div>
 
-          {/* Middle Column: Dead Stock / Slow Sales */}
-          <div className="relative group flex p-4 rounded-2xl border border-amber-500/20 bg-zinc-900/60 hover:bg-zinc-900/90 hover:border-amber-500/40 transition-all duration-200 flex-1 flex-col justify-between shadow-sm">
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-1 flex-wrap pb-2 border-b border-border/30">
-                <div className="flex items-center gap-1.5">
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
-                    <Coins className="h-3.5 w-3.5" />
-                  </div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">Slow-Moving</span>
+                <div className="space-y-1">
+                  <h4 className="font-bold text-sm text-foreground">Observing Catalog Demand Rhythm</h4>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    AnalyzeUp is observing your sales rhythm. Stockout risk runway unlocks at <strong className="text-foreground">14 days</strong> and demand velocity models unlock at <strong className="text-foreground">30 days</strong>. Speculative reorder quantities and premature price discounts are suppressed during baseline learning.
+                  </p>
                 </div>
-                <ThreeTierBadge tier="MODEL_2_PREDICTION" size="sm" />
+
+                <div className="grid grid-cols-2 gap-2.5 pt-1">
+                  <div className="p-2.5 rounded-xl bg-secondary/30 border border-border/30 space-y-0.5">
+                    <span className="text-[10px] text-muted-foreground font-semibold block">Stockout Risk Runway</span>
+                    <p className="text-xs font-bold text-foreground font-mono">
+                      {dataReadiness?.historicalDays ?? 0} / 14 Days
+                    </p>
+                    <p className="text-[10px] text-amber-400">Unlocks with early baseline</p>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-secondary/30 border border-border/30 space-y-0.5">
+                    <span className="text-[10px] text-muted-foreground font-semibold block">Sales Velocity Models</span>
+                    <p className="text-xs font-bold text-foreground font-mono">
+                      {dataReadiness?.historicalDays ?? 0} / 30 Days
+                    </p>
+                    <p className="text-[10px] text-amber-400">Unlocks with 30-day history</p>
+                  </div>
+                </div>
               </div>
-              <h4 className="font-bold text-sm text-zinc-100 leading-snug line-clamp-2 pt-0.5">{activeBrief.slowMovingItem.name}</h4>
-              <div className="space-y-1 text-xs">
-                <p className="text-zinc-400">{activeBrief.slowMovingItem.riskText}</p>
-                <p className="text-amber-400 font-bold flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
-                  {activeBrief.slowMovingItem.costText}
-                </p>
+
+              <div className="pt-2 border-t border-border/30 flex items-center justify-between text-xs text-muted-foreground">
+                <span>Ground-truth returns tracking active</span>
+                <span className="text-emerald-400 font-semibold flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Returns Live
+                </span>
               </div>
             </div>
-            <div className="pt-2.5 mt-2 border-t border-border/30 flex items-center justify-between text-xs gap-2">
-              <span className="text-zinc-400 shrink-0">Action</span>
-              <span 
-                className="text-amber-300 font-semibold text-right"
-                title={activeBrief.slowMovingItem.actionText}
-              >
-                {activeBrief.slowMovingItem.actionText
-                  .replace(/^Suggested action:\s*/i, '')
-                  .replace(/\s*clearance discount\.?/i, ' Discount')
-                  .replace(/\s*discount\.?/i, ' Discount')
-                  .trim() || '20% Discount'}
-              </span>
-            </div>
-          </div>
+          ) : (
+            <>
+              {/* Left Column: Stockout Risk */}
+              <div className="relative group flex p-4 rounded-2xl border border-rose-500/20 bg-zinc-900/60 hover:bg-zinc-900/90 hover:border-rose-500/40 transition-all duration-200 flex-1 flex-col justify-between shadow-sm">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-1 flex-wrap pb-2 border-b border-border/30">
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-rose-500/15 text-rose-400">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-rose-400">Stockout Risk</span>
+                    </div>
+                    <ThreeTierBadge
+                      tier={Boolean(capabilities?.stockoutPrediction && !activeBrief.stockoutItem.riskText.includes('Out of stock')) ? "MODEL_2_PREDICTION" : "ACTUAL_DATA"}
+                      size="sm"
+                    />
+                  </div>
+                  <h4 className="font-bold text-sm text-zinc-100 leading-snug line-clamp-2 pt-0.5">{activeBrief.stockoutItem.name}</h4>
+                  <div className="space-y-1 text-xs">
+                    <p className="text-rose-400 font-semibold flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse shrink-0"></span>
+                      {activeBrief.stockoutItem.riskText}
+                    </p>
+                    <p className="text-zinc-400">{activeBrief.stockoutItem.reorderText}</p>
+                  </div>
+                </div>
+                <div className="pt-2.5 mt-2 border-t border-border/30 flex items-center justify-between text-xs">
+                  <span className="text-zinc-400">Est. Reorder Cost</span>
+                  <span className="font-bold text-zinc-100 font-mono text-sm">{activeBrief.stockoutItem.costText.replace('Estimated cost: ', '')}</span>
+                </div>
+              </div>
+
+              {/* Middle Column: Dead Stock / Slow Sales */}
+              <div className="relative group flex p-4 rounded-2xl border border-amber-500/20 bg-zinc-900/60 hover:bg-zinc-900/90 hover:border-amber-500/40 transition-all duration-200 flex-1 flex-col justify-between shadow-sm">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between gap-1 flex-wrap pb-2 border-b border-border/30">
+                    <div className="flex items-center gap-1.5">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
+                        <Coins className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
+                        {Boolean(capabilities?.slowMoverDetection && dataReadiness?.level !== 'LEARNING') ? 'Slow-Moving' : 'Capital Asset'}
+                      </span>
+                    </div>
+                    <ThreeTierBadge
+                      tier={Boolean(capabilities?.slowMoverDetection && dataReadiness?.level !== 'LEARNING') ? "MODEL_2_PREDICTION" : "ACTUAL_DATA"}
+                      size="sm"
+                    />
+                  </div>
+                  <h4 className="font-bold text-sm text-zinc-100 leading-snug line-clamp-2 pt-0.5">{activeBrief.slowMovingItem.name}</h4>
+                  <div className="space-y-1 text-xs">
+                    <p className="text-zinc-400">{activeBrief.slowMovingItem.riskText}</p>
+                    <p className="text-amber-400 font-bold flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
+                      {activeBrief.slowMovingItem.costText}
+                    </p>
+                  </div>
+                </div>
+                <div className="pt-2.5 mt-2 border-t border-border/30 flex items-center justify-between text-xs gap-2">
+                  <span className="text-zinc-400 shrink-0">Action</span>
+                  <span 
+                    className="text-amber-300 font-semibold text-right"
+                    title={activeBrief.slowMovingItem.actionText}
+                  >
+                    {activeBrief.slowMovingItem.actionText
+                      .replace(/^Suggested action:\s*/i, '')
+                      .replace(/^Action:\s*/i, '')
+                      .replace(/\s*clearance discount\.?/i, ' Discount')
+                      .trim() || (Boolean(capabilities?.slowMoverDetection && dataReadiness?.level !== 'LEARNING') ? '20% Discount' : 'Monitor Velocity')}
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
 
           {/* Right Column: Customer Returns */}
           <div className="relative group flex p-4 rounded-2xl border border-emerald-500/20 bg-zinc-900/60 hover:bg-zinc-900/90 hover:border-emerald-500/40 transition-all duration-200 flex-1 flex-col justify-between shadow-sm">

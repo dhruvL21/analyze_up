@@ -69,15 +69,25 @@ export interface ProductIntelligenceReport {
   };
 }
 
+export interface ComputeProductIntelligenceOptions {
+  isDeadStockEnabled?: boolean;
+  isVelocityEnabled?: boolean;
+  historicalDays?: number;
+}
+
 // 1. Calculate Full Product Intelligence Report
 export function computeProductIntelligence(
   product: Product,
   allTransactions: Transaction[] = [],
   allReturns: ProductReturn[] = [],
-  allSuppliers: Supplier[] = []
+  allSuppliers: Supplier[] = [],
+  options?: ComputeProductIntelligenceOptions
 ): ProductIntelligenceReport {
   const productName = product?.name || product?.productName || product?.title || 'Selected Product';
   const stock = product?.stock !== undefined && !isNaN(product.stock) ? product.stock : 0;
+
+  const isDeadStockEnabled = options?.isDeadStockEnabled ?? true;
+  const isVelocityEnabled = options?.isVelocityEnabled ?? true;
 
   const pTx = allTransactions.filter(
     t => t.type === 'Sale' && (t.productId === product?.id || t.sku === product?.sku || (t.productName && product?.name && t.productName.toLowerCase() === product.name.toLowerCase()))
@@ -90,10 +100,13 @@ export function computeProductIntelligence(
   const unitProfit = sellingPrice - costPrice;
   const profitMarginPercent = sellingPrice > 0 ? Math.round((unitProfit / sellingPrice) * 100) : 35;
 
-  // Daily Sales Velocity
-  const dailySales = product?.averageDailySales && product.averageDailySales > 0
-    ? product.averageDailySales
-    : (totalSoldQty > 0 ? Math.max(0.2, totalSoldQty / 30) : 0);
+  // Daily Sales Velocity: If an item has 0 confirmed sales in transactions, its daily sales in this dataset is 0.
+  // Never inherit mock/fallback values when zero sales have actually taken place.
+  const dailySales = totalSoldQty > 0
+    ? (product?.averageDailySales && product.averageDailySales > 0
+        ? product.averageDailySales
+        : Math.max(0.1, totalSoldQty / Math.max(1, options?.historicalDays || 30)))
+    : 0;
 
   // Days of Stock Remaining
   const daysOfStockRemaining = dailySales > 0 ? Math.round(stock / dailySales) : (stock > 0 ? 999 : 0);
@@ -121,23 +134,31 @@ export function computeProductIntelligence(
     healthColor = '#f59e0b';
     badgeClass = 'bg-amber-500/20 text-amber-400 border border-amber-500/40 font-bold shadow-sm';
   } else if (!hasSalesHistory) {
-    healthStatus = 'Dead Stock';
-    healthColor = '#94a3b8';
-    badgeClass = 'bg-slate-400/20 text-slate-200 border border-slate-400/40 font-bold shadow-sm';
-  } else if (daysOfStockRemaining > 120 && stock > 80 && dailySales < 0.8) {
+    // If dead stock detection is disabled (e.g. in learning mode, < 30 days history):
+    // Zero-sale items are NOT dead stock; they are simply in-cycle catalog items.
+    if (isDeadStockEnabled) {
+      healthStatus = 'Dead Stock';
+      healthColor = '#94a3b8';
+      badgeClass = 'bg-slate-400/20 text-slate-200 border border-slate-400/40 font-bold shadow-sm';
+    } else {
+      healthStatus = 'Healthy';
+      healthColor = '#10b981';
+      badgeClass = 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold shadow-sm';
+    }
+  } else if (daysOfStockRemaining > 120 && stock > 80 && dailySales < 0.8 && isVelocityEnabled) {
     // Only flag Overstocked when stock exceeds 4 full months of demand on a slow item
     healthStatus = 'Overstocked';
     healthColor = '#3b82f6';
     badgeClass = 'bg-blue-500/20 text-blue-300 border border-blue-500/40 font-bold shadow-sm';
-  } else if (dailySales >= 2.0) {
+  } else if (dailySales >= 2.0 && isVelocityEnabled && totalSoldQty >= 10) {
     healthStatus = 'Fast Moving';
     healthColor = '#10b981';
     badgeClass = 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold shadow-sm';
-  } else if (dailySales >= 1.0) {
+  } else if (dailySales >= 1.0 && isVelocityEnabled && totalSoldQty >= 5) {
     healthStatus = 'Trending';
     healthColor = '#10b981';
     badgeClass = 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold shadow-sm';
-  } else if (dailySales < 0.3 && totalSoldQty > 0) {
+  } else if (dailySales < 0.3 && totalSoldQty > 0 && isVelocityEnabled) {
     healthStatus = 'Slow Moving';
     healthColor = '#94a3b8';
     badgeClass = 'bg-slate-400/20 text-slate-200 border border-slate-400/40 font-bold shadow-sm';
@@ -250,16 +271,19 @@ export function computeProductIntelligence(
     };
   }
 
-  // Tags
+  // Tags: Strict validation against ground-truth volume and mutual exclusivity
   const tags: string[] = [];
-  if (totalSoldQty > 30 || dailySales > 1.5) tags.push('Best Seller');
-  if (dailySales >= 1.0) tags.push('Trending');
+  const isBestSeller = totalSoldQty >= 25 || (dailySales >= 1.5 && totalSoldQty >= 10 && isVelocityEnabled);
+  const isTrending = dailySales >= 1.0 && totalSoldQty >= 5 && isVelocityEnabled;
+
+  if (isBestSeller && healthStatus !== 'Dead Stock') tags.push('Best Seller');
+  if (isTrending && healthStatus !== 'Dead Stock' && !tags.includes('Best Seller')) tags.push('Trending');
   if (profitMarginPercent >= 45) tags.push('High Margin');
   if (profitMarginPercent < 20) tags.push('Low Margin');
-  if (healthStatus === 'Dead Stock') tags.push('Dead Stock');
+  if (healthStatus === 'Dead Stock' && isDeadStockEnabled) tags.push('Dead Stock');
   if (isReorderNeeded) tags.push('Reorder Soon');
   if (healthStatus === 'Overstocked') tags.push('Overstock');
-  if (opportunityAdvice.type === 'price_increase') tags.push('Price Up Candidate');
+  if (opportunityAdvice.type === 'price_increase' && totalSoldQty >= 5) tags.push('Price Up Candidate');
 
   // Executive Summary with robust product name resolution
   let executiveSummary = `${productName} holds a Performance Grade of ${performanceGrade}. `;

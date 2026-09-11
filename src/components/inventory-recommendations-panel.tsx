@@ -20,7 +20,7 @@ import {
 } from '@/components/ui/dialog';
 
 export function InventoryRecommendationsPanel() {
-  const { products, transactions, updateProduct, addOrder, addTransaction, suppliers, businessProfile } = useData();
+  const { products, transactions, updateProduct, addOrder, addTransaction, suppliers, businessProfile, dataReadiness, capabilities } = useData();
   const { toast } = useToast();
 
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
@@ -80,25 +80,25 @@ export function InventoryRecommendationsPanel() {
   }, [products, appliedIds]);
 
   // Candidate 2: Dead Stock Clearance
-  // DYNAMIC RULE: Clearance predictions ONLY show instantly if data has at least 1 month (30 days) of sales history
+  // Centralized Capability Gate: Only unlocks when deadStockDetection capability is enabled
   const deadStockProd = React.useMemo(() => {
-    if (!salesHistory.hasMinimumHistory) return null;
+    if (!capabilities?.deadStockDetection && !salesHistory.hasMinimumHistory) return null;
     return products.find(
       p => p && p.stock > 0 && salesHistory.isProductEligibleForDeadStock(p) && !appliedIds.has(`${p.id}:clearance`)
     );
-  }, [products, salesHistory, appliedIds]);
+  }, [products, capabilities, salesHistory, appliedIds]);
 
   // Candidate 3: Price Increase Optimization
-  // DYNAMIC RULE: Price hikes ONLY show instantly if data has >= 30 days of history, product has sustained sales, and is NOT dead stock
+  // Centralized Capability Gate: Only unlocks when demandForecasting capability is enabled
   const priceUpProd = React.useMemo(() => {
-    if (!salesHistory.hasMinimumHistory) return null;
+    if (!capabilities?.demandForecasting && !salesHistory.hasMinimumHistory) return null;
     return products.find(
       p => p &&
         p.id !== deadStockProd?.id &&
         salesHistory.isProductEligibleForPriceUp(p) &&
         !appliedIds.has(`${p.id}:price_up`)
     );
-  }, [products, salesHistory, deadStockProd, appliedIds]);
+  }, [products, capabilities, salesHistory, deadStockProd, appliedIds]);
 
   const handleReorder = (prod: any) => {
     const key = `${prod.id}:reorder`;

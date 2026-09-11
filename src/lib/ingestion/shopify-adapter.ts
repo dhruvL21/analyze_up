@@ -212,10 +212,16 @@ export function convertShopifyToCanonicalTransactions(shopifyOrders: any[]): Tra
 }
 
 /**
- * Heuristically determines return reason from note, customer comment, or reason text.
+ * Heuristically determines return reason from note, customer comment, reason text, or restock status.
  */
-function determineReturnReason(rawText: string = ''): ProductReturn['reason'] {
-  const lower = rawText.toLowerCase();
+export function determineReturnReason(
+  rawText: string = '',
+  restockType?: string,
+  restockBool?: boolean
+): ProductReturn['reason'] {
+  const lower = (rawText || '').toLowerCase().trim();
+
+  // 1. Defective detection
   if (
     lower.includes('defect') ||
     lower.includes('broken') ||
@@ -224,11 +230,23 @@ function determineReturnReason(rawText: string = ''): ProductReturn['reason'] {
     lower.includes('not working') ||
     lower.includes('damaged product') ||
     lower.includes('poor quality') ||
+    lower.includes('bad quality') ||
+    lower.includes('low quality') ||
+    lower.includes('quality issue') ||
     lower.includes('torn') ||
-    lower.includes('scratched')
+    lower.includes('scratched') ||
+    lower.includes('leaking') ||
+    lower.includes('flaw') ||
+    lower.includes('item damaged') ||
+    lower.includes('damaged item') ||
+    lower.includes('doa') ||
+    lower.includes('dead on arrival') ||
+    lower === 'defective'
   ) {
     return 'Defective';
   }
+
+  // 2. Damaged in Transit detection
   if (
     lower.includes('transit') ||
     lower.includes('shipping') ||
@@ -236,10 +254,18 @@ function determineReturnReason(rawText: string = ''): ProductReturn['reason'] {
     lower.includes('crushed') ||
     lower.includes('delivery damage') ||
     lower.includes('package damaged') ||
-    lower.includes('courier')
+    lower.includes('courier') ||
+    lower.includes('shipping damage') ||
+    lower.includes('box damaged') ||
+    lower.includes('arrived damaged') ||
+    lower.includes('damaged during delivery') ||
+    lower.includes('damaged in transit') ||
+    lower === 'damaged'
   ) {
     return 'Damaged in Transit';
   }
+
+  // 3. Wrong Item detection
   if (
     lower.includes('wrong') ||
     lower.includes('incorrect') ||
@@ -249,23 +275,57 @@ function determineReturnReason(rawText: string = ''): ProductReturn['reason'] {
     lower.includes('not as described') ||
     lower.includes('fit') ||
     lower.includes('too large') ||
-    lower.includes('too small')
+    lower.includes('too small') ||
+    lower.includes('different') ||
+    lower.includes('mismatch') ||
+    lower.includes('not what i ordered') ||
+    lower.includes('exchange')
   ) {
     return 'Wrong Item';
   }
+
+  // 4. Buyer Remorse / Unopened / Order Cancellation
   if (
     lower.includes('remorse') ||
     lower.includes('unwanted') ||
     lower.includes('unopened') ||
     lower.includes('cancel') ||
     lower.includes('changed mind') ||
+    lower.includes('change of mind') ||
     lower.includes('buyer') ||
     lower.includes('mistake') ||
     lower.includes('no longer needed') ||
-    lower.includes('accidental')
+    lower.includes('not needed') ||
+    lower.includes('accidental') ||
+    lower.includes('customer') ||
+    lower.includes('not satisfied') ||
+    lower.includes('disliked') ||
+    lower.includes('dont want') ||
+    lower.includes('duplicate') ||
+    lower.includes('order cancelled')
   ) {
     return 'Unopened / Buyer Remorse';
   }
+
+  // 5. Restock-based inference:
+  // If an item is restocked back to inventory in Shopify, it is resalable, meaning it was not broken or defective.
+  // Standard restocked customer returns default to 'Unopened / Buyer Remorse'.
+  const rType = (restockType || '').toLowerCase();
+  if (rType === 'return' || rType === 'cancel' || rType === 'legacy_restock' || restockBool === true) {
+    return 'Unopened / Buyer Remorse';
+  }
+
+  // If marked explicitly as no_restock / discarded without note, default to Defective (damaged/non-resalable)
+  if (rType === 'no_restock' || rType === 'cancel_no_restock' || restockBool === false) {
+    return 'Defective';
+  }
+
+  // Fallback for general unclassified Shopify refunds:
+  // In retail/e-commerce, standard customer refunds without specific defect reports are buyer returns.
+  if (lower.includes('refund') || lower.includes('return') || !lower) {
+    return 'Unopened / Buyer Remorse';
+  }
+
   return 'Other';
 }
 
@@ -340,9 +400,17 @@ export function convertShopifyToCanonicalReturns(shopifyOrdersOrRefunds: any[]):
           ? `${order.customer.first_name || ''} ${order.customer.last_name || ''}`.trim() || 'Online Customer'
           : 'Shopify Customer';
 
-        const firstLineItem = (Array.isArray(order.line_items) && order.line_items[0]) || {};
-        const prodId = firstLineItem.product_id
-          ? (firstLineItem.variant_id ? `shopify_${firstLineItem.product_id}_${firstLineItem.variant_id}` : `shopify_${firstLineItem.product_id}`)
+        const firstLineItem = (Array.isArray(order.line_items) && order.line_items.length > 0)
+          ? order.line_items[0]
+          : {};
+        const rawProdId = firstLineItem.product_id
+          ? String(firstLineItem.product_id).replace(/^gid:\/\/shopify\/Product\//, '')
+          : '';
+        const rawVarId = firstLineItem.variant_id
+          ? String(firstLineItem.variant_id).replace(/^gid:\/\/shopify\/ProductVariant\//, '')
+          : '';
+        const prodId = rawProdId
+          ? (rawVarId ? `shopify_${rawProdId}_${rawVarId}` : `shopify_${rawProdId}_default`)
           : `shopify_order_${orderId}`;
         const productName = firstLineItem.title || (orderNumber ? `Order ${orderNumber}` : 'Refunded Order');
         const sku = String(firstLineItem.sku || '');
@@ -356,7 +424,7 @@ export function convertShopifyToCanonicalReturns(shopifyOrdersOrRefunds: any[]):
           orderNumber,
           quantity: 1,
           customerName,
-          reason: determineReturnReason(order.cancel_reason || order.note || ''),
+          reason: determineReturnReason(order.cancel_reason || order.note || '', 'return', true),
           actionTaken: 'Restocked',
           refundStatus: 'Refunded',
           refundAmount,
@@ -389,7 +457,7 @@ export function convertShopifyToCanonicalReturns(shopifyOrdersOrRefunds: any[]):
           : 'Shopify Customer');
 
     const note = refund.note || refund.reason || parentOrder?.cancel_reason || '';
-    const reason = determineReturnReason(note);
+    const defaultReason = determineReturnReason(note, refund.restock ? 'return' : undefined, refund.restock);
 
     const refundLineItems = Array.isArray(refund.refund_line_items) ? refund.refund_line_items : [];
 
@@ -407,8 +475,15 @@ export function convertShopifyToCanonicalReturns(shopifyOrdersOrRefunds: any[]):
         );
         const lineItem = rli.line_item || matchingParentItem || {};
 
-        const prodId = lineItem.product_id
-          ? (lineItem.variant_id ? `shopify_${lineItem.product_id}_${lineItem.variant_id}` : `shopify_${lineItem.product_id}`)
+        const rawProdId = lineItem.product_id
+          ? String(lineItem.product_id).replace(/^gid:\/\/shopify\/Product\//, '')
+          : '';
+        const rawVarId = lineItem.variant_id
+          ? String(lineItem.variant_id).replace(/^gid:\/\/shopify\/ProductVariant\//, '')
+          : '';
+
+        const prodId = rawProdId
+          ? (rawVarId ? `shopify_${rawProdId}_${rawVarId}` : `shopify_${rawProdId}_default`)
           : String(rli.line_item_id || lineItem.id || `prod_${idx}`);
         const productName = lineItem.title || lineItem.name || matchingParentItem?.title || 'Returned Item';
         const sku = String(lineItem.sku || matchingParentItem?.sku || '');
@@ -420,6 +495,7 @@ export function convertShopifyToCanonicalReturns(shopifyOrdersOrRefunds: any[]):
             : (unitPrice * quantity)
         ) || 0;
         const actionTaken = determineActionTaken(rli.restock_type, refund.restock);
+        const itemReason = determineReturnReason(note, rli.restock_type, refund.restock);
 
         returns.push({
           id: returnId,
@@ -429,7 +505,7 @@ export function convertShopifyToCanonicalReturns(shopifyOrdersOrRefunds: any[]):
           orderNumber,
           quantity,
           customerName,
-          reason,
+          reason: itemReason,
           actionTaken,
           refundStatus: 'Refunded',
           refundAmount,
@@ -467,7 +543,7 @@ export function convertShopifyToCanonicalReturns(shopifyOrdersOrRefunds: any[]):
             orderNumber,
             quantity: 1,
             customerName,
-            reason,
+            reason: defaultReason,
             actionTaken: 'Disposed / Written Off',
             refundStatus: 'Refunded',
             refundAmount: totalAdjustAmount,
@@ -504,8 +580,14 @@ export function convertShopifyToCanonicalReturns(shopifyOrdersOrRefunds: any[]):
         );
         const lineItem = rli.fulfillment_line_item?.line_item || rli.line_item || matchingParentItem || {};
         const reasonFromReturn = determineReturnReason(rli.return_reason || rli.return_reason_note || '');
-        const prodId = lineItem.product_id
-          ? (lineItem.variant_id ? `shopify_${lineItem.product_id}_${lineItem.variant_id}` : `shopify_${lineItem.product_id}`)
+        const rawProdId = lineItem.product_id
+          ? String(lineItem.product_id).replace(/^gid:\/\/shopify\/Product\//, '')
+          : '';
+        const rawVarId = lineItem.variant_id
+          ? String(lineItem.variant_id).replace(/^gid:\/\/shopify\/ProductVariant\//, '')
+          : '';
+        const prodId = rawProdId
+          ? (rawVarId ? `shopify_${rawProdId}_${rawVarId}` : `shopify_${rawProdId}_default`)
           : String(rli.fulfillment_line_item_id || lineItem.id || `prod_${idx}`);
         const productName = lineItem.title || lineItem.name || matchingParentItem?.title || 'Returned Item';
         const qty = Math.max(1, Number(rli.quantity || 1));
@@ -625,7 +707,7 @@ export function convertShopifyGraphQLReturnsToCanonical(graphqlReturns: any[]): 
       const rawProdId = extractShopifyNumericId(product.id);
       const rawVarId = extractShopifyNumericId(variant.id);
       const prodId = rawProdId
-        ? (rawVarId ? `shopify_${rawProdId}_${rawVarId}` : `shopify_${rawProdId}`)
+        ? (rawVarId ? `shopify_${rawProdId}_${rawVarId}` : `shopify_${rawProdId}_default`)
         : `shopify_return_item_${rliId}`;
 
       const productName = lineItem.title || product.title || 'Returned Product';
@@ -647,7 +729,7 @@ export function convertShopifyGraphQLReturnsToCanonical(graphqlReturns: any[]): 
       } else if (['UNWANTED', 'ACCIDENTAL_ORDER'].includes(reasonCode)) {
         reason = 'Unopened / Buyer Remorse';
       } else {
-        reason = determineReturnReason(`${reasonCode} ${reasonNote}`);
+        reason = determineReturnReason(`${reasonCode} ${reasonNote}`, 'return', true);
       }
 
       const actionTaken = (reason === 'Defective' || reason === 'Damaged in Transit')

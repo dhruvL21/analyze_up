@@ -1,4 +1,5 @@
 import { Product, Transaction, Supplier, PurchaseOrder } from './types';
+import type { IntelligenceCapabilities, DataReadiness } from './data-readiness-engine';
 
 export interface ProductVelocity {
   productId: string;
@@ -468,9 +469,101 @@ export function generateBusinessForecastingReport(
   products: Product[] = [],
   transactions: Transaction[] = [],
   suppliers: Supplier[] = [],
-  orders: PurchaseOrder[] = []
+  orders: PurchaseOrder[] = [],
+  options?: {
+    capabilities?: IntelligenceCapabilities;
+    dataReadiness?: DataReadiness;
+    forceUnlock?: boolean;
+  }
 ): ForecastingReport {
-  const salesTx = transactions.filter(t => t.type === 'Sale');
+  const salesTx = transactions.filter(t => t.type === 'Sale' || !t.type);
+
+  // Evaluate historical sales days span and order volume
+  const validTimestamps = salesTx
+    .map(t => {
+      const ts = t.transactionDate || (t as any).createdAt;
+      if (!ts) return null;
+      const parsed = new Date(ts).getTime();
+      return isNaN(parsed) ? null : parsed;
+    })
+    .filter((ts): ts is number => ts !== null && ts > 0);
+
+  let historicalDays = 0;
+  if (validTimestamps.length > 0) {
+    const minTs = Math.min(...validTimestamps);
+    const maxTs = Math.max(...validTimestamps);
+    historicalDays = Math.max(1, Math.round((maxTs - minTs) / (1000 * 60 * 60 * 24)) + 1);
+  }
+  const totalOrders = salesTx.length;
+
+  // Enforce Data Readiness Engine plan:
+  // Demand forecasting unlocks ONLY when (historicalDays >= 30 && totalOrders >= 80) OR (totalOrders >= 400 && historicalDays >= 14)
+  const isPredictiveUnlocked = Boolean(
+    options?.forceUnlock ||
+    options?.capabilities?.demandForecasting ||
+    (options?.dataReadiness && options.dataReadiness.level !== 'LEARNING') ||
+    ((historicalDays >= 30 && totalOrders >= 80) || (totalOrders >= 400 && historicalDays >= 14))
+  );
+
+  if (!isPredictiveUnlocked) {
+    return {
+      overallConfidence: 'INSUFFICIENT',
+      confidenceReason: `Baseline sales learning active (${historicalDays}/30 days observed, ${totalOrders}/80 target orders). 30-day demand forecasting requires statistical maturity.`,
+      velocities: products.map(p => ({
+        productId: p.id,
+        productName: p.name || 'Product',
+        sku: p.sku || 'N/A',
+        dailyVelocity: 0,
+        weeklyVelocity: 0,
+        monthlyVelocity: 0,
+        recent7DayVelocity: 0,
+        historicalVelocity: 0,
+        velocityChangePercent: 0,
+        trend: 'Stable' as const,
+      })),
+      demandForecasts: products.map(p => ({
+        productId: p.id,
+        productName: p.name || 'Product',
+        sku: p.sku || 'N/A',
+        currentStock: p.stock || 0,
+        forecast7Days: 0,
+        forecast30Days: 0,
+        forecast90Days: 0,
+        confidence: 'INSUFFICIENT' as const,
+        confidenceReason: 'In baseline learning stage. Requires 30 days of sales history.',
+      })),
+      stockoutProjections: products.map(p => ({
+        productId: p.id,
+        productName: p.name || 'Product',
+        sku: p.sku || 'N/A',
+        currentStock: p.stock || 0,
+        dailyVelocity: 0,
+        daysRemaining: null,
+        projectedStockoutDate: null,
+        stockoutRiskLevel: 'NONE' as const,
+        recommendedReorderQty: 0,
+        reorderUrgency: 'NONE' as const,
+        reason: 'Baseline sales learning active. Stockout projections require historical sales data.',
+        preferredSupplierName: p.supplier || suppliers[0]?.name || 'Supplier',
+        supplierLeadTimeDays: p.leadTimeDays || 7,
+      })),
+      revenueProfitForecast30Days: {
+        period: '30 Days' as const,
+        projectedRevenue: 0,
+        projectedCOGS: 0,
+        projectedGrossProfit: 0,
+        projectedMarginPercent: 0,
+        revenueChangePercent: 0,
+        confidence: 'INSUFFICIENT' as const,
+        keyDrivers: ['Baseline learning active. Speculative 30-day demand forecasts suppressed.'],
+      },
+      futureDeadStockRisks: [],
+      totalProjected30DayRevenue: 0,
+      totalProjected30DayProfit: 0,
+      criticalStockoutCount: 0,
+      projectedExcessCapital: 0,
+    };
+  }
 
   let overallConfidence: ForecastingReport['overallConfidence'] = 'HIGH';
   let confidenceReason = 'Sufficient historical sales and supplier data for predictive intelligence.';

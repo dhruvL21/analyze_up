@@ -8,10 +8,17 @@ import { useData } from '@/context/data-context';
 import { Boxes, PackageCheck, AlertTriangle, XCircle, Flame, Clock } from 'lucide-react';
 
 export function InventoryQualitySnapshot() {
-  const { products, transactions, businessProfile } = useData();
+  const { products, transactions, businessProfile, capabilities, dataReadiness } = useData();
+
+  const isDeadStockActive = capabilities?.deadStockDetection ?? false;
+  const isVelocityActive = capabilities?.slowMoverDetection ?? false;
+
   const quality = React.useMemo(() => {
-    return computeInventoryQuality(products, transactions);
-  }, [products, transactions]);
+    return computeInventoryQuality(products, transactions, {
+      isDeadStockEnabled: isDeadStockActive,
+      isVelocityEnabled: isVelocityActive,
+    });
+  }, [products, transactions, isDeadStockActive, isVelocityActive]);
 
   const currencySymbol = businessProfile?.currency?.includes('USD') ? '$' : '₹';
 
@@ -58,11 +65,26 @@ export function InventoryQualitySnapshot() {
               <p className="text-2xl font-extrabold text-rose-400">{quality.criticalStockCount}</p>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-500/10 border border-slate-500/25 space-y-1">
+            <div className="p-3.5 rounded-2xl bg-slate-500/10 border border-slate-500/25 space-y-1 overflow-hidden">
               <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
-                <Clock className="w-4 h-4 text-slate-400" /> Dead Stock
+                <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+                <span>Dead Stock</span>
               </span>
-              <p className="text-2xl font-extrabold text-slate-300">{quality.deadStockCount}</p>
+              <div className="flex items-baseline gap-2 pt-0.5">
+                <p className="text-2xl font-extrabold text-slate-300">
+                  {isDeadStockActive ? quality.deadStockCount : 0}
+                </p>
+                {!isDeadStockActive && (
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 font-bold border border-amber-500/30 whitespace-nowrap">
+                    Observing
+                  </span>
+                )}
+              </div>
+              {!isDeadStockActive && (
+                <p className="text-[10px] text-muted-foreground truncate" title={`Requires 30d baseline (${dataReadiness?.historicalDays || 0}/30d)`}>
+                  Requires 30d baseline ({dataReadiness?.historicalDays || 0}/30d)
+                </p>
+              )}
             </div>
           </div>
 

@@ -23,6 +23,7 @@ import { classifyQueryIntent } from './query-classifier';
 import { executeDeterministicAnalytics } from './analytics-engine';
 import { HybridRetriever } from './retriever';
 import { buildRAGPromptContext } from './context-builder';
+import { evaluateDataReadiness } from '@/lib/data-readiness-engine';
 
 // Tracks indexing state per business
 const indexingStatusMap = new Map<string, KnowledgeBaseStats>();
@@ -190,14 +191,16 @@ export async function executeRAGQuery(
     citations = retrieval.citations;
   }
 
-  // 2. Build Compact, Verified Prompt Context
+  // 2. Build Compact, Verified Prompt Context with Data Readiness Envelope
+  const dataReadiness = request.dataReadiness || evaluateDataReadiness(products, transactions);
   const builtContext = buildRAGPromptContext(
     query,
     intent,
     retrievedResults,
     analytics,
     citations,
-    businessProfile
+    businessProfile,
+    dataReadiness
   );
 
   let finalAnswer = '';

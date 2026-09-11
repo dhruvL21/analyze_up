@@ -55,6 +55,73 @@ export function cleanDate(val: any): string {
 
 /* ----------------- DATASET NORMALIZERS ----------------- */
 
+export function isNumericString(val: any): boolean {
+  if (val === undefined || val === null) return false;
+  const s = String(val).trim().replace(/,/g, '').replace(/[₹$€£%]/g, '');
+  return s.length > 0 && !isNaN(Number(s));
+}
+
+export function findFallbackProductName(row: Record<string, any>): string {
+  for (const [key, val] of Object.entries(row)) {
+    if (!val) continue;
+    const str = String(val).trim();
+    if (!str || str === '0.00' || str === '0' || isNumericString(str)) continue;
+
+    const lowerKey = key.toLowerCase();
+    if (
+      lowerKey.includes('discount') ||
+      lowerKey.includes('tax') ||
+      lowerKey.includes('price') ||
+      lowerKey.includes('cost') ||
+      lowerKey.includes('qty') ||
+      lowerKey.includes('sku') ||
+      lowerKey.includes('order') ||
+      lowerKey.includes('invoice') ||
+      lowerKey.includes('date')
+    ) {
+      continue;
+    }
+
+    if (
+      lowerKey.includes('name') ||
+      lowerKey.includes('title') ||
+      lowerKey.includes('item') ||
+      lowerKey.includes('product') ||
+      lowerKey.includes('desc')
+    ) {
+      return str;
+    }
+  }
+  return '';
+}
+
+export function findFallbackPrice(row: Record<string, any>, defaultVal = 0): number {
+  for (const [key, val] of Object.entries(row)) {
+    if (!val) continue;
+    const lowerKey = key.toLowerCase();
+    if (
+      lowerKey.includes('discount') ||
+      lowerKey.includes('tax') ||
+      lowerKey.includes('cost') ||
+      lowerKey.includes('purchase')
+    ) {
+      continue;
+    }
+
+    if (
+      lowerKey.includes('price') ||
+      lowerKey.includes('rate') ||
+      lowerKey.includes('mrp') ||
+      lowerKey.includes('amount') ||
+      lowerKey.includes('selling')
+    ) {
+      const num = cleanNumber(val, 0);
+      if (num > 0) return num;
+    }
+  }
+  return defaultVal;
+}
+
 export function normalizeToProducts(
   rawRows: Record<string, any>[],
   fieldMapping: Record<string, string>
@@ -70,13 +137,19 @@ export function normalizeToProducts(
     const rowNum = idx + 1;
 
     Object.entries(fieldMapping).forEach(([sourceCol, targetKey]) => {
-      if (targetKey && targetKey !== 'skip') {
+      if (targetKey && targetKey !== 'skip' && targetKey !== 'customAttribute') {
         mapped[targetKey] = row[sourceCol];
       }
     });
 
-    const name = String(mapped.name || mapped.productName || mapped.product_name || mapped.title || mapped.itemName || mapped.item_name || '').trim();
-    if (!name) {
+    let name = String(mapped.name || mapped.productName || mapped.product_name || mapped.title || mapped.itemName || mapped.item_name || '').trim();
+    // Resilient fallback if name was overwritten with numeric values like 0.00
+    if (!name || name === '0.00' || name === '0' || isNumericString(name)) {
+      const fallback = findFallbackProductName(row);
+      if (fallback) name = fallback;
+    }
+
+    if (!name || name === '0.00') {
       errorRecords.push({
         rowNumber: rowNum,
         rawRow: row,
@@ -95,7 +168,11 @@ export function normalizeToProducts(
       seenSkus.add(sku);
     }
 
-    const price = cleanNumber(mapped.price || mapped.sellingPrice || mapped.selling_price || mapped.salePrice || mapped.retailPrice, 0);
+    let price = cleanNumber(mapped.price || mapped.sellingPrice || mapped.selling_price || mapped.salePrice || mapped.retailPrice, 0);
+    if (price <= 0) {
+      price = findFallbackPrice(row, 0);
+    }
+
     const costPrice = cleanNumber(mapped.costPrice || mapped.cost_price || mapped.cost || mapped.unitCost || mapped.purchasePrice, Math.round(price * 0.6));
     const stock = cleanInteger(mapped.stock || mapped.inventory_quantity || mapped.inventoryQuantity || mapped.quantity || mapped.qty || mapped.currentStock, 0);
     const minStock = cleanInteger(mapped.minStock || mapped.min_stock || mapped.safetyStock || mapped.safety_stock, 5);
@@ -119,6 +196,8 @@ export function normalizeToProducts(
       brand: String(mapped.brand || '').trim(),
       barcode: String(mapped.barcode || '').trim(),
       description: String(mapped.description || mapped.remarks || '').trim(),
+      custom_attributes: { ...row },
+      raw_attributes: { ...row },
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -158,13 +237,19 @@ export function normalizeToSales(
     const rowNum = idx + 1;
 
     Object.entries(fieldMapping).forEach(([sourceCol, targetKey]) => {
-      if (targetKey && targetKey !== 'skip') {
+      if (targetKey && targetKey !== 'skip' && targetKey !== 'customAttribute') {
         mapped[targetKey] = row[sourceCol];
       }
     });
 
-    const productName = String(mapped.productName || mapped.product_name || mapped.name || mapped.itemName || mapped.item_name || '').trim();
-    if (!productName) {
+    let productName = String(mapped.productName || mapped.product_name || mapped.name || mapped.itemName || mapped.item_name || '').trim();
+    // Resilient fallback if productName was overwritten with numeric values like 0.00
+    if (!productName || productName === '0.00' || productName === '0' || isNumericString(productName)) {
+      const fallback = findFallbackProductName(row);
+      if (fallback) productName = fallback;
+    }
+
+    if (!productName || productName === '0.00') {
       errorRecords.push({
         rowNumber: rowNum,
         rawRow: row,
@@ -174,10 +259,16 @@ export function normalizeToSales(
     }
 
     const unitsSold = cleanInteger(mapped.quantity || mapped.units_sold || mapped.unitsSold || mapped.qty, 1);
-    const sellingPrice = cleanNumber(mapped.sellingPrice || mapped.selling_price || mapped.price || mapped.unitPrice || mapped.unit_price, 0);
+    let sellingPrice = cleanNumber(mapped.sellingPrice || mapped.selling_price || mapped.price || mapped.unitPrice || mapped.unit_price, 0);
+    if (sellingPrice <= 0) {
+      sellingPrice = findFallbackPrice(row, 0);
+    }
+
     const costPerUnit = cleanNumber(mapped.costPrice || mapped.cost_per_unit || mapped.costPerUnit || mapped.cost_price || mapped.cost, Math.round(sellingPrice * 0.6));
     const revenue = cleanNumber(mapped.revenue || mapped.total_revenue || mapped.totalRevenue || mapped.amount, sellingPrice * unitsSold);
     const totalCost = cleanNumber(mapped.totalCost || mapped.total_cost, costPerUnit * unitsSold);
+    const discount = cleanNumber(mapped.discount || row['Discount'] || row['Item Discount'] || 0);
+    const tax = cleanNumber(mapped.tax || row['Tax'] || row['Item Tax'] || 0);
 
     const saleCandidate: CanonicalSale = {
       sale_id: mapped.saleId || mapped.sale_id ? String(mapped.saleId || mapped.sale_id) : `sale-${Date.now()}-${idx}`,
@@ -191,11 +282,15 @@ export function normalizeToSales(
       cost_per_unit: costPerUnit,
       revenue,
       total_cost: totalCost,
+      discount,
+      tax,
       customer_name: String(mapped.customerName || mapped.customer_name || mapped.customer || 'Retail Customer').trim(),
       supplier_name: String(mapped.supplierName || mapped.supplier_name || mapped.supplier || '').trim(),
       sale_date: cleanDate(mapped.orderDate || mapped.saleDate || mapped.sale_date || mapped.date || mapped.order_date),
       payment_method: String(mapped.paymentMode || mapped.payment_method || mapped.paymentMethod || mapped.payment || 'UPI').trim(),
       status: 'Completed',
+      custom_attributes: { ...row },
+      raw_attributes: { ...row },
       created_at: new Date().toISOString(),
     };
 

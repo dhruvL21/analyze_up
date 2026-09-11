@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, Suspense } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -83,6 +83,8 @@ import {
   Sliders,
   Save,
   BookmarkCheck,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import {
   comparePeriods,
@@ -133,13 +135,30 @@ import {
 import { cn } from '@/lib/utils';
 
 function ExecutiveIntelligencePageContent() {
-  const { products, transactions, suppliers, orders, returns, businessProfile, activePlan, handleUpgrade, isProcessingPayment, aiQueryCount } = useData();
+  const { products, transactions, suppliers, orders, returns, businessProfile, activePlan, handleUpgrade, isProcessingPayment, aiQueryCount, capabilities, dataReadiness } = useData();
   const { user } = useUser();
   const { toast } = useToast();
   const searchParams = useSearchParams();
 
   // Unified Navigation Tab State
   const [activeTab, setActiveTab] = useState<'overview' | 'forecasting' | 'growth' | 'simulation' | 'billing' | 'team'>('overview');
+  const tabsContainerRef = useRef<HTMLDivElement>(null);
+  const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const [canScrollTabsLeft, setCanScrollTabsLeft] = useState(false);
+  const [canScrollTabsRight, setCanScrollTabsRight] = useState(false);
+
+  const checkTabsScroll = useCallback(() => {
+    const el = tabsContainerRef.current;
+    if (!el) return;
+    setCanScrollTabsLeft(el.scrollLeft > 10);
+    setCanScrollTabsRight(el.scrollWidth - el.clientWidth - el.scrollLeft > 10);
+  }, []);
+
+  useEffect(() => {
+    checkTabsScroll();
+    window.addEventListener('resize', checkTabsScroll);
+    return () => window.removeEventListener('resize', checkTabsScroll);
+  }, [checkTabsScroll]);
 
   useEffect(() => {
     const tab = searchParams?.get('tab');
@@ -147,6 +166,24 @@ function ExecutiveIntelligencePageContent() {
       setActiveTab(tab as any);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    const el = tabRefs.current[activeTab];
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
+    }
+  }, [activeTab]);
+
+  const handleTabClick = (tabKey: typeof activeTab, e?: React.MouseEvent<HTMLButtonElement>) => {
+    setActiveTab(tabKey);
+    if (e?.currentTarget) {
+      e.currentTarget.scrollIntoView({ behavior: 'smooth', inline: 'nearest', block: 'nearest' });
+    }
+  };
+
+  const scrollTabs = (offset: number) => {
+    tabsContainerRef.current?.scrollBy({ left: offset, behavior: 'smooth' });
+  };
 
   const [periodType, setPeriodType] = useState<'MONTH' | 'QUARTER' | 'YEAR'>('MONTH');
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
@@ -293,8 +330,8 @@ function ExecutiveIntelligencePageContent() {
     if (activeTab !== 'forecasting' && activeTab !== 'overview') {
       return { totalProjected30DayRevenue: 0, projectedExcessCapital: 0, criticalStockoutsCount: 0, stockoutProjections: [], velocities: [] } as any;
     }
-    return generateBusinessForecastingReport(products, transactions, suppliers, orders);
-  }, [products, transactions, suppliers, orders, activeTab]);
+    return generateBusinessForecastingReport(products, transactions, suppliers, orders, { capabilities, dataReadiness });
+  }, [products, transactions, suppliers, orders, activeTab, capabilities, dataReadiness]);
 
   const scenarioTotals = useMemo(() => {
     if (activeTab !== 'forecasting') {
@@ -466,61 +503,101 @@ function ExecutiveIntelligencePageContent() {
       </div>
 
       {/* Unified Executive Pill Tab Navigation Selector */}
-      <div className="flex items-center gap-2 p-2 bg-secondary/40 border border-border/40 rounded-2xl overflow-x-auto">
-        <button
-          onClick={() => setActiveTab('overview')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 ${
-            activeTab === 'overview'
-              ? 'bg-primary text-primary-foreground shadow-md'
-              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
-          }`}
-        >
-          <Crown className="w-4.5 h-4.5" /> Executive Overview
-        </button>
+      <div className="relative group/tabs flex items-center">
+        {canScrollTabsLeft && (
+          <Button
+            size="icon"
+            variant="secondary"
+            onClick={() => scrollTabs(-240)}
+            className="absolute left-1 z-20 h-8 w-8 rounded-full shadow-lg bg-background/95 border border-border/60 hover:bg-background text-foreground shrink-0 backdrop-blur-md transition-all active:scale-95"
+            title="Scroll tabs left"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+        )}
 
-        <button
-          onClick={() => setActiveTab('forecasting')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 ${
-            activeTab === 'forecasting'
-              ? 'bg-primary text-primary-foreground shadow-md'
-              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
-          }`}
+        <div
+          ref={tabsContainerRef}
+          onScroll={checkTabsScroll}
+          className="flex items-center gap-2 p-2 bg-secondary/40 border border-border/40 rounded-2xl overflow-x-auto scroll-smooth w-full [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden scroll-px-4 pr-10"
         >
-          <TrendingUp className="w-4.5 h-4.5" /> Demand Forecasting
-        </button>
+          <button
+            ref={(el) => { tabRefs.current['overview'] = el; }}
+            onClick={(e) => handleTabClick('overview', e)}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 ${
+              activeTab === 'overview'
+                ? 'bg-primary text-primary-foreground shadow-md'
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
+            }`}
+          >
+            <Crown className="w-4.5 h-4.5" /> Executive Overview
+          </button>
 
-        <button
-          onClick={() => setActiveTab('growth')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 ${
-            activeTab === 'growth'
-              ? 'bg-primary text-primary-foreground shadow-md'
-              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
-          }`}
-        >
-          <Rocket className="w-4.5 h-4.5" /> Growth & Retention
-        </button>
+          <button
+            ref={(el) => { tabRefs.current['forecasting'] = el; }}
+            onClick={(e) => handleTabClick('forecasting', e)}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 ${
+              activeTab === 'forecasting'
+                ? 'bg-primary text-primary-foreground shadow-md'
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
+            }`}
+          >
+            <TrendingUp className="w-4.5 h-4.5" /> Demand Forecasting
+            {(dataReadiness?.level === 'LEARNING' || !capabilities?.demandForecasting) && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
+                Learning
+              </span>
+            )}
+          </button>
 
-        <button
-          onClick={() => setActiveTab('simulation')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 ${
-            activeTab === 'simulation'
-              ? 'bg-primary text-primary-foreground shadow-md'
-              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
-          }`}
-        >
-          <FlaskConical className="w-4.5 h-4.5" /> AI Strategy Lab
-        </button>
+          <button
+            ref={(el) => { tabRefs.current['growth'] = el; }}
+            onClick={(e) => handleTabClick('growth', e)}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 ${
+              activeTab === 'growth'
+                ? 'bg-primary text-primary-foreground shadow-md'
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
+            }`}
+          >
+            <Rocket className="w-4.5 h-4.5" /> Growth & Retention
+          </button>
 
-        <button
-          onClick={() => setActiveTab('team')}
-          className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 ${
-            activeTab === 'team'
-              ? 'bg-primary text-primary-foreground shadow-md'
-              : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
-          }`}
-        >
-          <Users className="w-4.5 h-4.5" /> Team & Governance ({members.length})
-        </button>
+          <button
+            ref={(el) => { tabRefs.current['simulation'] = el; }}
+            onClick={(e) => handleTabClick('simulation', e)}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 ${
+              activeTab === 'simulation'
+                ? 'bg-primary text-primary-foreground shadow-md'
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
+            }`}
+          >
+            <FlaskConical className="w-4.5 h-4.5" /> AI Strategy Lab
+          </button>
+
+          <button
+            ref={(el) => { tabRefs.current['team'] = el; }}
+            onClick={(e) => handleTabClick('team', e)}
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 ${
+              activeTab === 'team'
+                ? 'bg-primary text-primary-foreground shadow-md'
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
+            }`}
+          >
+            <Users className="w-4.5 h-4.5" /> Team & Governance ({members.length})
+          </button>
+        </div>
+
+        {canScrollTabsRight && (
+          <Button
+            size="icon"
+            variant="secondary"
+            onClick={() => scrollTabs(240)}
+            className="absolute right-1 z-20 h-8 w-8 rounded-full shadow-lg bg-background/95 border border-border/60 hover:bg-background text-foreground shrink-0 backdrop-blur-md transition-all active:scale-95"
+            title="Scroll tabs right"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        )}
       </div>
 
       {/* ========================================================================= */}
@@ -583,11 +660,15 @@ function ExecutiveIntelligencePageContent() {
             <Card className="ios-glass rounded-2xl border-border/40">
               <CardContent className="p-4 text-center space-y-1">
                 <span className="text-xs text-muted-foreground block font-semibold">Forecast Conf.</span>
-                <span className="text-xl font-black text-indigo-400 block">
-                  {products.length > 0 ? scorecard.forecastConfidence : 'AWAITING DATA'}
+                <span className={`text-xl font-black block ${dataReadiness?.level === 'LEARNING' || !capabilities?.demandForecasting ? 'text-amber-400' : 'text-indigo-400'}`}>
+                  {dataReadiness?.level === 'LEARNING' || !capabilities?.demandForecasting
+                    ? 'LEARNING'
+                    : (products.length > 0 ? scorecard.forecastConfidence : 'AWAITING DATA')}
                 </span>
-                <span className="text-xs text-indigo-400/90 font-semibold block">
-                  {products.length > 0 ? '30D Projected' : 'No Transactions'}
+                <span className="text-xs text-muted-foreground font-semibold block">
+                  {dataReadiness?.level === 'LEARNING' || !capabilities?.demandForecasting
+                    ? 'Requires 30d Baseline'
+                    : (products.length > 0 ? '30D Projected' : 'No Transactions')}
                 </span>
               </CardContent>
             </Card>
@@ -769,6 +850,68 @@ function ExecutiveIntelligencePageContent() {
       {/* TAB 2: DEMAND & REVENUE FORECASTING */}
       {/* ========================================================================= */}
       {activeTab === 'forecasting' && (
+        (dataReadiness?.level === 'LEARNING' || !capabilities?.demandForecasting) ? (
+          <div className="space-y-6">
+            <Card className="p-6 md:p-8 rounded-3xl ios-glass border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-background/60 to-background shadow-xl relative overflow-hidden">
+              <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+                <div className="space-y-3 max-w-3xl">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/35 text-amber-300 text-xs font-semibold">
+                    <Clock className="w-4 h-4 text-amber-400" />
+                    Adaptive Intelligence Guardrail Active
+                  </div>
+                  <h2 className="text-xl md:text-2xl font-black text-foreground tracking-tight">
+                    Observing Your Catalog's Sales Rhythm
+                  </h2>
+                  <p className="text-xs md:text-sm text-muted-foreground leading-relaxed">
+                    AnalyzeUp enforces strict statistical sufficiency standards to protect your business. 30-Day demand forecasting and projected revenue trajectories require at least <strong className="text-foreground">30 days of recorded sales history</strong> or <strong className="text-foreground">80+ customer orders</strong>. Speculative forecasts and premature price discounts are suppressed during baseline learning.
+                  </p>
+                </div>
+
+                <div className="p-5 rounded-2xl bg-secondary/30 border border-border/40 space-y-2 min-w-[220px] shrink-0 text-center">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Current Readiness</span>
+                  <div className="text-3xl font-black text-amber-400 font-mono">
+                    {dataReadiness?.score || 38}<span className="text-sm text-muted-foreground">/100</span>
+                  </div>
+                  <Badge variant="outline" className="bg-amber-500/10 text-amber-300 border-amber-500/30 text-[10px] font-semibold">
+                    Level 1 • Learning
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6 pt-6 border-t border-border/30">
+                <div className="p-4 rounded-2xl bg-secondary/20 border border-border/30 space-y-1.5">
+                  <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <Clock className="w-3.5 h-3.5 text-blue-400" /> Sales History
+                  </span>
+                  <div className="text-base font-bold text-foreground font-mono">
+                    {dataReadiness?.historicalDays ?? 0} / 30 Days
+                  </div>
+                  <p className="text-[10px] text-amber-400">Baseline calibrating</p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-secondary/20 border border-border/30 space-y-1.5">
+                  <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-emerald-400" /> Order Density
+                  </span>
+                  <div className="text-base font-bold text-foreground font-mono">
+                    {dataReadiness?.totalOrders ?? 0} / 80 Orders
+                  </div>
+                  <p className="text-[10px] text-amber-400">Building sample volume</p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-secondary/20 border border-border/30 space-y-1.5">
+                  <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-primary" /> Active Catalog
+                  </span>
+                  <div className="text-base font-bold text-foreground font-mono">
+                    {products.length} SKUs Tracked
+                  </div>
+                  <p className="text-[10px] text-emerald-400">100% catalog monitored</p>
+                </div>
+              </div>
+            </Card>
+          </div>
+        ) : (
         <div className="space-y-6">
           {/* Forecasting KPIs */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
@@ -899,6 +1042,7 @@ function ExecutiveIntelligencePageContent() {
             </CardContent>
           </Card>
         </div>
+        )
       )}
 
       {/* ========================================================================= */}
@@ -1155,16 +1299,16 @@ function ExecutiveIntelligencePageContent() {
               </div>
             </CardHeader>
             <CardContent className="p-0 overflow-x-auto scrollbar-none">
-              <Table>
+              <Table className="min-w-[850px]">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="text-xs">Score</TableHead>
-                    <TableHead className="text-xs">Opportunity & Target</TableHead>
-                    <TableHead className="text-xs">Category</TableHead>
-                    <TableHead className="text-xs">Est. Rev Impact</TableHead>
-                    <TableHead className="text-xs">Est. Profit Impact</TableHead>
-                    <TableHead className="text-xs">Confidence</TableHead>
-                    <TableHead className="text-xs text-right">Action</TableHead>
+                    <TableHead className="text-xs whitespace-nowrap w-[70px]">Score</TableHead>
+                    <TableHead className="text-xs min-w-[260px]">Opportunity & Target</TableHead>
+                    <TableHead className="text-xs whitespace-nowrap min-w-[150px]">Category</TableHead>
+                    <TableHead className="text-xs whitespace-nowrap min-w-[120px]">Est. Rev Impact</TableHead>
+                    <TableHead className="text-xs whitespace-nowrap min-w-[120px]">Est. Profit Impact</TableHead>
+                    <TableHead className="text-xs whitespace-nowrap min-w-[100px]">Confidence</TableHead>
+                    <TableHead className="text-xs whitespace-nowrap text-right min-w-[140px]">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1188,8 +1332,8 @@ function ExecutiveIntelligencePageContent() {
                             <span className="text-[11px] text-muted-foreground block max-w-sm leading-relaxed">{opp.description}</span>
                           </div>
                         </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-[10px] font-bold uppercase">
+                        <TableCell className="whitespace-nowrap">
+                          <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider whitespace-nowrap px-3 py-1">
                             {opp.type.replace('_', ' ')}
                           </Badge>
                         </TableCell>
@@ -1368,7 +1512,7 @@ function ExecutiveIntelligencePageContent() {
                       setSimValue(10);
                     }}
                   >
-                    📈 Price Increase (+10%)
+                    <TrendingUp className="w-3.5 h-3.5" /> Price Increase (+10%)
                   </Button>
 
                   <Button
@@ -1380,7 +1524,7 @@ function ExecutiveIntelligencePageContent() {
                       setSimValue(20);
                     }}
                   >
-                    🏷️ Clearance Discount (-20%)
+                    Clearance Discount (-20%)
                   </Button>
 
                   <Button
@@ -1392,7 +1536,7 @@ function ExecutiveIntelligencePageContent() {
                       setSimValue(300);
                     }}
                   >
-                    📦 Bulk Order (300 Units)
+                    <Boxes className="w-3.5 h-3.5" /> Bulk Order (300 Units)
                   </Button>
 
                   <Button
@@ -1403,7 +1547,7 @@ function ExecutiveIntelligencePageContent() {
                       setSimType('SUPPLIER_SWITCH');
                     }}
                   >
-                    🔄 Switch Supplier
+                    <RefreshCw className="w-3.5 h-3.5" /> Switch Supplier
                   </Button>
 
                   <Button
@@ -1415,7 +1559,7 @@ function ExecutiveIntelligencePageContent() {
                       setSimValue(20);
                     }}
                   >
-                    ⚡ Demand Surge (+20%)
+                    <Zap className="w-3.5 h-3.5" /> Demand Surge (+20%)
                   </Button>
                 </div>
               </div>

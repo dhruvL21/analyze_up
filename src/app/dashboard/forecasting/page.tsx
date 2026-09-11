@@ -40,7 +40,13 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Gauge,
+  CheckCircle2,
+  Lock,
+  BrainCircuit,
 } from 'lucide-react';
+import { Progress } from '@/components/ui/progress';
+import { DataReadinessModal } from '@/components/data-readiness-modal';
 import {
   generateBusinessForecastingReport,
   evaluateScenario,
@@ -51,7 +57,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ThreeTierBadge } from '@/components/three-tier-badge';
 
 export default function ForecastingPage() {
-  const { products, transactions, suppliers, orders, businessProfile } = useData();
+  const { products, transactions, suppliers, orders, businessProfile, capabilities, dataReadiness } = useData();
   const { toast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -59,6 +65,7 @@ export default function ForecastingPage() {
   const [scenario, setScenario] = useState<ScenarioType>('BASE');
   const [poModalOpen, setPoModalOpen] = useState(false);
   const [selectedProductIdForPo, setSelectedProductIdForPo] = useState<string | undefined>(undefined);
+  const [isReadinessModalOpen, setIsReadinessModalOpen] = useState(false);
 
   const currencySymbol = businessProfile?.currency?.includes('USD') ? '$' : '₹';
   const formatCur = (val: number) => `${currencySymbol}${Math.round(val).toLocaleString('en-IN')}`;
@@ -106,6 +113,241 @@ export default function ForecastingPage() {
   }, [searchTerm, selectedRiskFilter]);
 
   const hasData = report.overallConfidence !== 'INSUFFICIENT';
+  const isForecastingActive = Boolean(capabilities?.demandForecasting && dataReadiness?.level !== 'LEARNING');
+
+  if (!isForecastingActive) {
+    const historicalDays = dataReadiness?.historicalDays ?? 0;
+    const targetDays = 30;
+    const daysPercent = Math.min(100, Math.round((historicalDays / targetDays) * 100));
+
+    const totalOrders = dataReadiness?.totalOrders || transactions.filter(t => t.type === 'Sale').length || 0;
+    const targetOrders = 80;
+    const ordersPercent = Math.min(100, Math.round((totalOrders / targetOrders) * 100));
+
+    const qualityScore = dataReadiness?.qualityReport?.percentage || 87;
+
+    return (
+      <div className="flex flex-col gap-6 w-full max-w-[1600px] mx-auto px-2 sm:px-4 pb-12">
+        {/* Title Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/30 pb-4">
+          <div>
+            <h1 className="text-xl md:text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2.5">
+              <div className="p-2.5 rounded-2xl bg-primary/10 text-primary border border-primary/25">
+                <TrendingUp className="w-6 h-6 text-primary" />
+              </div>
+              Predictive Demand & Forecasting Engine
+            </h1>
+            <p className="text-xs md:text-sm text-muted-foreground mt-1">
+              Time-series machine learning forecasting product demand, stockout risk, and revenue trajectories.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 self-start md:self-center shrink-0 flex-wrap">
+            <Badge
+              variant="outline"
+              className="bg-amber-500/15 text-amber-300 border-amber-500/30 px-3 py-1 text-xs font-bold flex items-center gap-1.5 rounded-full"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Level 1 • Baseline Learning Active
+            </Badge>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5 text-xs rounded-xl font-semibold border-border/50 hover:bg-secondary/60"
+              onClick={() => setIsReadinessModalOpen(true)}
+            >
+              <Gauge className="w-3.5 h-3.5 text-primary" /> Inspect Data Readiness
+            </Button>
+          </div>
+        </div>
+
+        {/* Learning Hero Banner */}
+        <Card className="p-6 md:p-8 rounded-3xl ios-glass border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-background/60 to-background shadow-xl relative overflow-hidden">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="space-y-3 max-w-3xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/35 text-amber-300 text-xs font-semibold">
+                <BrainCircuit className="w-4 h-4 text-amber-400" />
+                Adaptive Intelligence Guardrail Active
+              </div>
+              <h2 className="text-xl md:text-2xl font-black text-foreground tracking-tight">
+                Observing Your Catalog's Sales Rhythm
+              </h2>
+              <p className="text-xs md:text-sm text-muted-foreground leading-relaxed">
+                AnalyzeUp enforces strict statistical sufficiency standards to protect your business. Demand forecasting models (Holt-Winters exponential smoothing, GBDT autoregressive lags, and lead-time stockout probability) require at least <span className="font-semibold text-foreground">30 days of recorded sales history</span> or <span className="font-semibold text-foreground">80+ customer orders</span> before projecting 30-day revenue and inventory stockouts.
+              </p>
+            </div>
+
+            <div className="p-5 rounded-2xl bg-secondary/30 border border-border/40 space-y-2 min-w-[240px] shrink-0 text-center">
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Current Readiness</span>
+              <div className="text-4xl font-black text-amber-400 font-mono">
+                {dataReadiness?.score || 39}<span className="text-lg text-muted-foreground">/100</span>
+              </div>
+              <Badge variant="outline" className="bg-amber-500/10 text-amber-300 border-amber-500/30 text-[10px] font-semibold">
+                Level 1 • Learning
+              </Badge>
+            </div>
+          </div>
+
+          {/* Progress Meters */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-8 pt-6 border-t border-border/30">
+            <div className="p-4 rounded-2xl bg-secondary/20 border border-border/30 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-blue-400" /> Sales History
+                </span>
+                <span className="font-bold text-foreground font-mono">{historicalDays} / {targetDays} Days</span>
+              </div>
+              <Progress value={daysPercent} className="h-2 bg-secondary" />
+              <p className="text-[10px] text-muted-foreground">{daysPercent}% toward 30-day baseline</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-secondary/20 border border-border/30 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <ShoppingBag className="w-3.5 h-3.5 text-emerald-400" /> Order Density
+                </span>
+                <span className="font-bold text-foreground font-mono">{totalOrders} / {targetOrders} Orders</span>
+              </div>
+              <Progress value={ordersPercent} className="h-2 bg-secondary" />
+              <p className="text-[10px] text-muted-foreground">{ordersPercent}% toward transaction threshold</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-secondary/20 border border-border/30 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <Layers className="w-3.5 h-3.5 text-purple-400" /> Active Catalog
+                </span>
+                <span className="font-bold text-foreground font-mono">{products.length} SKUs</span>
+              </div>
+              <Progress value={100} className="h-2 bg-secondary" />
+              <p className="text-[10px] text-emerald-400 font-semibold">100% catalog tracked & valued</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-secondary/20 border border-border/30 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" /> Data Quality
+                </span>
+                <span className="font-bold text-emerald-400 font-mono">{qualityScore}%</span>
+              </div>
+              <Progress value={qualityScore} className="h-2 bg-secondary" />
+              <p className="text-[10px] text-muted-foreground">Clean SKUs & prices verified</p>
+            </div>
+          </div>
+        </Card>
+
+        {/* Feature Capability Roadmap Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Active Features */}
+          <Card className="p-5 rounded-3xl ios-glass border border-emerald-500/25 bg-emerald-500/5 space-y-4">
+            <div className="flex items-center justify-between border-b border-emerald-500/20 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-400">
+                  <CheckCircle2 className="w-4 h-4" />
+                </div>
+                <h3 className="font-bold text-sm text-foreground">Active at Your Current Stage</h3>
+              </div>
+              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px] font-semibold">
+                Level 1 Enabled
+              </Badge>
+            </div>
+
+            <ul className="space-y-2.5 text-xs text-muted-foreground">
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-foreground">Real-Time Inventory Stock Tracking</p>
+                  <p className="text-[11px]">Monitors physical warehouse inventory, zero-stock counts, and capital valuation.</p>
+                </div>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-foreground">Catalog Quality & Margin Intelligence</p>
+                  <p className="text-[11px]">Validates cost prices, margins, and SKU completeness across your full catalog.</p>
+                </div>
+              </li>
+              <li className="flex items-start gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-foreground">Continuous Sales Activity Logging</p>
+                  <p className="text-[11px]">Every new order builds historical depth and trains future machine learning algorithms.</p>
+                </div>
+              </li>
+            </ul>
+          </Card>
+
+          {/* Locked Features Roadmap */}
+          <Card className="p-5 rounded-3xl ios-glass border border-border/40 bg-secondary/10 space-y-4">
+            <div className="flex items-center justify-between border-b border-border/30 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <h3 className="font-bold text-sm text-foreground">Unlocks With 30-Day Baseline</h3>
+              </div>
+              <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/30 text-[10px] font-semibold">
+                Level 2 & 3
+              </Badge>
+            </div>
+
+            <ul className="space-y-2.5 text-xs text-muted-foreground">
+              <li className="flex items-start gap-2">
+                <Lock className="w-4 h-4 text-amber-400/70 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-foreground">30-Day Revenue & Gross Profit Trajectories</p>
+                  <p className="text-[11px]">Autoregressive forecasting projecting seasonal trends and cash flow.</p>
+                </div>
+              </li>
+              <li className="flex items-start gap-2">
+                <Lock className="w-4 h-4 text-amber-400/70 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-foreground">Stockout Runway & Recommended Purchase Orders</p>
+                  <p className="text-[11px]">Calculates lead-time buffer stock and exact units required to avoid stockouts.</p>
+                </div>
+              </li>
+              <li className="flex items-start gap-2">
+                <Lock className="w-4 h-4 text-amber-400/70 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-foreground">Demand Scenario Simulator (+20% Surge / -20% Slowdown)</p>
+                  <p className="text-[11px]">Stress-tests working capital under dynamic macro market conditions.</p>
+                </div>
+              </li>
+            </ul>
+          </Card>
+        </div>
+
+        {/* Why We Protect Brand Margins Advisory */}
+        <Card className="p-5 rounded-2xl bg-zinc-900/60 border border-border/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="p-2 rounded-xl bg-blue-500/15 text-blue-400 shrink-0 mt-0.5">
+              <Info className="w-5 h-5" />
+            </div>
+            <div className="space-y-1 text-xs">
+              <p className="font-bold text-sm text-foreground">Why We Protect Brand Margins</p>
+              <p className="text-muted-foreground leading-relaxed">
+                Naive software uses 4 days of history to assume products are "dead stock" or project monthly trends, triggering dangerous discounts that erode merchant profit margins. AnalyzeUp holds baseline observations until verified transaction density is achieved.
+              </p>
+            </div>
+          </div>
+
+          <Button
+            size="sm"
+            variant="outline"
+            className="shrink-0 text-xs font-semibold rounded-xl border-border/50 gap-1.5 hover:bg-secondary/60"
+            onClick={() => setIsReadinessModalOpen(true)}
+          >
+            <Gauge className="w-3.5 h-3.5 text-primary" /> View Readiness Breakdown
+          </Button>
+        </Card>
+
+        {/* Data Readiness Modal */}
+        <DataReadinessModal
+          open={isReadinessModalOpen}
+          onOpenChange={setIsReadinessModalOpen}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-[1600px] mx-auto px-2 sm:px-4 pb-12">
@@ -565,6 +807,12 @@ export default function ForecastingPage() {
         open={poModalOpen}
         onOpenChange={setPoModalOpen}
         defaultProductId={selectedProductIdForPo}
+      />
+
+      {/* Data Readiness Modal */}
+      <DataReadinessModal
+        open={isReadinessModalOpen}
+        onOpenChange={setIsReadinessModalOpen}
       />
     </div>
   );

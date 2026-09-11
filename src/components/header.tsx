@@ -29,6 +29,8 @@ import { cn } from '@/lib/utils';
 import { useData } from '@/context/data-context';
 import { detectBusinessEvents, getStoredEventStatuses } from '@/lib/business-event-engine';
 import { NotificationCenterDrawer } from './notification-center-drawer';
+import { DataReadinessModal } from './data-readiness-modal';
+import { Badge } from '@/components/ui/badge';
 
 const mobileNavItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -65,6 +67,7 @@ export function Header() {
   const { theme, setTheme } = useTheme();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [notifDrawerOpen, setNotifDrawerOpen] = useState(false);
+  const [isDataReadinessOpen, setIsDataReadinessOpen] = useState(false);
   const [healthTick, setHealthTick] = useState(0);
 
   const {
@@ -74,6 +77,7 @@ export function Header() {
     orders,
     returns,
     businessProfile,
+    dataReadiness,
     activePlan,
     isLimitExceeded,
     setShowSubscriptionModal,
@@ -134,7 +138,7 @@ export function Header() {
         </Link>
       </div>
 
-      <div className="hidden flex-1 justify-center md:flex">
+      <div className="hidden flex-1 justify-center lg:flex min-w-0">
         <Nav />
       </div>
 
@@ -182,6 +186,17 @@ export function Header() {
               <p className="font-bold text-xs text-foreground truncate">{user?.displayName || 'Business User'}</p>
               <p className="text-[10px] text-muted-foreground truncate">{user?.email || 'user@business.com'}</p>
             </div>
+            {dataReadiness && (
+              <DropdownMenuItem onClick={() => setIsDataReadinessOpen(true)} className="cursor-pointer text-xs justify-between">
+                <span className="flex items-center">
+                  <Sparkles className="mr-2 h-4 w-4 text-emerald-400" />
+                  Data Readiness
+                </span>
+                <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30">
+                  {dataReadiness.score}/100
+                </Badge>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem asChild className="cursor-pointer text-xs">
               <Link href="/dashboard/settings" className="flex items-center w-full">
                 <Settings className="mr-2 h-4 w-4" />
@@ -210,7 +225,7 @@ export function Header() {
         </DropdownMenu>
 
         {/* Mobile Hamburger Menu Icon - Far Right */}
-        <div className="md:hidden flex items-center">
+        <div className="lg:hidden flex items-center">
           <Button
             variant="ghost"
             size="icon"
@@ -239,7 +254,7 @@ export function Header() {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
               onClick={() => setIsMenuOpen(false)}
-              className="fixed inset-0 top-16 bg-black/40 backdrop-blur-sm z-30 md:hidden"
+              className="fixed inset-0 top-16 bg-black/40 backdrop-blur-sm z-30 lg:hidden"
             />
 
             {/* Slide Down Menu Content */}
@@ -248,7 +263,7 @@ export function Header() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -16 }}
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              className="absolute top-16 left-0 right-0 z-40 bg-background/95 backdrop-blur-xl border-b border-border shadow-2xl p-6 md:hidden flex flex-col gap-4 rounded-b-2xl"
+              className="absolute top-16 left-0 right-0 z-40 bg-background/95 backdrop-blur-xl border-b border-border shadow-2xl p-4 sm:p-6 lg:hidden flex flex-col gap-4 rounded-b-2xl max-h-[calc(100vh-5rem)] overflow-y-auto"
             >
               <motion.div
                 variants={containerVariants}
@@ -298,6 +313,7 @@ export function Header() {
       </AnimatePresence>
 
       {notifDrawerOpen && <NotificationCenterDrawer open={notifDrawerOpen} onOpenChange={setNotifDrawerOpen} />}
+      <DataReadinessModal open={isDataReadinessOpen} onOpenChange={setIsDataReadinessOpen} />
     </header>
   );
 }
