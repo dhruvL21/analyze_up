@@ -84,7 +84,7 @@ interface DataContextProps {
   bulkAddTransactions: (transactions: Omit<Transaction, 'id' | 'createdAt' | 'updatedAt' | 'tenantId'>[], silent?: boolean) => Promise<any>;
   bulkAddReturns: (returnsData: (Omit<ProductReturn, 'createdAt' | 'updatedAt' | 'userId'> & { id?: string })[], silent?: boolean) => Promise<any>;
   vectorizeAndSyncAiChatbot: () => Promise<any>;
-  clearAllData: () => Promise<void>;
+  clearAllData: (options?: { silent?: boolean }) => Promise<void>;
   // Google Drive & Integration Helpers
   driveConnection: any;
   autoSyncGoogleDriveNow: (showToast?: boolean) => Promise<void>;
@@ -295,8 +295,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
               });
             } else if (intData?.connectionStatus === 'Disconnected' || intData?.connectionStatus === 'Uninstalled' || !intData?.accessToken) {
               setBusinessProfile((prev) => {
+                if (!prev) return prev;
                 const merged: BusinessProfile = {
-                  ...(prev || {}),
+                  ...prev,
                   shopifyConnected: false,
                   shopifyStatus: 'Disconnected',
                   shopifyStoreUrl: '',
@@ -1964,7 +1965,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     toast({ title: 'Supplier Deleted', description: 'The supplier has been removed.' });
   }, [firestore, user, toast]);
 
-  const clearAllData = useCallback(async () => {
+  const clearAllData = useCallback(async (options?: { silent?: boolean }) => {
     if (!firestore || !user) {
       throw new Error('Your workspace is not ready to reset. Please wait for Firebase to reconnect and try again.');
     }
@@ -2136,10 +2137,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       window.dispatchEvent(new CustomEvent('analyzeup_drive_synced', { detail: { count: 0, reset: true } }));
     }
 
-    toast({
-      title: 'Workspace Reset Complete',
-      description: 'All products, sales, Google Drive, Shopify links, and logs have been deleted.',
-    });
+    if (!options?.silent) {
+      toast({
+        title: 'Workspace Reset Complete',
+        description: 'All products, sales, Google Drive, Shopify links, and logs have been deleted.',
+      });
+    }
   }, [firestore, user, businessProfile, toast]);
 
   const clearDemoBusiness = useCallback(async () => {
@@ -3002,175 +3005,16 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     let deletedTransactionsCount = 0;
     let deletedReturnsCount = 0;
 
-    // 1. If purgeData is requested, locate and delete all Shopify documents across collections
+    // 1. If purgeData is requested, execute a full, complete workspace purge so no residual data remains
     if (purgeData) {
+      deletedProductsCount = products.length;
+      deletedTransactionsCount = transactions.length;
+      deletedReturnsCount = returns.length;
+
       try {
-        const CHUNK_SIZE = 400;
-        const shopHandle = shop ? shop.replace('.myshopify.com', '').toLowerCase().trim() : '';
-
-        // A. Products
-        const productsSnap = await getDocs(collection(firestore, 'users', uid, 'products')).catch(() => ({ docs: [] } as any));
-        const shopifyProductDocs = productsSnap.docs.filter((d: any) => {
-          const data = d.data() || {};
-          return (
-            data.source?.toUpperCase() === 'SHOPIFY' ||
-            d.id.startsWith('shopify_') ||
-            d.id.includes('shopify') ||
-            (typeof data.id === 'string' && (data.id.startsWith('shopify_') || data.id.includes('shopify'))) ||
-            Boolean(data.shopifyProductId) ||
-            Boolean(data.shopifyVariantId) ||
-            (typeof data.sku === 'string' && data.sku.toUpperCase().startsWith('SHOPIFY-')) ||
-            (typeof data.supplier === 'string' && data.supplier.toLowerCase().includes('shopify')) ||
-            (shopHandle && typeof data.supplier === 'string' && data.supplier.toLowerCase().includes(shopHandle))
-          );
-        });
-
-        const deletedProductDocIds = new Set<string>(shopifyProductDocs.map((d: any) => d.id));
-        const deletedProductDataIds = new Set<string>(shopifyProductDocs.map((d: any) => d.data()?.id).filter(Boolean));
-        const deletedProductSkus = new Set<string>(shopifyProductDocs.map((d: any) => d.data()?.sku?.toUpperCase()).filter(Boolean));
-        const deletedProductNames = new Set<string>(shopifyProductDocs.map((d: any) => d.data()?.name?.toLowerCase()).filter(Boolean));
-        const deletedShopifyProdIds = new Set<string>(shopifyProductDocs.map((d: any) => String(d.data()?.shopifyProductId || '')).filter(Boolean));
-        deletedProductsCount = shopifyProductDocs.length;
-
-        // B. Transactions
-        const txSnap = await getDocs(collection(firestore, 'users', uid, 'transactions')).catch(() => ({ docs: [] } as any));
-        const shopifyTxDocs = txSnap.docs.filter((d: any) => {
-          const data = d.data() || {};
-          const skuUpper = typeof data.sku === 'string' ? data.sku.toUpperCase() : '';
-          const nameLower = typeof data.productName === 'string' ? data.productName.toLowerCase() : '';
-          const isSourceShopify = data.source?.toUpperCase() === 'SHOPIFY';
-          const isDocShopifyId = d.id.startsWith('tx_shopify_') || d.id.includes('shopify') || d.id.startsWith('tx_refund_');
-          const isDataShopifyId = typeof data.id === 'string' && (data.id.startsWith('tx_shopify_') || data.id.includes('shopify'));
-          const isPaymentShopify = typeof data.paymentMethod === 'string' && data.paymentMethod.toLowerCase().includes('shopify');
-          const hasShopifyOrderId = Boolean(data.shopifyOrderId || data.shopifyTransactionId);
-          const matchesProdId =
-            (data.productId && (deletedProductDocIds.has(data.productId) || deletedProductDataIds.has(data.productId) || deletedShopifyProdIds.has(String(data.productId)))) ||
-            (data.product_id && (deletedProductDocIds.has(data.product_id) || deletedProductDataIds.has(data.product_id) || deletedShopifyProdIds.has(String(data.product_id))));
-          const matchesSku = skuUpper && deletedProductSkus.has(skuUpper);
-          const matchesName = nameLower && deletedProductNames.has(nameLower);
-          const hasShopifyOrderAttrs = Boolean(
-            data.customAttributes?.['Financial Status'] ||
-            data.rawAttributes?.['Financial Status'] ||
-            data.customAttributes?.['Lineitem name']
-          );
-          const matchesShopHandle = shopHandle && (
-            (typeof data.supplier === 'string' && data.supplier.toLowerCase().includes(shopHandle)) ||
-            (typeof data.notes === 'string' && data.notes.toLowerCase().includes(shopHandle))
-          );
-
-          return (
-            isSourceShopify ||
-            isDocShopifyId ||
-            isDataShopifyId ||
-            isPaymentShopify ||
-            hasShopifyOrderId ||
-            matchesProdId ||
-            matchesSku ||
-            matchesName ||
-            hasShopifyOrderAttrs ||
-            matchesShopHandle
-          );
-        });
-        deletedTransactionsCount = shopifyTxDocs.length;
-
-        // C. Returns
-        const retSnap = await getDocs(collection(firestore, 'users', uid, 'returns')).catch(() => ({ docs: [] } as any));
-        const shopifyRetDocs = retSnap.docs.filter((d: any) => {
-          const data = d.data() || {};
-          return (
-            data.source?.toUpperCase() === 'SHOPIFY' ||
-            d.id.startsWith('ret_shopify_') ||
-            d.id.includes('shopify') ||
-            (typeof data.id === 'string' && (data.id.startsWith('ret_shopify_') || data.id.includes('shopify'))) ||
-            Boolean(data.shopifyReturnId) ||
-            deletedProductDocIds.has(data.productId) ||
-            (typeof data.notes === 'string' && data.notes.toLowerCase().includes('shopify'))
-          );
-        });
-        deletedReturnsCount = shopifyRetDocs.length;
-
-        // D. Sales Orders & Orders
-        const salesOrdersSnap = await getDocs(collection(firestore, 'users', uid, 'sales_orders')).catch(() => ({ docs: [] } as any));
-        const ordersSnap = await getDocs(collection(firestore, 'users', uid, 'orders')).catch(() => ({ docs: [] } as any));
-        const shopifyOrderDocs = [
-          ...salesOrdersSnap.docs,
-          ...ordersSnap.docs.filter((d: any) => {
-            const data = d.data() || {};
-            return (
-              data.source?.toUpperCase() === 'SHOPIFY' ||
-              d.id.startsWith('shopify_') ||
-              d.id.includes('shopify') ||
-              d.id.startsWith('order_') ||
-              Boolean(data.shopifyOrderId)
-            );
-          }),
-        ];
-
-        // E. Refunds & Inventory
-        const refundsSnap = await getDocs(collection(firestore, 'users', uid, 'refunds')).catch(() => ({ docs: [] } as any));
-        const inventorySnap = await getDocs(collection(firestore, 'users', uid, 'inventory')).catch(() => ({ docs: [] } as any));
-
-        // Group all documents to delete
-        const allDocsToDelete = [
-          ...shopifyProductDocs,
-          ...shopifyTxDocs,
-          ...shopifyRetDocs,
-          ...shopifyOrderDocs,
-          ...refundsSnap.docs,
-          ...inventorySnap.docs,
-        ];
-
-        // Execute batch deletions with chunking
-        for (let i = 0; i < allDocsToDelete.length; i += CHUNK_SIZE) {
-          const batch = writeBatch(firestore);
-          allDocsToDelete.slice(i, i + CHUNK_SIZE).forEach((docSnap) => {
-            batch.delete(docSnap.ref);
-          });
-          await batch.commit().catch((err) => console.warn('[Shopify Disconnect] Batch deletion error:', err));
-          await new Promise((r) => setTimeout(r, 10));
-        }
-
-        // F. Clean up orphaned categories if no remaining products use them
-        const remainingProductDocIds = new Set(
-          productsSnap.docs.filter((d: any) => !deletedProductDocIds.has(d.id)).map((d: any) => d.id)
-        );
-        const remainingProducts = products.filter((p) => remainingProductDocIds.has(p.id));
-        const remainingCategoryNames = new Set(remainingProducts.map((p) => (p.category || '').trim().toLowerCase()));
-        const categoriesSnap = await getDocs(collection(firestore, 'users', uid, 'categories')).catch(() => ({ docs: [] } as any));
-        const orphanedCategories = categoriesSnap.docs.filter((d: any) => {
-          const catName = (d.data()?.name || '').trim().toLowerCase();
-          return !remainingCategoryNames.has(catName);
-        });
-        if (orphanedCategories.length > 0 && remainingProducts.length === 0) {
-          const catBatch = writeBatch(firestore);
-          orphanedCategories.forEach((d: any) => catBatch.delete(d.ref));
-          await catBatch.commit().catch(console.warn);
-        }
-
-        // G. Recalculate or zero out analytics summary
-        const deletedTxIdSet = new Set(shopifyTxDocs.map((d: any) => d.id));
-        const remainingTxDocs = txSnap.docs.filter((d: any) => !deletedTxIdSet.has(d.id));
-        const remainingProdDocs = productsSnap.docs.filter((d: any) => !deletedProductDocIds.has(d.id));
-
-        if (remainingProdDocs.length === 0 || remainingTxDocs.length === 0) {
-          const summaryRef = doc(firestore, 'users', uid, 'analytics', 'summary');
-          await setDoc(summaryRef, DEFAULT_ANALYTICS_SUMMARY).catch(console.warn);
-          await deleteDoc(doc(firestore, 'users', uid, 'analytics', 'ai_brief')).catch(() => {});
-        } else {
-          const remProds = remainingProdDocs.map((d: any) => ({ id: d.id, ...d.data() }));
-          const remTx = remainingTxDocs.map((d: any) => ({ id: d.id, ...d.data() }));
-          const deletedRetIds = new Set(shopifyRetDocs.map((d: any) => d.id));
-          const remainingRet = returns.filter((r) => !deletedRetIds.has(r.id));
-          await recalculateAndSaveAnalyticsSummary(firestore, uid, {
-            products: remProds,
-            transactions: remTx,
-            suppliers,
-            orders,
-            returns: remainingRet,
-          }).catch(console.warn);
-        }
-      } catch (purgeErr) {
-        console.error('[Shopify Disconnect] Error purging Shopify data from Firestore:', purgeErr);
+        await clearAllData({ silent: true });
+      } catch (err) {
+        console.error('[Shopify Disconnect] Full workspace purge error:', err);
       }
     }
 
@@ -3219,7 +3063,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       }, { merge: true }).catch(console.error);
     }
 
-    // 4. Notify backend server
+    // 4. Notify backend server to scrub server cache and sync jobs
     const idToken = user ? await user.getIdToken().catch(() => null) : null;
     await fetch('/api/shopify/disconnect', {
       method: 'POST',
@@ -3264,7 +3108,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       deletedTransactions: deletedTransactionsCount,
       deletedReturns: deletedReturnsCount,
     };
-  }, [firestore, user, businessProfile, products, transactions, returns, suppliers, orders, updateBusinessProfile]);
+  }, [firestore, user, businessProfile, products, transactions, returns, clearAllData, updateBusinessProfile]);
 
   const businessBuddyCalibration = useMemo(() => {
     return getBusinessBuddyCalibration(businessProfile, products, transactions, returns);

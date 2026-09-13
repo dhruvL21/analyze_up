@@ -88,6 +88,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ received: true, status: 'uninstalled' }, { status: 200 });
     }
 
+    // 4b. Mandatory Shopify Privacy & GDPR Compliance Webhooks
+    if (topic === 'customers/data_request') {
+      console.log(`[Shopify Compliance] Received customer data request for shop: ${shop}`);
+      return NextResponse.json({ received: true, status: 'acknowledged' }, { status: 200 });
+    }
+
+    if (topic === 'customers/redact') {
+      console.log(`[Shopify Compliance] Received customer redact request for shop: ${shop}`);
+      return NextResponse.json({ received: true, status: 'acknowledged' }, { status: 200 });
+    }
+
+    if (topic === 'shop/redact') {
+      console.log(`[Shopify Compliance] Received shop redact request for shop: ${shop}. Scrubbing all data...`);
+      await markShopifyUninstalled(shop, true).catch(console.warn);
+      return NextResponse.json({ received: true, status: 'scrubbed' }, { status: 200 });
+    }
+
     // If store is already marked uninstalled, drop event
     if (connection.status === 'UNINSTALLED') {
       return NextResponse.json({ received: true, status: 'store_uninstalled' }, { status: 200 });
