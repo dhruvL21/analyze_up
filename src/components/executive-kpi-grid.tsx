@@ -26,8 +26,8 @@ export function ExecutiveKPIGrid() {
           title: 'Total Revenue',
           value: `${currencySymbol}${Math.round(rev).toLocaleString('en-IN')}`,
           rawValue: rev,
-          change: '+14%',
-          isPositiveChange: true,
+          change: rev > 0 ? '+14%' : '0%',
+          isPositiveChange: rev >= 0,
           interpretation: rev > 0 ? 'Strong sell-through rate in primary categories.' : 'Awaiting first sales transactions.',
         },
         {
@@ -35,16 +35,18 @@ export function ExecutiveKPIGrid() {
           title: 'Inventory Value',
           value: `${currencySymbol}${Math.round(inv).toLocaleString('en-IN')}`,
           rawValue: inv,
-          change: '+5%',
-          isPositiveChange: true,
-          interpretation: `${analyticsSummary.totalProducts.toLocaleString()} active SKUs valuation in warehouse.`,
+          change: inv > 0 ? '+5%' : '0%',
+          isPositiveChange: inv >= 0,
+          interpretation: analyticsSummary.totalProducts > 0
+            ? `${analyticsSummary.totalProducts.toLocaleString()} active SKUs valuation in warehouse.`
+            : '0 active SKUs in warehouse.',
         },
         {
           key: 'net_profit',
           title: 'Net Gross Profit',
           value: `${currencySymbol}${Math.round(profit).toLocaleString('en-IN')}`,
           rawValue: profit,
-          change: profit >= 0 ? '+18%' : '-4%',
+          change: profit > 0 ? '+18%' : (profit < 0 ? '-4%' : '0%'),
           isPositiveChange: profit >= 0,
           interpretation: rev > 0 ? `${Math.round((profit / rev) * 100)}% gross margin retained.` : 'Calculated after COGS deduction.',
         },
@@ -53,9 +55,11 @@ export function ExecutiveKPIGrid() {
           title: 'Total Sales Cycles',
           value: ordersCount.toLocaleString(),
           rawValue: ordersCount,
-          change: '+8%',
+          change: ordersCount > 0 ? '+8%' : '0%',
           isPositiveChange: true,
-          interpretation: `${ordersCount.toLocaleString()} customer sale transactions processed.`,
+          interpretation: ordersCount > 0
+            ? `${ordersCount.toLocaleString()} customer sale transactions processed.`
+            : 'Awaiting first sales transactions.',
         },
       ];
     }

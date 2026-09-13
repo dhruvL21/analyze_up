@@ -566,8 +566,8 @@ export function computeExecutiveKPIs(
       title: 'Total Revenue',
       value: `${currencySymbol}${Math.round(totalSalesVal).toLocaleString('en-IN')}`,
       rawValue: totalSalesVal,
-      change: '+14%',
-      isPositiveChange: true,
+      change: totalSalesVal > 0 ? '+14%' : '0%',
+      isPositiveChange: totalSalesVal >= 0,
       interpretation: totalSalesVal > 0 ? 'Strong sell-through rate in primary categories.' : 'Awaiting first sales transactions.',
     },
     {
@@ -575,16 +575,18 @@ export function computeExecutiveKPIs(
       title: 'Inventory Value',
       value: `${currencySymbol}${Math.round(totalInventoryVal).toLocaleString('en-IN')}`,
       rawValue: totalInventoryVal,
-      change: '+5%',
-      isPositiveChange: true,
-      interpretation: `${products.length} active SKUs valuation in warehouse.`,
+      change: totalInventoryVal > 0 ? '+5%' : '0%',
+      isPositiveChange: totalInventoryVal >= 0,
+      interpretation: products.length > 0
+        ? `${products.length} active SKUs valuation in warehouse.`
+        : '0 active SKUs in warehouse.',
     },
     {
       key: 'net_profit',
       title: 'Net Gross Profit',
       value: `${currencySymbol}${Math.round(totalProfit).toLocaleString('en-IN')}`,
       rawValue: totalProfit,
-      change: totalProfit >= 0 ? '+18%' : '-4%',
+      change: totalProfit > 0 ? '+18%' : (totalProfit < 0 ? '-4%' : '0%'),
       isPositiveChange: totalProfit >= 0,
       interpretation: totalSalesVal > 0 ? `${Math.round((totalProfit / totalSalesVal) * 100)}% gross margin retained.` : 'Calculated after COGS deduction.',
     },
@@ -593,9 +595,11 @@ export function computeExecutiveKPIs(
       title: 'Total Sales Cycles',
       value: totalOrdersCount.toString(),
       rawValue: totalOrdersCount,
-      change: '+8%',
+      change: totalOrdersCount > 0 ? '+8%' : '0%',
       isPositiveChange: true,
-      interpretation: `${totalOrdersCount} customer sale orders processed.`,
+      interpretation: totalOrdersCount > 0
+        ? `${totalOrdersCount} customer sale orders processed.`
+        : 'Awaiting first sales transactions.',
     },
   ];
 }

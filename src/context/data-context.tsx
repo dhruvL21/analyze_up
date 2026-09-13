@@ -273,7 +273,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         .then((snap) => {
           if (snap.exists()) {
             const intData = snap.data();
-            if (intData?.connectionStatus === 'Connected' || intData?.accessToken) {
+            if (intData?.connectionStatus === 'Connected' && Boolean(intData?.accessToken)) {
               setBusinessProfile((prev) => {
                 const merged: BusinessProfile = {
                   ...(prev || {}),
@@ -293,6 +293,21 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                 businessProfileRef.current = merged;
                 return merged;
               });
+            } else if (intData?.connectionStatus === 'Disconnected' || intData?.connectionStatus === 'Uninstalled' || !intData?.accessToken) {
+              setBusinessProfile((prev) => {
+                const merged: BusinessProfile = {
+                  ...(prev || {}),
+                  shopifyConnected: false,
+                  shopifyStatus: 'Disconnected',
+                  shopifyStoreUrl: '',
+                  shopifyStoreName: '',
+                  shopifyAccessToken: '',
+                  shopifyAutoSyncEnabled: false,
+                  shopifyRealtimeSyncEnabled: false,
+                };
+                businessProfileRef.current = merged;
+                return merged;
+              });
             }
           }
         })
@@ -308,6 +323,132 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }, 2000);
     return () => clearTimeout(timer);
   }, [firestore, user, products]);
+
+  // Automatically reconcile and purge orphaned Shopify sales cycles / products when store is disconnected
+  useEffect(() => {
+    if (!firestore || !user || !businessProfile) return;
+    const isShopifyDisconnected =
+      businessProfile.shopifyConnected === false ||
+      businessProfile.shopifyStatus === 'Disconnected' ||
+      businessProfile.shopifyStatus === 'Uninstalled' ||
+      !businessProfile.shopifyStoreUrl ||
+      !businessProfile.shopifyAccessToken;
+
+    if (!isShopifyDisconnected) return;
+
+    const timer = setTimeout(async () => {
+      try {
+        const uid = user.uid;
+        const txSnap = await getDocs(collection(firestore, 'users', uid, 'transactions')).catch(() => ({ docs: [] } as any));
+        const sumRef = doc(firestore, 'users', uid, 'analytics', 'summary');
+        const productsSnap = await getDocs(collection(firestore, 'users', uid, 'products')).catch(() => ({ docs: [] } as any));
+
+        const shopifyProductDocs = productsSnap.docs.filter((d: any) => {
+          const data = d.data() || {};
+          return (
+            data.source?.toUpperCase() === 'SHOPIFY' ||
+            d.id.startsWith('shopify_') ||
+            d.id.includes('shopify') ||
+            (typeof data.id === 'string' && (data.id.startsWith('shopify_') || data.id.includes('shopify'))) ||
+            Boolean(data.shopifyProductId) ||
+            Boolean(data.shopifyVariantId) ||
+            (typeof data.sku === 'string' && data.sku.toUpperCase().startsWith('SHOPIFY-')) ||
+            (typeof data.supplier === 'string' && data.supplier.toLowerCase().includes('shopify'))
+          );
+        });
+
+        const deletedProductDocIds = new Set<string>(shopifyProductDocs.map((d: any) => d.id));
+        const deletedProductDataIds = new Set<string>(shopifyProductDocs.map((d: any) => d.data()?.id).filter(Boolean));
+        const deletedProductSkus = new Set<string>(shopifyProductDocs.map((d: any) => d.data()?.sku?.toUpperCase()).filter(Boolean));
+        const deletedProductNames = new Set<string>(shopifyProductDocs.map((d: any) => d.data()?.name?.toLowerCase()).filter(Boolean));
+        const deletedShopifyIds = new Set<string>(shopifyProductDocs.map((d: any) => String(d.data()?.shopifyProductId || '')).filter(Boolean));
+
+        const shopifyTxDocs = txSnap.docs.filter((d: any) => {
+          const data = d.data() || {};
+          const skuUpper = typeof data.sku === 'string' ? data.sku.toUpperCase() : '';
+          const nameLower = typeof data.productName === 'string' ? data.productName.toLowerCase() : '';
+          const isSourceShopify = data.source?.toUpperCase() === 'SHOPIFY';
+          const isDocShopify = d.id.startsWith('tx_shopify_') || d.id.includes('shopify') || d.id.startsWith('tx_refund_');
+          const isDataShopify = typeof data.id === 'string' && (data.id.startsWith('tx_shopify_') || data.id.includes('shopify'));
+          const isPaymentShopify = typeof data.paymentMethod === 'string' && data.paymentMethod.toLowerCase().includes('shopify');
+          const hasShopifyOrderId = Boolean(data.shopifyOrderId || data.shopifyTransactionId);
+          const matchesProdId =
+            (data.productId && (deletedProductDocIds.has(data.productId) || deletedProductDataIds.has(data.productId) || deletedShopifyIds.has(String(data.productId)))) ||
+            (data.product_id && (deletedProductDocIds.has(data.product_id) || deletedProductDataIds.has(data.product_id) || deletedShopifyIds.has(String(data.product_id))));
+          const matchesSku = skuUpper && deletedProductSkus.has(skuUpper);
+          const matchesName = nameLower && deletedProductNames.has(nameLower);
+
+          return (
+            isSourceShopify ||
+            isDocShopify ||
+            isDataShopify ||
+            isPaymentShopify ||
+            hasShopifyOrderId ||
+            matchesProdId ||
+            matchesSku ||
+            matchesName
+          );
+        });
+
+        const remainingTxDocs = txSnap.docs.filter((d: any) => !shopifyTxDocs.some((sd: any) => sd.id === d.id));
+        const remainingProdDocs = productsSnap.docs.filter((d: any) => !shopifyProductDocs.some((sp: any) => sp.id === d.id));
+
+        if (shopifyTxDocs.length > 0 || shopifyProductDocs.length > 0) {
+          const CHUNK_SIZE = 400;
+          const toDelete = [...shopifyTxDocs, ...shopifyProductDocs];
+          for (let i = 0; i < toDelete.length; i += CHUNK_SIZE) {
+            const batch = writeBatch(firestore);
+            toDelete.slice(i, i + CHUNK_SIZE).forEach((docSnap: any) => batch.delete(docSnap.ref));
+            await batch.commit().catch(console.warn);
+          }
+
+          const retSnap = await getDocs(collection(firestore, 'users', uid, 'returns')).catch(() => ({ docs: [] } as any));
+          const shopifyRetDocs = retSnap.docs.filter((d: any) => {
+            const data = d.data() || {};
+            return (
+              data.source?.toUpperCase() === 'SHOPIFY' ||
+              d.id.startsWith('ret_shopify_') ||
+              d.id.includes('shopify') ||
+              deletedProductDocIds.has(data.productId)
+            );
+          });
+          if (shopifyRetDocs.length > 0) {
+            const retBatch = writeBatch(firestore);
+            shopifyRetDocs.forEach((d: any) => retBatch.delete(d.ref));
+            await retBatch.commit().catch(console.warn);
+          }
+
+          if (remainingTxDocs.length === 0 || remainingProdDocs.length === 0) {
+            await setDoc(sumRef, DEFAULT_ANALYTICS_SUMMARY).catch(console.warn);
+            await deleteDoc(doc(firestore, 'users', uid, 'analytics', 'ai_brief')).catch(() => {});
+          } else {
+            const remProds = remainingProdDocs.map((d: any) => ({ id: d.id, ...d.data() }));
+            const remTxs = remainingTxDocs.map((d: any) => ({ id: d.id, ...d.data() }));
+            await recalculateAndSaveAnalyticsSummary(firestore, uid, {
+              products: remProds,
+              transactions: remTxs,
+              suppliers,
+              orders,
+              returns,
+            }).catch(console.warn);
+          }
+        } else if (txSnap.docs.length === 0 || remainingTxDocs.length === 0) {
+          const sumSnap = await getDoc(sumRef).catch(() => null);
+          if (sumSnap && sumSnap.exists()) {
+            const sumData = sumSnap.data();
+            if (sumData?.totalTransactions > 0 || sumData?.totalRevenue > 0) {
+              await setDoc(sumRef, DEFAULT_ANALYTICS_SUMMARY).catch(console.warn);
+              await deleteDoc(doc(firestore, 'users', uid, 'analytics', 'ai_brief')).catch(() => {});
+            }
+          }
+        }
+      } catch (reconcileErr) {
+        console.warn('[DataContext] Disconnected Shopify auto-cleanup notice:', reconcileErr);
+      }
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [firestore, user, businessProfile?.shopifyConnected, businessProfile?.shopifyStatus, suppliers, orders, returns]);
 
   const updateBusinessProfile = useCallback(async (updates: Partial<BusinessProfile>, silent: boolean = false) => {
     if (!user) return;
@@ -999,12 +1140,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         }
         existingMapByFingerprint.set(fingerprint, t as any);
 
+        const incomingSource = (t as any).source || (String((t as any).id || '').startsWith('tx_shopify_') ? 'SHOPIFY' : 'Sync');
         operations.push({
           type: 'create',
           data: cleanObject({
             ...t,
             orderNumber: t.orderNumber || `ORD-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
-            source: (t as any).source || 'Sync',
+            source: incomingSource,
             tenantId: user.uid,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
@@ -1034,8 +1176,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           const transDocRef = doc(transactionsRef, op.id);
           batch.update(transDocRef, op.data);
         } else {
-          const newTransDocRef = doc(transactionsRef);
-          batch.set(newTransDocRef, op.data);
+          const targetDocId = (op.data as any).id || (op.data as any).transactionId;
+          const newTransDocRef = targetDocId ? doc(transactionsRef, targetDocId) : doc(transactionsRef);
+          batch.set(newTransDocRef, {
+            ...op.data,
+            id: newTransDocRef.id,
+          });
         }
       });
 
@@ -2721,7 +2867,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       if (isAuthError) {
         console.warn('[Shopify AutoSync] Store authentication requires attention:', err?.message);
         updateBusinessProfile({
+          shopifyConnected: false,
           shopifyStatus: 'Disconnected',
+          shopifyAccessToken: '',
+          shopifyAutoSyncEnabled: false,
+          shopifyRealtimeSyncEnabled: false,
         }, true).catch(() => {});
       } else if (showToast) {
         console.error('[Shopify Sync Error]:', err);
@@ -2856,35 +3006,69 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     if (purgeData) {
       try {
         const CHUNK_SIZE = 400;
+        const shopHandle = shop ? shop.replace('.myshopify.com', '').toLowerCase().trim() : '';
 
         // A. Products
         const productsSnap = await getDocs(collection(firestore, 'users', uid, 'products')).catch(() => ({ docs: [] } as any));
         const shopifyProductDocs = productsSnap.docs.filter((d: any) => {
-          const data = d.data();
+          const data = d.data() || {};
           return (
-            data.source === 'SHOPIFY' ||
+            data.source?.toUpperCase() === 'SHOPIFY' ||
             d.id.startsWith('shopify_') ||
+            d.id.includes('shopify') ||
+            (typeof data.id === 'string' && (data.id.startsWith('shopify_') || data.id.includes('shopify'))) ||
             Boolean(data.shopifyProductId) ||
             Boolean(data.shopifyVariantId) ||
-            (typeof data.sku === 'string' && data.sku.startsWith('SHOPIFY-')) ||
-            (typeof data.supplier === 'string' && data.supplier.toLowerCase().includes('shopify'))
+            (typeof data.sku === 'string' && data.sku.toUpperCase().startsWith('SHOPIFY-')) ||
+            (typeof data.supplier === 'string' && data.supplier.toLowerCase().includes('shopify')) ||
+            (shopHandle && typeof data.supplier === 'string' && data.supplier.toLowerCase().includes(shopHandle))
           );
         });
 
-        const deletedProductIds = new Set(shopifyProductDocs.map((d: any) => d.id));
+        const deletedProductDocIds = new Set<string>(shopifyProductDocs.map((d: any) => d.id));
+        const deletedProductDataIds = new Set<string>(shopifyProductDocs.map((d: any) => d.data()?.id).filter(Boolean));
+        const deletedProductSkus = new Set<string>(shopifyProductDocs.map((d: any) => d.data()?.sku?.toUpperCase()).filter(Boolean));
+        const deletedProductNames = new Set<string>(shopifyProductDocs.map((d: any) => d.data()?.name?.toLowerCase()).filter(Boolean));
+        const deletedShopifyProdIds = new Set<string>(shopifyProductDocs.map((d: any) => String(d.data()?.shopifyProductId || '')).filter(Boolean));
         deletedProductsCount = shopifyProductDocs.length;
 
         // B. Transactions
         const txSnap = await getDocs(collection(firestore, 'users', uid, 'transactions')).catch(() => ({ docs: [] } as any));
         const shopifyTxDocs = txSnap.docs.filter((d: any) => {
-          const data = d.data();
+          const data = d.data() || {};
+          const skuUpper = typeof data.sku === 'string' ? data.sku.toUpperCase() : '';
+          const nameLower = typeof data.productName === 'string' ? data.productName.toLowerCase() : '';
+          const isSourceShopify = data.source?.toUpperCase() === 'SHOPIFY';
+          const isDocShopifyId = d.id.startsWith('tx_shopify_') || d.id.includes('shopify') || d.id.startsWith('tx_refund_');
+          const isDataShopifyId = typeof data.id === 'string' && (data.id.startsWith('tx_shopify_') || data.id.includes('shopify'));
+          const isPaymentShopify = typeof data.paymentMethod === 'string' && data.paymentMethod.toLowerCase().includes('shopify');
+          const hasShopifyOrderId = Boolean(data.shopifyOrderId || data.shopifyTransactionId);
+          const matchesProdId =
+            (data.productId && (deletedProductDocIds.has(data.productId) || deletedProductDataIds.has(data.productId) || deletedShopifyProdIds.has(String(data.productId)))) ||
+            (data.product_id && (deletedProductDocIds.has(data.product_id) || deletedProductDataIds.has(data.product_id) || deletedShopifyProdIds.has(String(data.product_id))));
+          const matchesSku = skuUpper && deletedProductSkus.has(skuUpper);
+          const matchesName = nameLower && deletedProductNames.has(nameLower);
+          const hasShopifyOrderAttrs = Boolean(
+            data.customAttributes?.['Financial Status'] ||
+            data.rawAttributes?.['Financial Status'] ||
+            data.customAttributes?.['Lineitem name']
+          );
+          const matchesShopHandle = shopHandle && (
+            (typeof data.supplier === 'string' && data.supplier.toLowerCase().includes(shopHandle)) ||
+            (typeof data.notes === 'string' && data.notes.toLowerCase().includes(shopHandle))
+          );
+
           return (
-            data.source === 'SHOPIFY' ||
-            d.id.startsWith('tx_shopify_') ||
-            d.id.startsWith('tx_refund_') ||
-            data.paymentMethod === 'Shopify Payments' ||
-            Boolean(data.shopifyOrderId) ||
-            (data.productId && deletedProductIds.has(data.productId))
+            isSourceShopify ||
+            isDocShopifyId ||
+            isDataShopifyId ||
+            isPaymentShopify ||
+            hasShopifyOrderId ||
+            matchesProdId ||
+            matchesSku ||
+            matchesName ||
+            hasShopifyOrderAttrs ||
+            matchesShopHandle
           );
         });
         deletedTransactionsCount = shopifyTxDocs.length;
@@ -2892,13 +3076,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         // C. Returns
         const retSnap = await getDocs(collection(firestore, 'users', uid, 'returns')).catch(() => ({ docs: [] } as any));
         const shopifyRetDocs = retSnap.docs.filter((d: any) => {
-          const data = d.data();
+          const data = d.data() || {};
           return (
-            data.source === 'SHOPIFY' ||
+            data.source?.toUpperCase() === 'SHOPIFY' ||
             d.id.startsWith('ret_shopify_') ||
-            d.id.startsWith('ret_') ||
+            d.id.includes('shopify') ||
+            (typeof data.id === 'string' && (data.id.startsWith('ret_shopify_') || data.id.includes('shopify'))) ||
             Boolean(data.shopifyReturnId) ||
-            (data.productId && deletedProductIds.has(data.productId)) ||
+            deletedProductDocIds.has(data.productId) ||
             (typeof data.notes === 'string' && data.notes.toLowerCase().includes('shopify'))
           );
         });
@@ -2910,10 +3095,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         const shopifyOrderDocs = [
           ...salesOrdersSnap.docs,
           ...ordersSnap.docs.filter((d: any) => {
-            const data = d.data();
+            const data = d.data() || {};
             return (
-              data.source === 'SHOPIFY' ||
+              data.source?.toUpperCase() === 'SHOPIFY' ||
               d.id.startsWith('shopify_') ||
+              d.id.includes('shopify') ||
               d.id.startsWith('order_') ||
               Boolean(data.shopifyOrderId)
             );
@@ -2945,7 +3131,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         }
 
         // F. Clean up orphaned categories if no remaining products use them
-        const remainingProducts = products.filter((p) => !deletedProductIds.has(p.id));
+        const remainingProductDocIds = new Set(
+          productsSnap.docs.filter((d: any) => !deletedProductDocIds.has(d.id)).map((d: any) => d.id)
+        );
+        const remainingProducts = products.filter((p) => remainingProductDocIds.has(p.id));
         const remainingCategoryNames = new Set(remainingProducts.map((p) => (p.category || '').trim().toLowerCase()));
         const categoriesSnap = await getDocs(collection(firestore, 'users', uid, 'categories')).catch(() => ({ docs: [] } as any));
         const orphanedCategories = categoriesSnap.docs.filter((d: any) => {
@@ -2959,18 +3148,22 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         }
 
         // G. Recalculate or zero out analytics summary
-        if (remainingProducts.length === 0) {
+        const deletedTxIdSet = new Set(shopifyTxDocs.map((d: any) => d.id));
+        const remainingTxDocs = txSnap.docs.filter((d: any) => !deletedTxIdSet.has(d.id));
+        const remainingProdDocs = productsSnap.docs.filter((d: any) => !deletedProductDocIds.has(d.id));
+
+        if (remainingProdDocs.length === 0 || remainingTxDocs.length === 0) {
           const summaryRef = doc(firestore, 'users', uid, 'analytics', 'summary');
           await setDoc(summaryRef, DEFAULT_ANALYTICS_SUMMARY).catch(console.warn);
           await deleteDoc(doc(firestore, 'users', uid, 'analytics', 'ai_brief')).catch(() => {});
         } else {
-          const deletedTxIds = new Set(shopifyTxDocs.map((d: any) => d.id));
+          const remProds = remainingProdDocs.map((d: any) => ({ id: d.id, ...d.data() }));
+          const remTx = remainingTxDocs.map((d: any) => ({ id: d.id, ...d.data() }));
           const deletedRetIds = new Set(shopifyRetDocs.map((d: any) => d.id));
-          const remainingTx = transactions.filter((t) => !deletedTxIds.has(t.id));
           const remainingRet = returns.filter((r) => !deletedRetIds.has(r.id));
           await recalculateAndSaveAnalyticsSummary(firestore, uid, {
-            products: remainingProducts,
-            transactions: remainingTx,
+            products: remProds,
+            transactions: remTx,
             suppliers,
             orders,
             returns: remainingRet,

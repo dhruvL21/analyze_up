@@ -22,6 +22,7 @@ import type {
 } from './types';
 import { sanitizeShopDomain } from './config';
 import { encryptShopifyToken } from './crypto';
+import { DEFAULT_ANALYTICS_SUMMARY } from '@/lib/analytics-aggregator';
 
 // ============================================================================
 // Level 1 & 2: Durable In-Memory & Local File Cache Layer
@@ -547,6 +548,8 @@ export async function getShopifyConnectionByTenant(tenantId: string): Promise<Sh
 async function purgeTenantShopifyData(db: any, tenantId: string, shop?: string | null): Promise<void> {
   if (!db || !tenantId) return;
   try {
+    const shopHandle = shop ? shop.replace('.myshopify.com', '').toLowerCase().trim() : '';
+
     const collectionsToClean = ['sales_orders', 'refunds', 'inventory'];
     for (const col of collectionsToClean) {
       const snap = await db.collection('users').doc(tenantId).collection(col).get();
@@ -557,20 +560,38 @@ async function purgeTenantShopifyData(db: any, tenantId: string, shop?: string |
       }
     }
 
-    // Products
+    // 1. Products - track all deleted identifiers for correlating transactions
+    const deletedProductDocIds = new Set<string>();
+    const deletedProductDataIds = new Set<string>();
+    const deletedProductSkus = new Set<string>();
+    const deletedProductNames = new Set<string>();
+    const deletedShopifyIds = new Set<string>();
+
     const prodSnap = await db.collection('users').doc(tenantId).collection('products').get();
     if (!prodSnap.empty) {
       const batch = db.batch();
       let hasShopifyProds = false;
       prodSnap.docs.forEach((d: any) => {
-        const data = d.data();
-        if (
-          data.source === 'SHOPIFY' ||
+        const data = d.data() || {};
+        const isShopify =
+          data.source?.toUpperCase() === 'SHOPIFY' ||
           d.id.startsWith('shopify_') ||
-          data.shopifyProductId ||
-          data.shopifyVariantId ||
-          (typeof data.sku === 'string' && data.sku.startsWith('SHOPIFY-'))
-        ) {
+          d.id.includes('shopify') ||
+          (typeof data.id === 'string' && (data.id.startsWith('shopify_') || data.id.includes('shopify'))) ||
+          Boolean(data.shopifyProductId) ||
+          Boolean(data.shopifyVariantId) ||
+          (typeof data.sku === 'string' && data.sku.toUpperCase().startsWith('SHOPIFY-')) ||
+          (typeof data.supplier === 'string' && data.supplier.toLowerCase().includes('shopify')) ||
+          (shopHandle && typeof data.supplier === 'string' && data.supplier.toLowerCase().includes(shopHandle));
+
+        if (isShopify) {
+          deletedProductDocIds.add(d.id);
+          if (data.id) deletedProductDataIds.add(data.id);
+          if (data.sku) deletedProductSkus.add(String(data.sku).toUpperCase());
+          if (data.name) deletedProductNames.add(String(data.name).toLowerCase());
+          if (data.shopifyProductId) deletedShopifyIds.add(String(data.shopifyProductId));
+          if (data.shopifyVariantId) deletedShopifyIds.add(String(data.shopifyVariantId));
+
           batch.delete(d.ref);
           hasShopifyProds = true;
         }
@@ -578,41 +599,73 @@ async function purgeTenantShopifyData(db: any, tenantId: string, shop?: string |
       if (hasShopifyProds) await batch.commit().catch(console.warn);
     }
 
-    // Transactions
+    // 2. Transactions - correlate by source, doc ID, data ID, payment method, order ID, product ID, SKU, product name, shop handle
     const txSnap = await db.collection('users').doc(tenantId).collection('transactions').get();
+    const totalTxCount = txSnap.docs ? txSnap.docs.length : (txSnap.size || 0);
+    let remainingTxCount = totalTxCount;
+    let hasShopifyTx = false;
     if (!txSnap.empty) {
       const batch = db.batch();
-      let hasShopifyTx = false;
       txSnap.docs.forEach((d: any) => {
-        const data = d.data();
+        const data = d.data() || {};
+        const skuUpper = typeof data.sku === 'string' ? data.sku.toUpperCase() : '';
+        const nameLower = typeof data.productName === 'string' ? data.productName.toLowerCase() : '';
+        const isSourceShopify = data.source?.toUpperCase() === 'SHOPIFY';
+        const isDocShopify = d.id.startsWith('tx_shopify_') || d.id.includes('shopify') || d.id.startsWith('tx_refund_');
+        const isDataShopify = typeof data.id === 'string' && (data.id.startsWith('tx_shopify_') || data.id.includes('shopify'));
+        const isPaymentShopify = typeof data.paymentMethod === 'string' && data.paymentMethod.toLowerCase().includes('shopify');
+        const hasShopifyOrderId = Boolean(data.shopifyOrderId || data.shopifyTransactionId);
+        const matchesProdId =
+          (data.productId && (deletedProductDocIds.has(data.productId) || deletedProductDataIds.has(data.productId) || deletedShopifyIds.has(String(data.productId)))) ||
+          (data.product_id && (deletedProductDocIds.has(data.product_id) || deletedProductDataIds.has(data.product_id) || deletedShopifyIds.has(String(data.product_id))));
+        const matchesSku = skuUpper && deletedProductSkus.has(skuUpper);
+        const matchesName = nameLower && deletedProductNames.has(nameLower);
+        const hasShopifyOrderAttrs = Boolean(
+          data.customAttributes?.['Financial Status'] ||
+          data.rawAttributes?.['Financial Status'] ||
+          data.customAttributes?.['Lineitem name']
+        );
+        const matchesShopHandle = shopHandle && (
+          (typeof data.supplier === 'string' && data.supplier.toLowerCase().includes(shopHandle)) ||
+          (typeof data.notes === 'string' && data.notes.toLowerCase().includes(shopHandle))
+        );
+
         if (
-          data.source === 'SHOPIFY' ||
-          d.id.startsWith('tx_shopify_') ||
-          d.id.startsWith('tx_refund_') ||
-          data.paymentMethod === 'Shopify Payments' ||
-          data.shopifyOrderId
+          isSourceShopify ||
+          isDocShopify ||
+          isDataShopify ||
+          isPaymentShopify ||
+          hasShopifyOrderId ||
+          matchesProdId ||
+          matchesSku ||
+          matchesName ||
+          hasShopifyOrderAttrs ||
+          matchesShopHandle
         ) {
           batch.delete(d.ref);
           hasShopifyTx = true;
+          remainingTxCount--;
         }
       });
       if (hasShopifyTx) await batch.commit().catch(console.warn);
     }
 
-    // Returns
+    // 3. Returns
     const retSnap = await db.collection('users').doc(tenantId).collection('returns').get();
     if (!retSnap.empty) {
       const batch = db.batch();
       let hasShopifyRet = false;
       retSnap.docs.forEach((d: any) => {
-        const data = d.data();
-        if (
-          data.source === 'SHOPIFY' ||
+        const data = d.data() || {};
+        const isShopify =
+          data.source?.toUpperCase() === 'SHOPIFY' ||
           d.id.startsWith('ret_shopify_') ||
           d.id.startsWith('ret_') ||
           data.shopifyReturnId ||
-          (typeof data.notes === 'string' && data.notes.toLowerCase().includes('shopify'))
-        ) {
+          deletedProductDocIds.has(data.productId) ||
+          (typeof data.notes === 'string' && data.notes.toLowerCase().includes('shopify'));
+
+        if (isShopify) {
           batch.delete(d.ref);
           hasShopifyRet = true;
         }
@@ -620,10 +673,17 @@ async function purgeTenantShopifyData(db: any, tenantId: string, shop?: string |
       if (hasShopifyRet) await batch.commit().catch(console.warn);
     }
 
-    // Integration doc
+    // 4. Reset or zero out analytics summary
+    const totalProdsCount = prodSnap.docs ? prodSnap.docs.length : (prodSnap.size || 0);
+    const remainingProdsCount = totalProdsCount - deletedProductDocIds.size;
+    if (remainingTxCount <= 0 || remainingProdsCount <= 0 || (hasShopifyTx && remainingTxCount === 0)) {
+      await db.collection('users').doc(tenantId).collection('analytics').doc('summary').set(DEFAULT_ANALYTICS_SUMMARY).catch(console.warn);
+      await db.collection('users').doc(tenantId).collection('analytics').doc('ai_brief').delete().catch(() => {});
+    }
+
+    // 5. Integration doc & store lookup
     await db.collection('users').doc(tenantId).collection('integrations').doc('shopify').delete().catch(console.warn);
 
-    // Store lookup
     if (shop) {
       await db.collection('shopify_stores').doc(shop).delete().catch(console.warn);
     }

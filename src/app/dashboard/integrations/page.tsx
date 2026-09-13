@@ -213,19 +213,15 @@ export default function IntegrationsPage() {
 
   // Shopify integration states
   const isShopifyConnected = Boolean(
-    businessProfile?.shopifyConnected || businessProfile?.shopifyStatus === 'Connected'
+    businessProfile?.shopifyConnected &&
+    businessProfile?.shopifyStatus !== 'Disconnected' &&
+    businessProfile?.shopifyStatus !== 'Uninstalled' &&
+    businessProfile?.shopifyStoreUrl
   );
   const [showShopifyScheduleModal, setShowShopifyScheduleModal] = useState(false);
   const [isShopifyDisconnecting, setIsShopifyDisconnecting] = useState(false);
 
   const handleDisconnectShopify = async () => {
-    if (
-      !window.confirm(
-        'Are you sure you want to disconnect Shopify? All products, orders, and synchronized data imported from Shopify will be permanently deleted from your workspace.'
-      )
-    ) {
-      return;
-    }
     try {
       setIsShopifyDisconnecting(true);
       const result = await disconnectShopify({ purgeData: true });

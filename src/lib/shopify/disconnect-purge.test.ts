@@ -57,7 +57,7 @@ vi.mock('@/lib/firebase/admin', () => {
             });
           }
         }
-        return { empty: docs.length === 0, docs };
+        return { empty: docs.length === 0, docs, size: docs.length };
       },
     }),
     get: async () => {
@@ -71,7 +71,7 @@ vi.mock('@/lib/firebase/admin', () => {
           });
         }
       }
-      return { empty: docs.length === 0, docs };
+      return { empty: docs.length === 0, docs, size: docs.length };
     },
   });
 
@@ -237,4 +237,90 @@ describe('Shopify Disconnect & Data Purge Suite', () => {
     expect(updatedConn?.encryptedAccessToken).toBeNull();
     expect(mockAdminStore.has(`users/${tenantId}/products/shopify_prod_2`)).toBe(false);
   });
+
+  it('purges transactions with auto-generated random doc IDs, custom payment methods (UPI/COD), and resets analytics summary', async () => {
+    // Set active connection
+    const record: ShopifyConnectionRecord = {
+      id: `conn_${tenantId}_${shop}`,
+      tenantId,
+      shopDomain: shop,
+      encryptedAccessToken: encryptShopifyToken('shpat_active_test'),
+      encryptedRefreshToken: null,
+      accessTokenExpiresAt: null,
+      refreshTokenExpiresAt: null,
+      lastTokenRefreshAt: null,
+      status: 'ACTIVE',
+      requestedScopes: ['read_products'],
+      grantedScopes: ['read_products'],
+      missingScopes: [],
+      storeName: 'Test Merchant',
+      currency: 'INR',
+      primaryLocationId: null,
+      installedAt: new Date().toISOString(),
+      uninstalledAt: null,
+      lastSyncAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    await saveShopifyConnection(record);
+
+    // Products
+    mockAdminStore.set(`users/${tenantId}/products/shopify_9876543210_123456`, {
+      id: 'shopify_9876543210_123456',
+      shopifyProductId: '9876543210',
+      shopifyVariantId: '123456',
+      sku: 'SNK-ELV12-07',
+      name: 'Elevate Running Shoes',
+      source: 'SHOPIFY',
+      stock: 0,
+      price: 18320,
+    });
+
+    // 2 transactions with auto-generated Firestore IDs (e.g. random hash), custom payment methods, matching SKU
+    mockAdminStore.set(`users/${tenantId}/transactions/random_auto_id_999a`, {
+      id: 'tx_shopify_order_1001_item_1',
+      productId: '9876543210', // Raw Shopify numeric ID
+      sku: 'SNK-ELV12-07',
+      productName: 'Elevate Running Shoes',
+      source: 'SHOPIFY',
+      paymentMethod: 'UPI',
+      totalRevenue: 18320,
+      type: 'Sale',
+    });
+    mockAdminStore.set(`users/${tenantId}/transactions/random_auto_id_999b`, {
+      id: 'tx_shopify_order_1002_item_1',
+      productId: '9876543210',
+      sku: 'SNK-ELV12-07',
+      productName: 'Elevate Running Shoes',
+      source: 'SHOPIFY',
+      paymentMethod: 'Cash on Delivery',
+      totalRevenue: 18320,
+      type: 'Sale',
+    });
+
+    // Existing analytics summary with 41 transactions
+    mockAdminStore.set(`users/${tenantId}/analytics/summary`, {
+      totalProducts: 14,
+      totalTransactions: 41,
+      totalRevenue: 751185,
+      grossProfit: 300477,
+      inventoryValuation: 0,
+      healthScore: 85,
+    });
+
+    // Disconnect Shopify
+    await markShopifyDisconnected(shop, tenantId, true);
+
+    // Verify products and transactions with random auto-IDs are purged
+    expect(mockAdminStore.has(`users/${tenantId}/products/shopify_9876543210_123456`)).toBe(false);
+    expect(mockAdminStore.has(`users/${tenantId}/transactions/random_auto_id_999a`)).toBe(false);
+    expect(mockAdminStore.has(`users/${tenantId}/transactions/random_auto_id_999b`)).toBe(false);
+
+    // Verify analytics summary was reset to clean zero-state
+    const summary = mockAdminStore.get(`users/${tenantId}/analytics/summary`);
+    expect(summary).toBeDefined();
+    expect(summary?.totalTransactions).toBe(0);
+    expect(summary?.totalRevenue).toBe(0);
+  });
 });
+
