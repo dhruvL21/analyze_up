@@ -1,7 +1,9 @@
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 
 export async function getValidAccessToken(userId: string, firestore: any): Promise<string | null> {
-  const connectionRef = doc(firestore, 'users', userId, 'integrations', 'google-drive');
+  const cleanUserId = userId && String(userId).trim();
+  if (!cleanUserId || !firestore) return null;
+  const connectionRef = doc(firestore, 'users', cleanUserId, 'integrations', 'google-drive');
   const snap = await getDoc(connectionRef);
   
   if (!snap.exists()) return null;
@@ -17,7 +19,7 @@ export async function getValidAccessToken(userId: string, firestore: any): Promi
   }
   
   if (!refreshToken) {
-    console.warn('Refresh token missing for user:', userId);
+    console.warn('Refresh token missing for user:', cleanUserId);
     return null;
   }
   
@@ -93,8 +95,9 @@ export async function getClientDriveToken(driveConnection: any, user: any, fires
     const newAccessToken = tokenData.accessToken;
     const expiresIn = tokenData.expiresIn || 3600;
 
-    if (user && firestore) {
-      const connectionRef = doc(firestore, 'users', user.uid, 'integrations', 'google-drive');
+    const cleanUid = user?.uid && String(user.uid).trim();
+    if (cleanUid && firestore) {
+      const connectionRef = doc(firestore, 'users', cleanUid, 'integrations', 'google-drive');
       await updateDoc(connectionRef, {
         accessToken: newAccessToken,
         tokenExpiry: Date.now() + expiresIn * 1000,

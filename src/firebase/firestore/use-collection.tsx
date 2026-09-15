@@ -45,10 +45,12 @@ export function useCollection<T>(ref: Query | CollectionReference | null) {
             recordsRef.current.delete(change.doc.id);
             return;
           }
+          const rawDocData = (change.doc.data() || {}) as Record<string, any>;
+          const cleanDocId = change.doc.id || rawDocData.id || '';
           recordsRef.current.set(change.doc.id, serializePlainData<T>({
-            id: change.doc.id,
-            ...change.doc.data(),
-          }));
+            ...rawDocData,
+            id: cleanDocId,
+          } as T));
         });
 
         receivedInitialSnapshot = true;

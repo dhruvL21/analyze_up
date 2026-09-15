@@ -48,6 +48,7 @@ import {
   generateOrderLineItemKey,
   normalizeOrderNumber,
 } from '@/lib/ingestion/order-deduplication-engine';
+import { generateProductDocId, generateTransactionDocId } from '@/lib/import-job-service';
 import Papa from 'papaparse';
 import {
   ShoppingBag,
@@ -326,10 +327,34 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
         setAutoSyncFrequency(conn.autoSyncFrequency || 'daily');
         setAutoSyncTime(conn.autoSyncTime || '09:00');
         setAutoSyncDay(conn.autoSyncDay || 'monday');
+      } else {
+        setDriveFiles([]);
+        setDriveFolders([]);
+        setSyncHistory([]);
+        setSyncStats({ filesCount: 0, rowsCount: 0, duplicatesCount: 0, errorsCount: 0 });
       }
     });
 
-    return () => unsubscribe();
+    const handleReset = () => {
+      setDriveConnection(null);
+      setDriveFiles([]);
+      setDriveFolders([]);
+      setSyncHistory([]);
+      setSyncStats({ filesCount: 0, rowsCount: 0, duplicatesCount: 0, errorsCount: 0 });
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('analyzeup_workspace_reset', handleReset);
+      window.addEventListener('analyzeup_integrations_reset', handleReset);
+    }
+
+    return () => {
+      unsubscribe();
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('analyzeup_workspace_reset', handleReset);
+        window.removeEventListener('analyzeup_integrations_reset', handleReset);
+      }
+    };
   }, [subscribeGoogleDriveConnection]);
 
   const loadStats = useCallback(async () => {
@@ -464,12 +489,13 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
       });
 
       // 1. Immediately persist to client Firestore with user credentials (works in serverless/Vercel)
-      if (accessTokenFromOauth && user && firestore) {
-        const connectionRef = doc(firestore, 'users', user.uid, 'integrations', 'shopify');
+      const cleanUid = user?.uid && String(user.uid).trim();
+      if (accessTokenFromOauth && cleanUid && firestore) {
+        const connectionRef = doc(firestore, 'users', cleanUid, 'integrations', 'shopify');
         setDoc(
           connectionRef,
           {
-            userId: user.uid,
+            userId: cleanUid,
             provider: 'shopify',
             shopDomain: connectedShop,
             storeName,
@@ -482,17 +508,20 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
         ).catch(console.warn);
 
         // Store lookup index
-        const storeLookupRef = doc(firestore, 'shopify_stores', connectedShop);
-        setDoc(
-          storeLookupRef,
-          {
-            userId: user.uid,
-            shopDomain: connectedShop,
-            storeName,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        ).catch(console.warn);
+        const cleanShop = connectedShop && String(connectedShop).trim();
+        if (cleanShop) {
+          const storeLookupRef = doc(firestore, 'shopify_stores', cleanShop);
+          setDoc(
+            storeLookupRef,
+            {
+              userId: cleanUid,
+              shopDomain: cleanShop,
+              storeName,
+              updatedAt: new Date().toISOString(),
+            },
+            { merge: true }
+          ).catch(console.warn);
+        }
       }
 
       // 2. Synchronize businessProfile state immediately
@@ -545,11 +574,13 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
         const shopifyData = JSON.parse(decodedStr);
 
         const saveShopifyConnection = async () => {
-          const connectionRef = doc(firestore, 'users', user.uid, 'integrations', 'shopify');
+          const cleanUid = user?.uid && String(user.uid).trim();
+          if (!cleanUid || !firestore) return;
+          const connectionRef = doc(firestore, 'users', cleanUid, 'integrations', 'shopify');
           await setDoc(
             connectionRef,
             {
-              userId: user.uid,
+              userId: cleanUid,
               provider: 'shopify',
               shopDomain: shopifyData.shopDomain,
               storeName: shopifyData.storeName,
@@ -564,13 +595,16 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
           );
 
           // Save store lookup index for instant real-time webhook routing
-          const storeLookupRef = doc(firestore, 'shopify_stores', shopifyData.shopDomain);
-          await setDoc(storeLookupRef, {
-            userId: user.uid,
-            shopDomain: shopifyData.shopDomain,
-            storeName: shopifyData.storeName,
-            updatedAt: new Date().toISOString(),
-          }, { merge: true }).catch(console.warn);
+          const cleanDomain = shopifyData.shopDomain && String(shopifyData.shopDomain).trim();
+          if (cleanDomain) {
+            const storeLookupRef = doc(firestore, 'shopify_stores', cleanDomain);
+            await setDoc(storeLookupRef, {
+              userId: cleanUid,
+              shopDomain: cleanDomain,
+              storeName: shopifyData.storeName,
+              updatedAt: new Date().toISOString(),
+            }, { merge: true }).catch(console.warn);
+          }
 
           // Register real-time webhooks with Shopify Admin API
           fetch('/api/shopify/webhooks/register', {
@@ -616,7 +650,9 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
         const oauthData = JSON.parse(decodedStr);
 
         const saveConnection = async () => {
-          const connectionRef = doc(firestore, 'users', user.uid, 'integrations', 'google-drive');
+          const cleanUid = user?.uid && String(user.uid).trim();
+          if (!cleanUid || !firestore) return;
+          const connectionRef = doc(firestore, 'users', cleanUid, 'integrations', 'google-drive');
           const connectionSnap = await getDoc(connectionRef);
           const existingData = connectionSnap.exists() ? connectionSnap.data() : null;
 
@@ -625,7 +661,7 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
           await setDoc(
             connectionRef,
             {
-              userId: user.uid,
+              userId: cleanUid,
               provider: 'google-drive',
               googleEmail: oauthData.googleEmail || '',
               googleAccountId: oauthData.googleAccountId || '',
@@ -701,8 +737,9 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
           }, true);
         } else if (data && data.connected === false) {
           // Verify with client Firestore before resetting
-          if (firestore && user) {
-            const clientDoc = await getDoc(doc(firestore, 'users', user.uid, 'integrations', 'shopify'));
+          const cleanUid = user?.uid && String(user.uid).trim();
+          if (firestore && cleanUid) {
+            const clientDoc = await getDoc(doc(firestore, 'users', cleanUid, 'integrations', 'shopify'));
             if (clientDoc.exists()) {
               const cData = clientDoc.data();
               if (cData?.connectionStatus === 'Connected' || cData?.accessToken) {
@@ -808,8 +845,9 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
       });
       const data = await res.json();
       if (res.ok && data.success) {
-        if (firestore) {
-          const connectionRef = doc(firestore, 'users', user.uid, 'integrations', 'google-drive');
+        const cleanUid = user?.uid && String(user.uid).trim();
+        if (firestore && cleanUid) {
+          const connectionRef = doc(firestore, 'users', cleanUid, 'integrations', 'google-drive');
           await updateDoc(connectionRef, {
             selectedFolderId: data.folderId,
             selectedFolderName: data.folderName,
@@ -847,11 +885,13 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
     showNotification: boolean = true
   ) => {
     if (!user) return;
+    const safeFileId = (fileId && String(fileId).trim()) || `file_${Date.now()}`;
+    const safeFileName = (fileName && String(fileName).trim()) || 'Synced Document';
     try {
       setSyncProgress({
-        stage: `Parsing "${fileName}"...`,
+        stage: `Parsing "${safeFileName}"...`,
         percent: 25,
-        fileName,
+        fileName: safeFileName,
       });
 
       const results = Papa.parse(csvContent, { header: true, skipEmptyLines: true });
@@ -1006,7 +1046,11 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
       validRows.forEach(r => {
         const skuKey = (r.parsed.sku || r.parsed.name || '').trim().toUpperCase();
         if (!uniqueProductsMap.has(skuKey)) {
+          const resolved = resolveExistingProduct(products, r.parsed.sku, r.parsed.name);
+          const resolvedId = (resolved.existingProduct?.id && String(resolved.existingProduct.id).trim()) || generateProductDocId(r.parsed.sku, r.parsed.name);
+
           uniqueProductsMap.set(skuKey, {
+            id: resolvedId,
             name: r.parsed.name,
             sku: r.parsed.sku || `SKU-${r.parsed.name.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 10)}`,
             description: r.parsed.description || `Imported ${r.parsed.name}`,
@@ -1016,7 +1060,7 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
             supplierId: existingSupMap.get((r.parsed.supplier || '').toLowerCase()) || '',
             price: r.parsed.price || 499,
             costPrice: r.parsed.costPrice && r.parsed.costPrice > 0 ? r.parsed.costPrice : Math.round((r.parsed.price || 499) * 0.6),
-            stock: r.parsed.stock !== undefined && r.parsed.stock > 0 ? r.parsed.stock : 0,
+            stock: r.parsed.stock !== undefined && r.parsed.stock > 0 ? r.parsed.stock : (resolved.existingProduct?.stock ?? 0),
             minStock: r.parsed.minStock !== undefined ? r.parsed.minStock : 0,
             maxStock: r.parsed.stock ? r.parsed.stock * 2 : 0,
             unit: r.parsed.unit || 'Piece',
@@ -1039,7 +1083,7 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
       setSyncProgress({
         stage: `Saving catalog: ${trulyNewProducts.length} new items (${skippedExistingProductCount} already present skipped)...`,
         percent: 75,
-        fileName,
+        fileName: safeFileName,
         recordsCount: trulyNewProducts.length || productsToImport.length,
       });
 
@@ -1064,7 +1108,7 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
 
         validRows.forEach((r, idx) => {
           const orderNo = r.parsed.orderNo || `INV-${(r.parsed.sku || r.parsed.name || 'ITEM').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8)}-${idx + 1}`;
-          const existingProduct = resolveExistingProduct(products, r.parsed.sku, r.parsed.name);
+          const { prodDocId, existingProduct: matchedProduct } = resolveExistingProduct(products, r.parsed.sku, r.parsed.name);
           const orderLineKey = generateOrderLineItemKey(orderNo, r.parsed.sku, r.parsed.name, r.parsed.date, r.parsed.qty);
 
           if (orderLineKey && (existingLineKeys.has(orderLineKey) || seenLineKeysInBatch.has(orderLineKey))) {
@@ -1072,9 +1116,13 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
           }
           if (orderLineKey) seenLineKeysInBatch.add(orderLineKey);
 
+          const safeProdId = (matchedProduct?.id && String(matchedProduct.id).trim()) || prodDocId || generateProductDocId(r.parsed.sku, r.parsed.name);
+          const safeTxId = generateTransactionDocId(orderNo, r.parsed.sku, r.parsed.date, idx + 1);
+
           transactionsToImport.push({
+            id: safeTxId,
             type: 'Sale' as const,
-            productId: existingProduct?.id || `prod-${(r.parsed.sku || r.parsed.name).toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+            productId: safeProdId,
             productName: r.parsed.name,
             sku: r.parsed.sku,
             quantity: r.parsed.qty || 1,
@@ -1100,7 +1148,7 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
       setSyncProgress({
         stage: 'Vectorizing business data for AI Copilot...',
         percent: 92,
-        fileName,
+        fileName: safeFileName,
         recordsCount: trulyNewProducts.length || validRows.length,
       });
 
@@ -1110,7 +1158,7 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
       setSyncProgress({
         stage: 'Updating business intelligence and health score...',
         percent: 97,
-        fileName,
+        fileName: safeFileName,
         recordsCount: trulyNewProducts.length || validRows.length,
       });
 
@@ -1118,10 +1166,10 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
 
       // Track Google Drive file and sync history via DataContext
       await recordSyncSuccess(
-        fileId,
+        safeFileId,
         {
-          id: fileId,
-          fileName,
+          id: safeFileId,
+          fileName: safeFileName,
           status: 'Synced',
           lastProcessedAt: new Date().toISOString(),
           validRows: effectiveNewCount || validRows.length,
@@ -1133,13 +1181,13 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
           filesCount: 1,
           rowsCount: effectiveNewCount || validRows.length,
           status: 'Completed',
-          files: [fileName],
+          files: [safeFileName],
         }
       );
 
       logBusinessAction({
         title: 'Google Drive Data Synced',
-        productName: fileName,
+        productName: safeFileName,
         actionType: 'audit',
         changeDetails: `Synced ${effectiveNewCount} new records from Google Drive. ${skippedExistingProductCount > 0 ? `${skippedExistingProductCount} previously imported products and their transactions skipped to avoid duplicates.` : ''}`,
         impactValue: `+${effectiveNewCount} New Records`,
@@ -1148,7 +1196,7 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('analyzeup_audit_logged'));
         window.dispatchEvent(new CustomEvent('analyzeup_tasks_updated'));
-        window.dispatchEvent(new CustomEvent('analyzeup_drive_synced', { detail: { fileName, rowsCount: effectiveNewCount || validRows.length } }));
+        window.dispatchEvent(new CustomEvent('analyzeup_drive_synced', { detail: { fileName: safeFileName, rowsCount: effectiveNewCount || validRows.length } }));
         localStorage.removeItem('analyzeup_completed_tasks');
       }
 
@@ -1184,12 +1232,15 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
   // 9. Silent Sync or Manual Mapping Ingestion Flow
   const syncFile = useCallback(async (file: any, isBackground = false) => {
     if (!user) return;
-    setIsSyncingFileId(file.id);
+    const safeFileId = (file?.id && String(file.id).trim()) || (file?.name && String(file.name).trim()) || `file_${Date.now()}`;
+    const safeFileName = (file?.name && String(file.name).trim()) || 'Synced Document';
+
+    setIsSyncingFileId(safeFileId);
     setSyncState('syncing');
     setSyncProgress({
-      stage: `Connecting to Google Drive for "${file.name}"...`,
+      stage: `Connecting to Google Drive for "${safeFileName}"...`,
       percent: 15,
-      fileName: file.name,
+      fileName: safeFileName,
     });
 
     // Safety watchdog timer: automatically close modal after 30 seconds if any edge case stalls
@@ -1203,9 +1254,9 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
       if (!token) throw new Error('Could not obtain valid Google Drive token');
 
       setSyncProgress({
-        stage: `Downloading "${file.name}" from Google Drive...`,
+        stage: `Downloading "${safeFileName}" from Google Drive...`,
         percent: 30,
-        fileName: file.name,
+        fileName: safeFileName,
       });
 
       const res = await fetch('/api/drive/sync', {
@@ -1215,7 +1266,7 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
           Authorization: `Bearer ${token}`,
           'x-user-uid': user.uid,
         },
-        body: JSON.stringify({ fileId: file.id, fileName: file.name }),
+        body: JSON.stringify({ fileId: safeFileId, fileName: safeFileName }),
       });
 
       const data = await res.json();
@@ -1226,7 +1277,7 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
       setSyncProgress({
         stage: `Processing spreadsheet content...`,
         percent: 45,
-        fileName: file.name,
+        fileName: safeFileName,
       });
 
       // Parse CSV rows
@@ -1255,17 +1306,17 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
         setSyncProgress({
           stage: `Auto-mapping ${rawRows.length} records...`,
           percent: 55,
-          fileName: file.name,
+          fileName: safeFileName,
           recordsCount: rawRows.length,
         });
 
         // Auto Sync: Run direct ingestion silently on the client side
-        await runSilentIngestion(file.id, file.name, data.csvContent, matchedProfile, !isBackground, !isBackground);
+        await runSilentIngestion(safeFileId, safeFileName, data.csvContent, matchedProfile, !isBackground, !isBackground);
         
         // Save profile in DataContext for future automatic syncs
-        await saveMappingProfile(file.id, {
-          id: `profile-${file.id}`,
-          profileName: `Auto Map for ${file.name}`,
+        await saveMappingProfile(safeFileId, {
+          id: `profile-${safeFileId}`,
+          profileName: `Auto Map for ${safeFileName}`,
           fileType: matchedProfile.fileType,
           mapping: matchedProfile.mapping,
           headersSignature: currentSignature,
@@ -1276,18 +1327,18 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
         if (!isBackground) {
           // Needs Review / Custom Mapping: Open the mapping wizard modal with preset file content
           setPresetFile({
-            name: file.name,
+            name: safeFileName,
             content: data.csvContent,
-            driveFileId: file.id
+            driveFileId: safeFileId
           });
           setIsImportDialogOpen(true);
         } else {
           // In background auto-sync, mark file as Needs Review
           await recordSyncSuccess(
-            file.id,
+            safeFileId,
             {
-              id: file.id,
-              fileName: file.name,
+              id: safeFileId,
+              fileName: safeFileName,
               status: 'Needs Review',
               lastProcessedAt: new Date().toISOString(),
               size: data.csvContent.length,
@@ -1298,7 +1349,7 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
               filesCount: 1,
               rowsCount: 0,
               status: 'Completed',
-              files: [file.name],
+              files: [safeFileName],
             }
           );
         }
@@ -1375,8 +1426,9 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
 
       // Record lastSyncAt timestamp in Firestore so the connection doc updates
       const nowIso = new Date().toISOString();
-      if (firestore && user) {
-        const connRef = doc(firestore, 'users', user.uid, 'integrations', 'google-drive');
+      const cleanUid = user?.uid && String(user.uid).trim();
+      if (firestore && cleanUid) {
+        const connRef = doc(firestore, 'users', cleanUid, 'integrations', 'google-drive');
         await updateDoc(connRef, {
           lastSyncAt: nowIso,
           lastSyncStatus: 'Success',
@@ -1454,13 +1506,14 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
     if (!user || !presetFile) return;
 
     try {
-      const fileId = presetFile.driveFileId || `custom-${Date.now()}`;
+      const fileId = (presetFile.driveFileId && String(presetFile.driveFileId).trim()) || `custom-${Date.now()}`;
+      const fileName = (presetFile.name && String(presetFile.name).trim()) || 'Imported File';
       
       // Save Mapping Profile via DataContext so that subsequent syncs run automatically
       const currentSignature = rawHeadersSignature(presetFile.content);
       await saveMappingProfile(fileId, {
         id: `profile-${fileId}`,
-        profileName: `Auto Map for ${presetFile.name}`,
+        profileName: `Auto Map for ${fileName}`,
         fileType: summary.fileType,
         headersSignature: currentSignature,
         createdAt: new Date().toISOString(),
@@ -1472,11 +1525,11 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
         fileId,
         {
           id: fileId,
-          fileName: presetFile.name,
+          fileName: fileName,
           status: 'Synced',
           lastProcessedAt: new Date().toISOString(),
           validRows: summary.importedCount,
-          size: presetFile.content.length,
+          size: presetFile.content?.length || 0,
           modifiedTime: new Date().toISOString(),
         },
         {
@@ -1484,7 +1537,7 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
           filesCount: 1,
           rowsCount: summary.importedCount,
           status: 'Completed',
-          files: [presetFile.name],
+          files: [fileName],
         }
       );
 

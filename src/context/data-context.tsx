@@ -522,8 +522,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         const batch = writeBatch(firestore);
         const chunk = demo.transactions.slice(i, i + 450);
         chunk.forEach(t => {
-          const ref = doc(firestore, 'users', uid, 'transactions', t.id);
-          batch.set(ref, cleanObject({ ...t, userId: uid }));
+          const tId = (t.id && String(t.id).trim()) || `tx-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+          const ref = doc(firestore, 'users', uid, 'transactions', tId);
+          batch.set(ref, cleanObject({ ...t, userId: uid, id: tId }));
         });
         txBatches.push(batch.commit());
       }
@@ -531,12 +532,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
       const poBatch = writeBatch(firestore);
       demo.orders.forEach(o => {
-        const ref = doc(firestore, 'users', uid, 'orders', o.id);
-        poBatch.set(ref, cleanObject({ ...o, userId: uid }));
+        const oId = (o.id && String(o.id).trim()) || `ord-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+        const ref = doc(firestore, 'users', uid, 'orders', oId);
+        poBatch.set(ref, cleanObject({ ...o, userId: uid, id: oId }));
       });
       demo.returns.forEach(r => {
-        const ref = doc(firestore, 'users', uid, 'returns', r.id);
-        poBatch.set(ref, cleanObject({ ...r, userId: uid }));
+        const rId = (r.id && String(r.id).trim()) || `ret-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+        const ref = doc(firestore, 'users', uid, 'returns', rId);
+        poBatch.set(ref, cleanObject({ ...r, userId: uid, id: rId }));
       });
       await poBatch.commit();
 
@@ -788,7 +791,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     const existingProductNameMap = new Map<string, Product>();
 
     products.forEach(p => {
-      if (p.id) existingProductByIdMap.set(p.id, p);
+      const validId = p.id && String(p.id).trim();
+      if (validId) existingProductByIdMap.set(validId, p);
       if (p.shopifyVariantId) existingProductByVariantMap.set(String(p.shopifyVariantId), p);
       if (p.shopifyProductId) existingProductByShopifyProdMap.set(String(p.shopifyProductId), p);
       if (p.sku) existingProductSkuMap.set(p.sku.trim().toUpperCase(), p);
@@ -806,9 +810,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
     productsData.forEach(productData => {
       const pAny = productData as any;
-      const docId = pAny.id ? String(pAny.id) : '';
-      const shopifyVarId = pAny.shopifyVariantId ? String(pAny.shopifyVariantId) : '';
-      const shopifyProdId = pAny.shopifyProductId ? String(pAny.shopifyProductId) : '';
+      const docId = pAny.id ? String(pAny.id).trim() : '';
+      const shopifyVarId = pAny.shopifyVariantId ? String(pAny.shopifyVariantId).trim() : '';
+      const shopifyProdId = pAny.shopifyProductId ? String(pAny.shopifyProductId).trim() : '';
       const skuUpper = (productData.sku || '').trim().toUpperCase();
       const nameLower = (productData.name || '').trim().toLowerCase();
 
@@ -847,21 +851,25 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           return;
         }
 
+        const validExistingId = (existingProduct.id && String(existingProduct.id).trim()) || '';
+        const targetId = validExistingId || (pAny.id && String(pAny.id).trim()) || generateProductDocId(productData.sku, productData.name);
+
         const updatedProduct: Product = {
           ...existingProduct,
+          id: targetId,
           ...(nameChanged ? { name: productData.name } : {}),
           ...(skuChanged ? { sku: productData.sku } : {}),
           ...(priceChanged ? { price: incomingPrice } : {}),
           ...(costChanged ? { costPrice: incomingCost } : {}),
           ...(stockChanged ? { stock: finalStock } : {}),
         };
-        if (existingProduct.id) existingProductByIdMap.set(existingProduct.id, updatedProduct);
+        existingProductByIdMap.set(targetId, updatedProduct);
         if (updatedProduct.sku) existingProductSkuMap.set(updatedProduct.sku.trim().toUpperCase(), updatedProduct);
         if (updatedProduct.name) existingProductNameMap.set(updatedProduct.name.trim().toLowerCase(), updatedProduct);
 
         operations.push({
           type: 'update',
-          id: existingProduct.id,
+          id: targetId,
           data: cleanObject({
             ...(nameChanged ? { name: productData.name } : {}),
             ...(skuChanged ? { sku: productData.sku } : {}),
@@ -879,7 +887,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         });
         updateCount++;
       } else {
-        const targetId = pAny.id || `prod_${Date.now().toString(36)}_${newCount}`;
+        const rawTargetId = pAny.id ? String(pAny.id).trim() : '';
+        const targetId = rawTargetId || generateProductDocId(productData.sku, productData.name);
         const newProductRecord: any = {
           ...productData,
           id: targetId,
@@ -890,7 +899,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           leadTimeDays: productData.leadTimeDays ?? 0,
         };
 
-        if (targetId) existingProductByIdMap.set(targetId, newProductRecord);
+        existingProductByIdMap.set(targetId, newProductRecord);
         if (skuUpper) existingProductSkuMap.set(skuUpper, newProductRecord);
         if (nameLower) existingProductNameMap.set(nameLower, newProductRecord);
         if (shopifyVarId) existingProductByVariantMap.set(shopifyVarId, newProductRecord);
@@ -925,12 +934,18 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       const batch = writeBatch(firestore);
 
       chunk.forEach(op => {
+        const validId = (op.id && String(op.id).trim()) || '';
         if (op.type === 'update') {
-          const productRef = doc(productsRef, op.id);
-          batch.update(productRef, op.data);
+          if (validId) {
+            const productRef = doc(productsRef, validId);
+            batch.set(productRef, op.data, { merge: true });
+          } else {
+            const newProductRef = doc(productsRef);
+            batch.set(newProductRef, op.data, { merge: true });
+          }
         } else {
-          const newProductRef = op.id ? doc(productsRef, op.id) : doc(productsRef);
-          batch.set(newProductRef, op.data);
+          const newProductRef = validId ? doc(productsRef, validId) : doc(productsRef);
+          batch.set(newProductRef, op.data, { merge: true });
 
           if (op.data.stock > 0) {
             const transRef = doc(transactionsRef);
@@ -980,13 +995,17 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const bulkUpdateProducts = useCallback(async (updates: (Partial<Product> & { id: string })[]) => {
     if (!firestore || !user || !productsRef) return;
 
+    const validUpdates = updates.filter(u => u && u.id && String(u.id).trim().length > 0);
+    if (validUpdates.length === 0) return;
+
     const CHUNK_SIZE = 450;
-    for (let i = 0; i < updates.length; i += CHUNK_SIZE) {
-      const chunk = updates.slice(i, i + CHUNK_SIZE);
+    for (let i = 0; i < validUpdates.length; i += CHUNK_SIZE) {
+      const chunk = validUpdates.slice(i, i + CHUNK_SIZE);
       const batch = writeBatch(firestore);
 
       chunk.forEach(update => {
-        const productRef = doc(productsRef, update.id);
+        const validId = String(update.id).trim();
+        const productRef = doc(productsRef, validId);
         batch.set(productRef, cleanObject({
           ...update,
           updatedAt: serverTimestamp(),
@@ -1007,14 +1026,18 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const bulkDeleteProducts = useCallback(async (productIds: string[]) => {
     if (!firestore || !user || productIds.length === 0) return;
 
+    const validIds = productIds.filter(id => id && String(id).trim().length > 0);
+    if (validIds.length === 0) return;
+
     const CHUNK_SIZE = 450;
     const deletePromises: Promise<void>[] = [];
 
-    for (let i = 0; i < productIds.length; i += CHUNK_SIZE) {
-      const chunk = productIds.slice(i, i + CHUNK_SIZE);
+    for (let i = 0; i < validIds.length; i += CHUNK_SIZE) {
+      const chunk = validIds.slice(i, i + CHUNK_SIZE);
       const batch = writeBatch(firestore);
       chunk.forEach(id => {
-        const productRef = doc(firestore, 'users', user.uid, 'products', id);
+        const validId = String(id).trim();
+        const productRef = doc(firestore, 'users', user.uid, 'products', validId);
         batch.delete(productRef);
       });
       deletePromises.push(
@@ -1079,7 +1102,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     let skippedCount = 0;
 
     const operations: Array<
-      | { type: 'create'; data: any }
+      | { type: 'create'; id?: string; data: any }
       | { type: 'update'; id: string; data: any }
     > = [];
 
@@ -1122,9 +1145,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           return;
         }
 
+        const validExistingId = (existing.id && String(existing.id).trim()) || '';
+        const targetId = validExistingId || (t as any).id || (t.orderNumber ? generateTransactionDocId(t.orderNumber, (t as any).sku, typeof t.transactionDate === 'string' ? t.transactionDate : undefined, updateCount) : `tx_${Date.now().toString(36)}_${updateCount}_${Math.random().toString(36).slice(2, 6)}`);
+
         operations.push({
           type: 'update',
-          id: existing.id,
+          id: targetId,
           data: cleanObject({
             ...(isStatusChanged ? { status: t.status } : {}),
             ...(isPaymentChanged ? { paymentMethod: t.paymentMethod } : {}),
@@ -1142,10 +1168,15 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         existingMapByFingerprint.set(fingerprint, t as any);
 
         const incomingSource = (t as any).source || (String((t as any).id || '').startsWith('tx_shopify_') ? 'SHOPIFY' : 'Sync');
+        const rawTargetId = ((t as any).id && String((t as any).id).trim()) || ((t as any).transactionId && String((t as any).transactionId).trim()) || '';
+        const targetDocId = rawTargetId || (t.orderNumber ? generateTransactionDocId(t.orderNumber, (t as any).sku, typeof t.transactionDate === 'string' ? t.transactionDate : undefined, newCount) : `tx_${Date.now().toString(36)}_${newCount}_${Math.random().toString(36).slice(2, 6)}`);
+
         operations.push({
           type: 'create',
+          id: targetDocId,
           data: cleanObject({
             ...t,
+            id: targetDocId,
             orderNumber: t.orderNumber || `ORD-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
             source: incomingSource,
             tenantId: user.uid,
@@ -1173,12 +1204,20 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       const batch = writeBatch(firestore);
 
       chunk.forEach(op => {
+        const validId = (op.id && String(op.id).trim()) || '';
         if (op.type === 'update') {
-          const transDocRef = doc(transactionsRef, op.id);
-          batch.update(transDocRef, op.data);
+          if (validId) {
+            const transDocRef = doc(transactionsRef, validId);
+            batch.set(transDocRef, op.data, { merge: true });
+          } else {
+            const newTransDocRef = doc(transactionsRef);
+            batch.set(newTransDocRef, {
+              ...op.data,
+              id: newTransDocRef.id,
+            });
+          }
         } else {
-          const targetDocId = (op.data as any).id || (op.data as any).transactionId;
-          const newTransDocRef = targetDocId ? doc(transactionsRef, targetDocId) : doc(transactionsRef);
+          const newTransDocRef = validId ? doc(transactionsRef, validId) : doc(transactionsRef);
           batch.set(newTransDocRef, {
             ...op.data,
             id: newTransDocRef.id,
@@ -1326,17 +1365,18 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       const batch = writeBatch(firestore);
 
       chunk.forEach(op => {
-        const returnDocRef = doc(returnsRef, op.id);
+        const validId = (op.id && String(op.id).trim()) || `ret_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+        const returnDocRef = doc(returnsRef, validId);
         if (op.type === 'update') {
-          batch.update(returnDocRef, op.data);
+          batch.set(returnDocRef, op.data, { merge: true });
         } else {
           batch.set(returnDocRef, op.data);
 
           // If restocked, update product stock in Firestore
           if (op.rawReturn.actionTaken === 'Restocked' && op.rawReturn.productId) {
             const product = products.find(p => p.id === op.rawReturn.productId || (op.rawReturn.sku && p.sku === op.rawReturn.sku));
-            if (product) {
-              const productRef = doc(firestore, 'users', user.uid, 'products', product.id);
+            if (product && product.id && String(product.id).trim()) {
+              const productRef = doc(firestore, 'users', user.uid, 'products', String(product.id).trim());
               batch.update(productRef, {
                 stock: product.stock + Math.abs(op.rawReturn.quantity || 1),
                 updatedAt: serverTimestamp(),
@@ -1347,7 +1387,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           // If refunded, record deterministic Sale adjustment transaction (negative sales!)
           if (op.rawReturn.refundStatus === 'Refunded' || op.rawReturn.refundStatus === 'Store Credit') {
             const product = products.find(p => p.id === op.rawReturn.productId || (op.rawReturn.sku && p.sku === op.rawReturn.sku));
-            const refundTxId = `tx_refund_${op.id}`;
+            const refundTxId = `tx_refund_${validId}`;
             const transRef = doc(transactionsRef, refundTxId);
             batch.set(transRef, cleanObject({
               id: refundTxId,
@@ -1425,11 +1465,36 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, [products, transactions, suppliers, orders, returns, businessProfile]);
 
   const updateProduct = useCallback(async (updatedProduct: Product, options?: { silentToast?: boolean; forceShopifySync?: boolean }) => {
-    if (!firestore || !user) return;
-    const existingProduct = products.find(p => p.id === updatedProduct.id);
-    const productRef = doc(firestore, 'users', user.uid, 'products', updatedProduct.id);
+    if (!firestore || !user || !updatedProduct?.id || !String(updatedProduct.id).trim()) return;
+    const cleanId = String(updatedProduct.id).trim();
+    const existingProduct = products.find(p => p.id === cleanId);
+    const productRef = doc(firestore, 'users', user.uid, 'products', cleanId);
+
+    const newPrice = updatedProduct.price;
+    const compareAtPrice =
+      updatedProduct.compareAtPrice !== undefined
+        ? updatedProduct.compareAtPrice
+        : (existingProduct?.compareAtPrice && existingProduct.compareAtPrice > newPrice)
+        ? existingProduct.compareAtPrice
+        : (existingProduct && existingProduct.price > newPrice)
+        ? existingProduct.price
+        : undefined;
+
+    const oldPrice =
+      compareAtPrice !== undefined
+        ? compareAtPrice
+        : existingProduct?.price !== undefined
+        ? existingProduct.price
+        : newPrice;
+
     const { id, ...updateData } = updatedProduct;
-    const dataToUpdate = cleanObject({ ...updateData, updatedAt: serverTimestamp() });
+    const dataToUpdate: any = cleanObject({
+      ...updateData,
+      price: newPrice,
+      ...(compareAtPrice !== undefined ? { compareAtPrice } : {}),
+      ...(compareAtPrice && compareAtPrice > newPrice ? { discountPercent: Math.round(((compareAtPrice - newPrice) / compareAtPrice) * 100) } : {}),
+      updatedAt: serverTimestamp(),
+    });
 
     try {
       await setDoc(productRef, dataToUpdate, { merge: true });
@@ -1444,37 +1509,39 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
 
     const isPriceChanged = Boolean(existingProduct && existingProduct.price !== updatedProduct.price);
-    const shop = businessProfile?.shopifyStoreUrl;
-    const token = businessProfile?.shopifyAccessToken;
+    const isCompareAtChanged = Boolean(compareAtPrice && compareAtPrice !== existingProduct?.compareAtPrice);
+    let shop = businessProfile?.shopifyStoreUrl;
+    let token = businessProfile?.shopifyAccessToken;
+    if ((!shop || !token) && firestore && user?.uid) {
+      try {
+        const intSnap = await getDoc(doc(firestore, 'users', user.uid, 'integrations', 'shopify'));
+        if (intSnap.exists()) {
+          const intData = intSnap.data();
+          if (intData?.shopDomain && !shop) shop = intData.shopDomain;
+          if (intData?.accessToken && !token) token = intData.accessToken;
+        }
+      } catch (err) {
+        console.warn('[DataContext] Integration lookup fallback notice:', err);
+      }
+    }
+
     const isShopifyProduct = Boolean(
       updatedProduct.shopifyProductId ||
+      existingProduct?.shopifyProductId ||
       updatedProduct.shopifyVariantId ||
+      existingProduct?.shopifyVariantId ||
       updatedProduct.source === 'shopify' ||
       updatedProduct.source === 'SHOPIFY' ||
       (typeof updatedProduct.sku === 'string' && updatedProduct.sku.startsWith('SHOPIFY-')) ||
       (typeof updatedProduct.supplier === 'string' && updatedProduct.supplier.toLowerCase().includes('shopify'))
     );
     const shouldSyncShopify = Boolean(
-      (isPriceChanged || options?.forceShopifySync) &&
+      (isPriceChanged || isCompareAtChanged || options?.forceShopifySync) &&
       (shop || isShopifyProduct || Boolean(businessProfile?.shopifyConnected))
     );
 
     // Automatically synchronize discounted price with Shopify store & backend database
     if (shouldSyncShopify) {
-      const oldPrice =
-        updatedProduct.compareAtPrice !== undefined
-          ? updatedProduct.compareAtPrice
-          : existingProduct && existingProduct.price !== updatedProduct.price
-          ? existingProduct.price
-          : existingProduct?.compareAtPrice || updatedProduct.price;
-      const newPrice = updatedProduct.price;
-      const compareAtPrice =
-        updatedProduct.compareAtPrice !== undefined
-          ? updatedProduct.compareAtPrice
-          : oldPrice > newPrice
-          ? oldPrice
-          : undefined;
-
       try {
         const res = await fetch('/api/shopify/price/update', {
           method: 'POST',
@@ -1484,11 +1551,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             accessToken: token,
             userId: user.uid,
             tenantId: user.uid,
-            productId: updatedProduct.id,
-            shopifyProductId: updatedProduct.shopifyProductId,
-            shopifyVariantId: updatedProduct.shopifyVariantId,
-            sku: updatedProduct.sku,
-            productName: updatedProduct.name,
+            productId: cleanId,
+            shopifyProductId: updatedProduct.shopifyProductId || existingProduct?.shopifyProductId,
+            shopifyVariantId: updatedProduct.shopifyVariantId || existingProduct?.shopifyVariantId,
+            sku: updatedProduct.sku || existingProduct?.sku,
+            productName: updatedProduct.name || existingProduct?.name,
             newPrice,
             oldPrice,
             compareAtPrice,
@@ -1524,7 +1591,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
 
     // Persist and recalculate analytics summary in Firestore
-    const updatedProductsList = products.map(p => p.id === updatedProduct.id ? { ...p, ...updatedProduct } : p);
+    const updatedProductsList = products.map(p => p.id === cleanId ? { ...p, ...updatedProduct, id: cleanId } : p);
     recalculateAndSaveAnalyticsSummary(firestore, user.uid, {
       products: updatedProductsList,
       transactions,
@@ -1544,8 +1611,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, [firestore, user, products, transactions, suppliers, orders, returns, businessProfile, toast]);
 
   const deleteProduct = useCallback(async (productId: string) => {
-    if (!firestore || !user) return;
-    const productRef = doc(firestore, 'users', user.uid, 'products', productId);
+    if (!firestore || !user || !productId || !String(productId).trim()) return;
+    const cleanId = String(productId).trim();
+    const productRef = doc(firestore, 'users', user.uid, 'products', cleanId);
     await deleteDoc(productRef).catch((_serverError) => {
       errorEmitter.emit('permission-error', new FirestorePermissionError({
         path: productRef.path,
@@ -1573,9 +1641,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     batch.set(newOrderRef, newOrder);
 
     // Only if explicitly created as Fulfilled (e.g. historical import), handle stock replenishment immediately
-    if (orderStatus === 'Fulfilled') {
-      const productRef = doc(firestore, 'users', user.uid, 'products', orderData.productId);
-      const product = products.find(p => p.id === orderData.productId);
+    if (orderStatus === 'Fulfilled' && orderData.productId && String(orderData.productId).trim()) {
+      const cleanProdId = String(orderData.productId).trim();
+      const productRef = doc(firestore, 'users', user.uid, 'products', cleanProdId);
+      const product = products.find(p => p.id === cleanProdId);
       if (product) {
         batch.update(productRef, {
           stock: product.stock + orderData.quantity,
@@ -1619,8 +1688,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, [firestore, user, ordersRef, suppliers, toast, products, transactionsRef]);
 
   const deleteOrder = useCallback(async (orderId: string) => {
-    if (!firestore || !user) return;
-    const orderRef = doc(firestore, 'users', user.uid, 'orders', orderId);
+    if (!firestore || !user || !orderId || !String(orderId).trim()) return;
+    const cleanId = String(orderId).trim();
+    const orderRef = doc(firestore, 'users', user.uid, 'orders', cleanId);
     await deleteDoc(orderRef).catch((_serverError) => {
       errorEmitter.emit('permission-error', new FirestorePermissionError({
         path: orderRef.path,
@@ -1631,8 +1701,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, [firestore, user, toast]);
 
   const receivePurchaseOrder = useCallback(async (orderId: string, customReceivedQty?: number) => {
-    if (!firestore || !user || !ordersRef || !transactionsRef) return;
-    const orderToUpdate = orders.find(o => o.id === orderId);
+    if (!firestore || !user || !ordersRef || !transactionsRef || !orderId || !String(orderId).trim()) return;
+    const cleanOrderId = String(orderId).trim();
+    const orderToUpdate = orders.find(o => o.id === cleanOrderId);
     if (!orderToUpdate) return;
 
     if (orderToUpdate.status === 'Fulfilled') {
@@ -1642,7 +1713,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
     const receivedQty = customReceivedQty !== undefined ? customReceivedQty : orderToUpdate.quantity;
     const batch = writeBatch(firestore);
-    const orderRef = doc(firestore, 'users', user.uid, 'orders', orderId);
+    const orderRef = doc(firestore, 'users', user.uid, 'orders', cleanOrderId);
 
     batch.update(orderRef, {
       status: 'Fulfilled',
@@ -1651,8 +1722,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     });
 
     const product = products.find(p => p.id === orderToUpdate.productId);
-    if (product) {
-      const productRef = doc(firestore, 'users', user.uid, 'products', product.id);
+    if (product && product.id && String(product.id).trim()) {
+      const productRef = doc(firestore, 'users', user.uid, 'products', String(product.id).trim());
       const newStock = (product.stock || 0) + receivedQty;
       batch.update(productRef, {
         stock: newStock,
@@ -1712,23 +1783,18 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       user.getIdToken().then((token) => {
         fetch('/api/shopify/inventory/adjust', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             shop: shopifyStore,
-            inventoryItemId: invItemId || product.id.replace('shopify_', ''),
-            locationId: 'primary',
-            delta: receivedQty,
-            reason: 'received_purchase_order',
-            purchaseOrderId: orderId,
-            receivingEventId: `rcv_${orderId}_${Date.now()}`,
+            accessToken: token,
+            userId: user.uid,
+            tenantId: user.uid,
+            inventoryItemId: invItemId,
+            availableDelta: receivedQty,
+            productName: product.name,
           }),
-        }).catch((err) => {
-          console.warn('[Shopify PO Inventory Sync Note]:', err);
-        });
-      }).catch(console.warn);
+        }).catch((err) => console.warn('[Shopify PO Receiving Sync Error]:', err));
+      });
     }
 
     toast({
@@ -1738,13 +1804,15 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, [firestore, user, ordersRef, transactionsRef, orders, products, suppliers, businessProfile, toast]);
 
   const updateOrderStatus = useCallback(async (orderId: string, status: string) => {
+    if (!orderId || !String(orderId).trim()) return;
+    const cleanId = String(orderId).trim();
     if (status === 'Fulfilled') {
-      await receivePurchaseOrder(orderId);
+      await receivePurchaseOrder(cleanId);
       return;
     }
 
     if (!firestore || !user) return;
-    const orderRef = doc(firestore, 'users', user.uid, 'orders', orderId);
+    const orderRef = doc(firestore, 'users', user.uid, 'orders', cleanId);
     await updateDoc(orderRef, { status, updatedAt: serverTimestamp() }).catch(console.error);
     toast({ title: 'Order Status Updated', description: `Order status set to ${status}.` });
   }, [firestore, user, receivePurchaseOrder, toast]);
@@ -1789,16 +1857,16 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, [firestore, user, suppliers, suppliersRef, toast]);
 
   const recordSale = useCallback(async (productId: string, quantity: number) => {
-    if (!firestore || !user || !transactionsRef) return;
-
-    const product = products.find(p => p.id === productId);
+    if (!firestore || !user || !transactionsRef || !productId || !String(productId).trim()) return;
+    const cleanProdId = String(productId).trim();
+    const product = products.find(p => p.id === cleanProdId);
     if (!product || product.stock < quantity) {
       toast({ variant: 'destructive', title: 'Error', description: 'Insufficient stock or product not found.' });
       return;
     }
 
     const batch = writeBatch(firestore);
-    const productRef = doc(firestore, 'users', user.uid, 'products', productId);
+    const productRef = doc(firestore, 'users', user.uid, 'products', cleanProdId);
     const transactionRef = doc(transactionsRef);
 
     batch.update(productRef, {
@@ -1809,7 +1877,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     batch.set(transactionRef, {
       id: transactionRef.id,
       tenantId: user.uid,
-      productId,
+      productId: cleanProdId,
       locationId: 'MAIN-WAREHOUSE',
       type: 'Sale',
       quantity,
@@ -1843,9 +1911,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     batch.set(newReturnRef, newReturn);
 
     // If restocked, update product stock
-    if (returnData.actionTaken === 'Restocked') {
-      const productRef = doc(firestore, 'users', user.uid, 'products', returnData.productId);
-      const product = products.find(p => p.id === returnData.productId);
+    if (returnData.actionTaken === 'Restocked' && returnData.productId && String(returnData.productId).trim()) {
+      const cleanProdId = String(returnData.productId).trim();
+      const productRef = doc(firestore, 'users', user.uid, 'products', cleanProdId);
+      const product = products.find(p => p.id === cleanProdId);
       if (product) {
         batch.update(productRef, {
           stock: product.stock + returnData.quantity,
@@ -1888,10 +1957,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, [firestore, user, returnsRef, transactionsRef, products, toast]);
 
   const updateReturnStatus = useCallback(async (returnId: string, refundStatus: string) => {
-    if (!firestore || !user || !returnsRef || !transactionsRef) return;
-    
-    const returnRef = doc(firestore, 'users', user.uid, 'returns', returnId);
-    const returnToUpdate = returns.find(r => r.id === returnId);
+    if (!firestore || !user || !returnsRef || !transactionsRef || !returnId || !String(returnId).trim()) return;
+    const cleanReturnId = String(returnId).trim();
+    const returnRef = doc(firestore, 'users', user.uid, 'returns', cleanReturnId);
+    const returnToUpdate = returns.find(r => r.id === cleanReturnId);
     if (!returnToUpdate) return;
 
     const batch = writeBatch(firestore);
@@ -1930,8 +1999,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, [firestore, user, returns, products, transactionsRef, returnsRef, toast]);
 
   const updateReturn = useCallback(async (returnId: string, updates: Partial<ProductReturn>) => {
-    if (!firestore || !user || !returnsRef) return;
-    const returnRef = doc(firestore, 'users', user.uid, 'returns', returnId);
+    if (!firestore || !user || !returnsRef || !returnId || !String(returnId).trim()) return;
+    const cleanReturnId = String(returnId).trim();
+    const returnRef = doc(firestore, 'users', user.uid, 'returns', cleanReturnId);
     await updateDoc(returnRef, cleanObject({
       ...updates,
       updatedAt: serverTimestamp(),
@@ -1942,8 +2012,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, [firestore, user, returnsRef, toast]);
 
   const deleteReturn = useCallback(async (returnId: string) => {
-    if (!firestore || !user) return;
-    const returnRef = doc(firestore, 'users', user.uid, 'returns', returnId);
+    if (!firestore || !user || !returnId || !String(returnId).trim()) return;
+    const cleanReturnId = String(returnId).trim();
+    const returnRef = doc(firestore, 'users', user.uid, 'returns', cleanReturnId);
     await deleteDoc(returnRef).catch((_serverError) => {
         errorEmitter.emit('permission-error', new FirestorePermissionError({
             path: returnRef.path,
@@ -1954,8 +2025,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, [firestore, user, toast]);
 
   const deleteSupplier = useCallback(async (supplierId: string) => {
-    if (!firestore || !user) return;
-    const supplierRef = doc(firestore, 'users', user.uid, 'suppliers', supplierId);
+    if (!firestore || !user || !supplierId || !String(supplierId).trim()) return;
+    const cleanSupplierId = String(supplierId).trim();
+    const supplierRef = doc(firestore, 'users', user.uid, 'suppliers', cleanSupplierId);
     await deleteDoc(supplierRef).catch((_serverError) => {
       errorEmitter.emit('permission-error', new FirestorePermissionError({
         path: supplierRef.path,
@@ -1973,12 +2045,12 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     // 1. Wipe all local storage caches, history, demographics, insights, completed actions & snapshots instantly
     if (typeof window !== 'undefined') {
       try {
+        sessionStorage.clear();
         const keysToKeep = new Set([
           'analyzeup_subscription_plan',
           'analyzeup_just_registered',
           'analyzeup_just_logged_in',
           'analyzeup_feature_tour_seen_global',
-          user ? `analyzeup_profile_${user.uid}` : '',
           user ? `analyzeup_feature_tour_seen_${user.uid}` : '',
           user ? `analyzeup_feature_tour_completed_${user.uid}` : '',
         ]);
@@ -1994,7 +2066,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             key.includes('event') ||
             key.includes('task') ||
             key.includes('recommend') ||
-            key.includes('opportunity')
+            key.includes('opportunity') ||
+            key.includes('shopify') ||
+            key.includes('drive') ||
+            key.includes('profile')
           ) {
             localStorage.removeItem(key);
           }
@@ -2077,6 +2152,24 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         integrations.forEach((name) => integrationsBatch.delete(doc(firestore, 'users', uid, 'integrations', name)));
         await integrationsBatch.commit().catch((err) => console.warn('[ClearAllData] Integrations batch error'));
 
+        // Delete global shopify store lookup index
+        const shop = businessProfile?.shopifyStoreUrl;
+        if (shop && String(shop).trim()) {
+          const storeLookupRef = doc(firestore, 'shopify_stores', String(shop).trim());
+          await deleteDoc(storeLookupRef).catch(console.warn);
+        }
+
+        // Notify server disconnect route to scrub any backend cached sessions or tokens
+        fetch('/api/shopify/disconnect', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: uid,
+            shop: shop || '',
+            purgeData: true,
+          }),
+        }).catch(err => console.warn('[ClearAllData] Disconnect endpoint notice:', err));
+
         // Remove generated AI output; retain only an empty analytics summary.
         await deleteDoc(doc(firestore, 'users', uid, 'analytics', 'ai_brief')).catch(() => {});
 
@@ -2106,6 +2199,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         shopifyStatus: 'Disconnected',
         shopifyAccessToken: '',
         shopifyLastSyncedAt: '',
+        shopifyAutoSyncEnabled: false,
+        shopifyRealtimeSyncEnabled: false,
         isOnboardingCompleted: false,
         updatedAt: new Date().toISOString(),
       };
@@ -2116,13 +2211,15 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           ...businessProfile,
           inventorySetupMethod: profileReset.inventorySetupMethod,
           csvImportedAt: undefined,
-          shopifyConnected: profileReset.shopifyConnected,
-          shopifyStoreUrl: profileReset.shopifyStoreUrl,
-          shopifyStoreName: profileReset.shopifyStoreName,
-          shopifyStatus: profileReset.shopifyStatus,
+          shopifyConnected: false,
+          shopifyStoreUrl: '',
+          shopifyStoreName: '',
+          shopifyStatus: 'Disconnected',
           shopifyAccessToken: undefined,
           shopifyLastSyncedAt: undefined,
-          isOnboardingCompleted: profileReset.isOnboardingCompleted,
+          shopifyAutoSyncEnabled: false,
+          shopifyRealtimeSyncEnabled: false,
+          isOnboardingCompleted: false,
           updatedAt: profileReset.updatedAt,
         };
         setBusinessProfile(cleanedProfile);
@@ -2135,6 +2232,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('analyzeup_drive_synced', { detail: { count: 0, reset: true } }));
+      window.dispatchEvent(new CustomEvent('analyzeup_integrations_reset'));
+      window.dispatchEvent(new CustomEvent('analyzeup_workspace_reset'));
     }
 
     if (!options?.silent) {
@@ -2235,8 +2334,16 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     if (!user || !firestore) return;
     try {
       const docRef = doc(firestore, 'users', user.uid, 'integrations', 'google-drive');
-      await deleteDoc(docRef);
+      await deleteDoc(docRef).catch(() => {});
+      const docRefUnderscore = doc(firestore, 'users', user.uid, 'integrations', 'google_drive');
+      await deleteDoc(docRefUnderscore).catch(() => {});
       setDriveConnection(null);
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('analyzeup_drive_synced', { detail: { count: 0, reset: true } }));
+        window.dispatchEvent(new CustomEvent('analyzeup_integrations_reset'));
+      }
+
       toast({
         title: 'Google Drive Disconnected',
         description: 'Successfully revoked credentials from AnalyzeUp workspace.',
@@ -2259,8 +2366,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const recordSyncSuccess = useCallback(async (fileId: string, fileData: Record<string, any>, historyData: Record<string, any>) => {
     if (!user || !firestore) return;
     try {
-      const fileRef = doc(firestore, 'users', user.uid, 'google_drive_files', fileId);
-      await setDoc(fileRef, cleanObject(fileData), { merge: true });
+      const safeFileId = (fileId && String(fileId).trim()) || (fileData?.id && String(fileData.id).trim()) || `file_${Date.now()}`;
+      const fileRef = doc(firestore, 'users', user.uid, 'google_drive_files', safeFileId);
+      await setDoc(fileRef, cleanObject({ ...fileData, id: safeFileId }), { merge: true });
       await addDoc(collection(firestore, 'users', user.uid, 'sync_history'), cleanObject(historyData));
       const connRef = doc(firestore, 'users', user.uid, 'integrations', 'google-drive');
       await updateDoc(connRef, {
@@ -2303,8 +2411,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const saveMappingProfile = useCallback(async (fileId: string, profileData: Record<string, any>) => {
     if (!user || !firestore) return;
     try {
-      const profileRef = doc(firestore, 'users', user.uid, 'mapping_profiles', `profile-${fileId}`);
-      await setDoc(profileRef, cleanObject(profileData), { merge: true });
+      const safeFileId = (fileId && String(fileId).trim()) || (profileData?.id && String(profileData.id).trim()) || `profile_${Date.now()}`;
+      const profileRef = doc(firestore, 'users', user.uid, 'mapping_profiles', `profile-${safeFileId}`);
+      await setDoc(profileRef, cleanObject({ ...profileData, id: `profile-${safeFileId}` }), { merge: true });
     } catch (e) {
       console.error('Error saving mapping profile:', e);
     }
@@ -2511,13 +2620,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
               // 3. Populate products into Catalog Intelligence & Inventory without fabricated stock
               const productsToImport = validRows.map(r => {
-                const existingProd = resolveExistingProduct(products, r.parsed.sku, r.parsed.name);
+                const { prodDocId, existingProduct: matchedProduct } = resolveExistingProduct(products, r.parsed.sku, r.parsed.name);
                 const stockVal = r.parsed.hasExplicitStock && r.parsed.stock !== undefined
                   ? r.parsed.stock
-                  : (existingProd ? existingProd.stock : 0);
+                  : (matchedProduct ? matchedProduct.stock : 0);
+                const resolvedId = (matchedProduct?.id && String(matchedProduct.id).trim()) || prodDocId || generateProductDocId(r.parsed.sku, r.parsed.name);
 
                 return {
-                  ...(existingProd?.id ? { id: existingProd.id } : {}),
+                  id: resolvedId,
                   name: r.parsed.name,
                   sku: r.parsed.sku,
                   description: r.parsed.description,
@@ -2541,10 +2651,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
               // 4. Populate sales transactions linked directly to authoritative products
               const transactionsToImport = validRows.map((r, idx) => {
-                const existingProd = resolveExistingProduct(products, r.parsed.sku, r.parsed.name);
+                const { prodDocId, existingProduct: matchedProduct } = resolveExistingProduct(products, r.parsed.sku, r.parsed.name);
+                const safeProdId = (matchedProduct?.id && String(matchedProduct.id).trim()) || prodDocId || generateProductDocId(r.parsed.sku, r.parsed.name);
+                const safeTxId = generateTransactionDocId(r.parsed.orderNo, r.parsed.sku, r.parsed.date, idx + 1);
+
                 return {
+                  id: safeTxId,
                   type: 'Sale' as const,
-                  productId: existingProd?.id || `prod-${(r.parsed.sku || r.parsed.name).toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+                  productId: safeProdId,
                   productName: r.parsed.name,
                   sku: r.parsed.sku,
                   quantity: r.parsed.qty || 1,
@@ -2567,28 +2681,30 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
               }
 
               const nowIso = new Date().toISOString();
+              const safeFileId = (file.id && String(file.id).trim()) || (file.name && String(file.name).trim()) || `file_${Date.now()}`;
+              const safeFileName = file.name || 'Untitled Spreadsheet';
               await recordSyncSuccess(
-                file.id,
+                safeFileId,
                 {
-                  id: file.id,
-                  name: file.name,
+                  id: safeFileId,
+                  name: safeFileName,
                   status: 'Synced',
                   rowCount: validRows.length,
                   lastSyncedAt: nowIso,
                   fileType: matchedProfile.fileType,
                 },
                 {
-                  fileId: file.id,
-                  fileName: file.name,
+                  fileId: safeFileId,
+                  fileName: safeFileName,
                   recordsCount: validRows.length,
                   syncedAt: nowIso,
                   status: 'Success',
                 }
               );
 
-              await saveMappingProfile(file.id, {
-                id: `profile-${file.id}`,
-                profileName: `Auto Map for ${file.name}`,
+              await saveMappingProfile(safeFileId, {
+                id: `profile-${safeFileId}`,
+                profileName: `Auto Map for ${safeFileName}`,
                 fileType: matchedProfile.fileType,
                 mapping: safeFieldMapping,
                 headersSignature: currentSignature,
@@ -2812,12 +2928,19 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
         if (deletedShopifyProducts.length > 0) {
           const deleteBatch = writeBatch(firestore);
+          let validDeletes = 0;
           deletedShopifyProducts.forEach(dp => {
-            const dpRef = doc(firestore, 'users', user.uid, 'products', dp.id);
-            deleteBatch.delete(dpRef);
+            const dpId = dp?.id && String(dp.id).trim();
+            if (dpId) {
+              const dpRef = doc(firestore, 'users', user.uid, 'products', dpId);
+              deleteBatch.delete(dpRef);
+              validDeletes++;
+            }
           });
-          await deleteBatch.commit().catch(console.error);
-          deletedProdsCount = deletedShopifyProducts.length;
+          if (validDeletes > 0) {
+            await deleteBatch.commit().catch(console.error);
+          }
+          deletedProdsCount = validDeletes;
           prodChanges += deletedProdsCount;
 
           if (typeof window !== 'undefined') {

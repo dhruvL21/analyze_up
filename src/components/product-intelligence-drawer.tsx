@@ -120,11 +120,17 @@ export function ProductIntelligenceDrawer({ product, open, onOpenChange }: Produ
       description: `Reduce the selling price of "${liveProduct.name}" from ${currencySymbol}${oldPrice} to ${currencySymbol}${targetPrice} (-20%) to liquidate dead stock. This updates catalog pricing.`,
       onConfirm: async () => {
         try {
-          await updateProduct({
-            ...liveProduct,
-            price: targetPrice,
-            updatedAt: new Date().toISOString(),
-          });
+          await updateProduct(
+            {
+              ...liveProduct,
+              price: targetPrice,
+              compareAtPrice: oldPrice,
+              discountPercent: 20,
+              liquidationStatus: 'Liquidated',
+              updatedAt: new Date().toISOString(),
+            },
+            { forceShopifySync: true, silentToast: false }
+          );
 
           logBusinessAction({
             title: 'Clearance Promo Applied (-20%)',
@@ -138,7 +144,7 @@ export function ProductIntelligenceDrawer({ product, open, onOpenChange }: Produ
 
           toast({
             title: '🏷️ Clearance Promo Applied!',
-            description: `Updated selling price of "${liveProduct.name}" to ${currencySymbol}${targetPrice} in database.`,
+            description: `Updated selling price of "${liveProduct.name}" to ${currencySymbol}${targetPrice} in database and Shopify.`,
           });
         } catch (err) {
           console.error(err);
@@ -157,11 +163,14 @@ export function ProductIntelligenceDrawer({ product, open, onOpenChange }: Produ
       description: `Adjust selling price of "${liveProduct.name}" from ${currencySymbol}${oldPrice.toLocaleString('en-IN')} to ${currencySymbol}${targetPrice.toLocaleString('en-IN')} to protect product profitability and margin.`,
       onConfirm: async () => {
         try {
-          await updateProduct({
-            ...liveProduct,
-            price: targetPrice,
-            updatedAt: new Date().toISOString(),
-          });
+          await updateProduct(
+            {
+              ...liveProduct,
+              price: targetPrice,
+              updatedAt: new Date().toISOString(),
+            },
+            { forceShopifySync: true, silentToast: false }
+          );
 
           logBusinessAction({
             title: actionTitle,

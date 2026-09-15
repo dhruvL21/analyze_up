@@ -33,18 +33,22 @@ export function DeadStockModal({ open, onOpenChange }: DeadStockModalProps) {
   const totalDeadCapital = deadStockItems.reduce((acc, p) => acc + (p.stock * (p.costPrice || p.price * 0.6)), 0);
 
   const handleApplyDiscount = (product: any, percent: number) => {
-    const newPrice = Math.round(product.price * (1 - percent / 100));
+    const oldPrice = product.price || 500;
+    const newPrice = Math.round(oldPrice * (1 - percent / 100));
     updateProduct(
       {
         ...product,
         price: newPrice,
+        compareAtPrice: oldPrice,
+        discountPercent: percent,
+        liquidationStatus: 'Liquidated',
         updatedAt: new Date().toISOString(),
       },
-      { silentToast: true }
+      { silentToast: false, forceShopifySync: true }
     );
     toast({
       title: 'Clearance Discount Applied!',
-      description: `Reduced price of "${product.name}" by ${percent}% to ${currencySymbol}${newPrice}.`,
+      description: `Reduced price of "${product.name}" by ${percent}% to ${currencySymbol}${newPrice}. Syncing with Shopify.`,
     });
   };
 

@@ -209,11 +209,17 @@ export function AIActionCenter() {
             if (targetProd) {
               const oldPrice = targetProd.price || 500;
               const newPrice = Math.round(oldPrice * 0.8);
-              await updateProduct({
-                ...targetProd,
-                price: newPrice,
-                updatedAt: new Date().toISOString(),
-              });
+              await updateProduct(
+                {
+                  ...targetProd,
+                  price: newPrice,
+                  compareAtPrice: oldPrice,
+                  discountPercent: 20,
+                  liquidationStatus: 'Liquidated',
+                  updatedAt: new Date().toISOString(),
+                },
+                { forceShopifySync: true, silentToast: false }
+              );
 
               logBusinessAction({
                 title: 'Liquidated Dead Stock (20% Clearance)',
@@ -225,18 +231,21 @@ export function AIActionCenter() {
 
               toast({
                 title: '🏷️ Clearance Promo Applied & Saved to Audit!',
-                description: `Reduced price of "${pName}" to ${currencySymbol}${newPrice}. Changes reflect in ${destination.label}.`,
+                description: `Reduced price of "${pName}" to ${currencySymbol}${newPrice}. Changes pushed to Shopify and ${destination.label}.`,
               });
             }
           } else if (task.actionType === 'price_up') {
             if (targetProd) {
               const oldPrice = targetProd.price || 500;
               const newPrice = Math.round(oldPrice * 1.08);
-              await updateProduct({
-                ...targetProd,
-                price: newPrice,
-                updatedAt: new Date().toISOString(),
-              });
+              await updateProduct(
+                {
+                  ...targetProd,
+                  price: newPrice,
+                  updatedAt: new Date().toISOString(),
+                },
+                { forceShopifySync: true, silentToast: false }
+              );
 
               logBusinessAction({
                 title: 'Optimized Price (+8%)',

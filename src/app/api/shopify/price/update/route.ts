@@ -47,6 +47,22 @@ export async function POST(req: NextRequest) {
       accessToken = body.accessToken;
     }
 
+    if (!accessToken && tenantId && hasAdminCredentials()) {
+      try {
+        const db = getAdminFirestore();
+        if (db) {
+          const snap = await db.collection('users').doc(tenantId).collection('integrations').doc('shopify').get();
+          if (snap.exists) {
+            const data = snap.data();
+            if (data?.accessToken) accessToken = data.accessToken;
+            if (!shop && data?.shopDomain) shop = data.shopDomain;
+          }
+        }
+      } catch (e) {
+        console.warn('[Shopify Price Update] Admin SDK token lookup notice:', e);
+      }
+    }
+
     if (newPrice === undefined || isNaN(Number(newPrice)) || Number(newPrice) < 0) {
       return NextResponse.json(
         { success: false, error: 'A valid non-negative newPrice is required.' },

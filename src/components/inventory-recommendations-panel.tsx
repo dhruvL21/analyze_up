@@ -161,11 +161,17 @@ export function InventoryRecommendationsPanel() {
       onConfirm: async () => {
         setAnimatingId(key);
         try {
-          await updateProduct({
-            ...prod,
-            price: newPrice,
-            updatedAt: new Date().toISOString(),
-          });
+          await updateProduct(
+            {
+              ...prod,
+              price: newPrice,
+              compareAtPrice: oldPrice,
+              discountPercent: 20,
+              liquidationStatus: 'Liquidated',
+              updatedAt: new Date().toISOString(),
+            },
+            { forceShopifySync: true, silentToast: false }
+          );
 
           logBusinessAction({
             title: 'Applied 20% Clearance Promo',
@@ -182,7 +188,7 @@ export function InventoryRecommendationsPanel() {
 
           toast({
             title: '🏷️ Clearance Promo Applied & Saved in History!',
-            description: `Reduced price of "${pName}" to ${currencySymbol}${newPrice}. Click "Change History" to view audit details.`,
+            description: `Reduced price of "${pName}" to ${currencySymbol}${newPrice}. Synced with Shopify. Click "Change History" to view audit details.`,
           });
         } catch (err) {
           console.error(err);
@@ -204,11 +210,14 @@ export function InventoryRecommendationsPanel() {
       onConfirm: async () => {
         setAnimatingId(key);
         try {
-          await updateProduct({
-            ...prod,
-            price: newPrice,
-            updatedAt: new Date().toISOString(),
-          });
+          await updateProduct(
+            {
+              ...prod,
+              price: newPrice,
+              updatedAt: new Date().toISOString(),
+            },
+            { forceShopifySync: true, silentToast: false }
+          );
 
           logBusinessAction({
             title: 'Optimized Price (+8%)',

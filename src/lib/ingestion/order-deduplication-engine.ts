@@ -130,11 +130,12 @@ export function resolveExistingProduct(
       p => p.sku && p.sku.trim().toUpperCase() === normSku
     );
     if (matchBySku) {
+      const safeId = (matchBySku.id && String(matchBySku.id).trim()) || generateProductDocId(sku, name);
       return {
-        prodDocId: matchBySku.id,
+        prodDocId: safeId,
         isExisting: true,
-        existingProduct: matchBySku,
-        id: matchBySku.id,
+        existingProduct: { ...matchBySku, id: safeId },
+        id: safeId,
         stock: matchBySku.stock ?? 0,
       };
     }
@@ -145,11 +146,12 @@ export function resolveExistingProduct(
       p => p.name && p.name.trim().toLowerCase() === normName
     );
     if (matchByName) {
+      const safeId = (matchByName.id && String(matchByName.id).trim()) || generateProductDocId(sku, name);
       return {
-        prodDocId: matchByName.id,
+        prodDocId: safeId,
         isExisting: true,
-        existingProduct: matchByName,
-        id: matchByName.id,
+        existingProduct: { ...matchByName, id: safeId },
+        id: safeId,
         stock: matchByName.stock ?? 0,
       };
     }
@@ -194,8 +196,8 @@ export async function reconcileDuplicateProducts(
 
     // Pick authoritative product: prefer Shopify source, or highest valid stock, or earliest created
     const authoritative = group.reduce((best, current) => {
-      const bestIsShopify = best.source === 'SHOPIFY' || best.id.startsWith('shopify_');
-      const currIsShopify = current.source === 'SHOPIFY' || current.id.startsWith('shopify_');
+      const bestIsShopify = best.source === 'SHOPIFY' || (best.id && best.id.startsWith('shopify_'));
+      const currIsShopify = current.source === 'SHOPIFY' || (current.id && current.id.startsWith('shopify_'));
       if (currIsShopify && !bestIsShopify) return current;
       if (bestIsShopify && !currIsShopify) return best;
 
@@ -209,14 +211,52 @@ export async function reconcileDuplicateProducts(
     // Delete redundant duplicates from Firestore
     const duplicatesToDelete = group.filter(p => p.id !== authoritative.id);
     for (const dup of duplicatesToDelete) {
-      purgedProductIds.push(dup.id);
+      if (dup.id && String(dup.id).trim().length > 0) {
+        purgedProductIds.push(String(dup.id).trim());
+      }
+    }
+  }
+
+  // Also group by normalized Name for products that share the exact same title
+  const purgedSet = new Set(purgedProductIds);
+  const remainingProducts = products.filter(p => !purgedSet.has(String(p.id).trim()));
+  const byName = new Map<string, Product[]>();
+  for (const p of remainingProducts) {
+    const nameNorm = (p.name || '').trim().toLowerCase();
+    if (!nameNorm) continue;
+    const group = byName.get(nameNorm) || [];
+    group.push(p);
+    byName.set(nameNorm, group);
+  }
+
+  for (const [nameNorm, group] of byName.entries()) {
+    if (group.length <= 1) continue;
+
+    const authoritative = group.reduce((best, current) => {
+      const bestIsShopify = best.source === 'SHOPIFY' || (best.id && best.id.startsWith('shopify_'));
+      const currIsShopify = current.source === 'SHOPIFY' || (current.id && current.id.startsWith('shopify_'));
+      if (currIsShopify && !bestIsShopify) return current;
+      if (bestIsShopify && !currIsShopify) return best;
+
+      if (current.stock !== 25 && best.stock === 25) return current;
+      if (best.stock !== 25 && current.stock === 25) return best;
+
+      return best;
+    }, group[0]);
+
+    const duplicatesToDelete = group.filter(p => p.id !== authoritative.id);
+    for (const dup of duplicatesToDelete) {
+      if (dup.id && String(dup.id).trim().length > 0) {
+        purgedProductIds.push(String(dup.id).trim());
+      }
     }
   }
 
   if (purgedProductIds.length > 0) {
     const batch = writeBatch(firestore);
     purgedProductIds.forEach(id => {
-      const ref = doc(firestore, 'users', userId, 'products', id);
+      if (!id || !String(id).trim()) return;
+      const ref = doc(firestore, 'users', userId, 'products', String(id).trim());
       batch.delete(ref);
     });
     await batch.commit().catch(err => console.warn('[Product Reconcile Error]:', err));

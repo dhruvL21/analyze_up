@@ -28,7 +28,9 @@ export function useDoc<T>(ref: DocumentReference | null) {
     const unsubscribe = onSnapshot(
       ref,
       (snapshot) => {
-        const data = snapshot.exists() ? ({ id: snapshot.id, ...snapshot.data() } as T) : null;
+        const rawDocData = (snapshot.data() || {}) as Record<string, any>;
+        const cleanDocId = snapshot.id || rawDocData.id || '';
+        const data = snapshot.exists() ? ({ ...rawDocData, id: cleanDocId } as T) : null;
         setState({ data, loading: false });
       },
       (serverError) => {
