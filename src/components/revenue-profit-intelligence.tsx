@@ -318,7 +318,7 @@ export function RevenueProfitIntelligence() {
                     <span className="text-xs font-semibold text-rose-400 uppercase tracking-wider flex items-center gap-1.5">
                       <AlertTriangle className="w-3.5 h-3.5 text-rose-400" /> Lowest Margin Product
                     </span>
-                    <Badge variant="outline" className="text-rose-400 border-rose-500/30 text-xs font-medium px-2 py-0.5">
+                    <Badge variant="outline" className="text-rose-400 border-rose-500/30 text-xs font-medium px-2 py-0.5 whitespace-nowrap shrink-0">
                       {lowestMarginItem && lowestMarginItem.margin < 0 ? 'Loss Making' : 'Needs Attention'}
                     </Badge>
                   </div>
@@ -476,7 +476,7 @@ export function RevenueProfitIntelligence() {
                     <div className="space-y-0.5 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-bold text-foreground truncate text-sm">{item.product.name}</span>
-                        <Badge variant="outline" className="text-xs px-2 py-0.5 border-primary/30 text-primary font-medium">
+                        <Badge variant="outline" className="text-xs px-2 py-0.5 border-primary/30 text-primary font-medium whitespace-nowrap shrink-0">
                           {item.margin > 30 ? 'Top Performer' : item.margin < 15 ? 'Needs Attention' : 'Best Seller'}
                         </Badge>
                       </div>

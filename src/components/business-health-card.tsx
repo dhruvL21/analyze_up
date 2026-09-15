@@ -61,17 +61,17 @@ export function BusinessHealthCard() {
       <div className="absolute top-0 right-0 w-44 h-44 bg-emerald-500/10 rounded-full blur-3xl -z-10 pointer-events-none" />
 
       <div className="space-y-4">
-        <div className="flex items-center justify-between pb-3 border-b border-border/40">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+        <div className="flex items-center justify-between pb-3 border-b border-border/40 gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
               <Activity className="w-5 h-5 animate-pulse" />
             </div>
-            <div>
-              <CardTitle className="text-base font-bold text-foreground">Business Health Score</CardTitle>
-              <CardDescription className="text-xs">Overall operational vitality & margin index</CardDescription>
+            <div className="min-w-0">
+              <CardTitle className="text-base font-bold text-foreground truncate">Business Health Score</CardTitle>
+              <CardDescription className="text-xs truncate">Overall operational vitality & margin index</CardDescription>
             </div>
           </div>
-          <Badge className={`${health.badgeClass} text-xs px-3 py-1 font-bold tracking-wide uppercase transition-all`}>
+          <Badge className={`${health.badgeClass} text-xs px-3 py-1 font-bold tracking-wide uppercase transition-all whitespace-nowrap shrink-0`}>
             {health.category}
           </Badge>
         </div>

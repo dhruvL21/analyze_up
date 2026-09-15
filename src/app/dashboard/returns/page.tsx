@@ -192,29 +192,7 @@ export default function ReturnsPage() {
     };
   }, [returns, transactions, products]);
 
-  // Reason Breakdown for Analytics
-  const reasonBreakdown = React.useMemo(() => {
-    const counts = {
-      'Defective': 0,
-      'Wrong Item': 0,
-      'Unopened / Buyer Remorse': 0,
-      'Damaged in Transit': 0,
-      'Other': 0
-    };
-    
-    returns.forEach(r => {
-      if (counts[r.reason] !== undefined) {
-        counts[r.reason] += r.quantity;
-      }
-    });
 
-    const total = Object.values(counts).reduce((a, b) => a + b, 0) || 1;
-    return Object.entries(counts).map(([name, qty]) => ({
-      name,
-      qty,
-      percentage: Math.round((qty / total) * 100)
-    })).sort((a, b) => b.qty - a.qty);
-  }, [returns]);
 
   // Quality Control Alerts (Products with Return Rate > 10% or High return count)
   const qualityAlerts = React.useMemo(() => {
@@ -573,24 +551,37 @@ export default function ReturnsPage() {
           </Card>
         )}
 
-        {/* Main Grid: Returns History & Analytics */}
-        <div className="grid gap-6 grid-cols-1 xl:grid-cols-3 items-stretch">
-          {/* Returns Log */}
-          <Card className="xl:col-span-2 ios-glass rounded-3xl border-border/50 shadow-xl overflow-hidden flex flex-col justify-between">
-            <div>
-              <CardHeader className="border-b border-border/40 pb-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-base font-bold">Returned Orders Log</CardTitle>
-                    <CardDescription className="text-xs">
-                      View, search, and update details for customer returns.
-                    </CardDescription>
-                  </div>
-                  <Badge variant="outline" className="text-xs font-semibold px-2.5 py-1 bg-secondary/30 border-border/40 self-start sm:self-auto">
+        {/* Returns Log */}
+        <Card className="w-full ios-glass rounded-3xl border-border/50 shadow-xl overflow-hidden flex flex-col justify-between">
+          <div>
+            <CardHeader className="border-b border-border/40 pb-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <CardTitle className="text-base font-bold">Returned Orders Log</CardTitle>
+                  <CardDescription className="text-xs">
+                    View, search, and update details for customer returns.
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  {otherReturnsCount > 0 && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAutoClassifyReasons}
+                      disabled={isAutoClassifying}
+                      className="h-7 px-2.5 text-xs gap-1.5 border-primary/40 hover:bg-primary/10 text-primary font-medium rounded-xl shrink-0 whitespace-nowrap"
+                      title="Auto-assign specific return reasons to unclassified items"
+                    >
+                      <Sparkles className={`h-3.5 w-3.5 ${isAutoClassifying ? 'animate-spin' : ''}`} />
+                      <span>Auto-Assign Reasons ({otherReturnsCount})</span>
+                    </Button>
+                  )}
+                  <Badge variant="outline" className="text-xs font-semibold px-2.5 py-1 bg-secondary/30 border-border/40">
                     {filteredReturns.length} {filteredReturns.length === 1 ? 'Record' : 'Records'}
                   </Badge>
                 </div>
-              </CardHeader>
+              </div>
+            </CardHeader>
               <CardContent className="p-5 space-y-4">
                 {/* Search & Filters */}
                 <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
@@ -634,17 +625,17 @@ export default function ReturnsPage() {
                 </div>
 
                 {/* Table */}
-                <div className="overflow-x-auto rounded-2xl border border-border/40 bg-secondary/10">
+                <div className="overflow-x-auto w-full rounded-2xl border border-border/40 bg-secondary/10">
                   <Table>
                     <TableHeader className="bg-secondary/30">
                       <TableRow>
-                        <TableHead>Customer</TableHead>
-                        <TableHead>Product</TableHead>
-                        <TableHead className="text-center">Qty</TableHead>
-                        <TableHead>Action</TableHead>
-                        <TableHead>Refund</TableHead>
-                        <TableHead className="text-right">Amount</TableHead>
-                        <TableHead className="w-[80px]"><span className="sr-only">Actions</span></TableHead>
+                        <TableHead className="min-w-[150px]">Customer</TableHead>
+                        <TableHead className="min-w-[190px]">Product</TableHead>
+                        <TableHead className="text-center w-[60px]">Qty</TableHead>
+                        <TableHead className="w-[110px]">Action</TableHead>
+                        <TableHead className="w-[110px]">Refund</TableHead>
+                        <TableHead className="text-right w-[110px]">Amount</TableHead>
+                        <TableHead className="w-[50px] text-right"><span className="sr-only">Actions</span></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -677,12 +668,12 @@ export default function ReturnsPage() {
                       ) : (
                         paginatedReturns.map((item) => (
                           <TableRow key={item.id} className="hover:bg-secondary/30 transition-colors">
-                            <TableCell className="font-medium">
+                            <TableCell className="font-medium whitespace-nowrap">
                               <div>
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <p className="text-sm font-semibold">{item.customerName}</p>
                                   {item.source === 'SHOPIFY' && (
-                                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-emerald-500/30 text-emerald-400 bg-emerald-500/10">
+                                    <Badge variant="outline" className="text-[9px] px-1.5 py-0 h-4 border-emerald-500/30 text-emerald-400 bg-emerald-500/10 whitespace-nowrap shrink-0">
                                       Shopify
                                     </Badge>
                                   )}
@@ -700,18 +691,18 @@ export default function ReturnsPage() {
                                 </div>
                               </div>
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="min-w-[190px]">
                               <div>
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  <p className="text-sm font-medium">{item.productName}</p>
+                                  <p className="text-sm font-medium leading-snug">{item.productName}</p>
                                   {!isProductLinked(item) && (
                                     <button
                                       type="button"
                                       onClick={() => openAssignProductModal(item)}
-                                      className="text-[10px] text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.5 rounded transition-colors inline-flex items-center gap-1 cursor-pointer"
+                                      className="text-[10px] text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.5 rounded transition-colors inline-flex items-center gap-1 cursor-pointer whitespace-nowrap shrink-0"
                                       title="This return is not linked to an inventory product. Click to assign."
                                     >
-                                      <Link2 className="h-2.5 w-2.5" />
+                                      <Link2 className="h-2.5 w-2.5 shrink-0" />
                                       <span>Assign Product</span>
                                     </button>
                                   )}
@@ -721,11 +712,11 @@ export default function ReturnsPage() {
                                     <DropdownMenuTrigger asChild>
                                       <button
                                         type="button"
-                                        className="text-[10px] inline-flex items-center gap-1 font-medium bg-secondary/70 hover:bg-secondary border border-border/50 hover:border-primary/50 px-2 py-0.5 rounded-md transition-colors cursor-pointer group"
+                                        className="text-[10px] inline-flex items-center gap-1 font-medium bg-secondary/70 hover:bg-secondary border border-border/50 hover:border-primary/50 px-2 py-0.5 rounded-md transition-colors cursor-pointer group whitespace-nowrap shrink-0"
                                         title="Click to reassign return reason"
                                       >
                                         <span>{item.reason}</span>
-                                        <ChevronDown className="h-2.5 w-2.5 text-muted-foreground group-hover:text-foreground" />
+                                        <ChevronDown className="h-2.5 w-2.5 text-muted-foreground group-hover:text-foreground shrink-0" />
                                       </button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="start" className="rounded-xl min-w-[200px] z-50">
@@ -746,14 +737,14 @@ export default function ReturnsPage() {
                                   </DropdownMenu>
 
                                   {item.sku ? (
-                                    <span className="text-[10px] font-mono text-muted-foreground/70">
+                                    <span className="text-[10px] font-mono text-muted-foreground/70 whitespace-nowrap">
                                       {item.sku}
                                     </span>
                                   ) : (
                                     <button
                                       type="button"
                                       onClick={() => openAssignProductModal(item)}
-                                      className="text-[10px] text-muted-foreground hover:text-foreground underline decoration-dotted cursor-pointer"
+                                      className="text-[10px] text-muted-foreground hover:text-foreground underline decoration-dotted cursor-pointer whitespace-nowrap"
                                     >
                                       No SKU (Assign)
                                     </button>
@@ -761,19 +752,20 @@ export default function ReturnsPage() {
                                 </div>
                               </div>
                             </TableCell>
-                            <TableCell className="text-center font-bold text-sm">
+                            <TableCell className="text-center font-bold text-sm whitespace-nowrap">
                               {item.quantity}
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="whitespace-nowrap">
                               <Badge
                                 variant={item.actionTaken === 'Restocked' ? 'outline' : 'destructive'}
-                                className={item.actionTaken === 'Restocked' ? 'border-primary/30 text-primary bg-primary/10' : ''}
+                                className={`whitespace-nowrap ${item.actionTaken === 'Restocked' ? 'border-primary/30 text-primary bg-primary/10' : ''}`}
                               >
                                 {item.actionTaken === 'Restocked' ? 'Restocked' : 'Disposed'}
                               </Badge>
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="whitespace-nowrap">
                               <Badge
+                                className="whitespace-nowrap"
                                 variant={
                                   item.refundStatus === 'Refunded'
                                     ? 'secondary'
@@ -787,13 +779,13 @@ export default function ReturnsPage() {
                                 {item.refundStatus}
                               </Badge>
                             </TableCell>
-                            <TableCell className="text-right font-semibold text-sm">
+                            <TableCell className="text-right font-semibold text-sm whitespace-nowrap">
                               ₹{item.refundAmount.toLocaleString('en-IN')}
                             </TableCell>
-                            <TableCell>
+                            <TableCell className="text-right whitespace-nowrap">
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <Button size="icon" variant="ghost" className="rounded-full h-8 w-8 hover:bg-secondary">
+                                  <Button size="icon" variant="ghost" className="rounded-full h-8 w-8 hover:bg-secondary shrink-0">
                                     <MoreHorizontal className="h-4 w-4" />
                                     <span className="sr-only">Toggle menu</span>
                                   </Button>
@@ -923,70 +915,6 @@ export default function ReturnsPage() {
               </CardContent>
             </div>
           </Card>
-
-          {/* Reason Breakdown Card */}
-          <Card className="ios-glass rounded-3xl border-border/50 shadow-xl overflow-hidden flex flex-col justify-between">
-            <div>
-              <CardHeader className="border-b border-border/40 pb-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <CardTitle className="text-base font-bold">Return Reasons Breakdown</CardTitle>
-                    <CardDescription className="text-xs">Weekly return volume breakdown by reason.</CardDescription>
-                  </div>
-                  {otherReturnsCount > 0 && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleAutoClassifyReasons}
-                      disabled={isAutoClassifying}
-                      className="h-7 px-2.5 text-xs gap-1.5 border-primary/40 hover:bg-primary/10 text-primary font-medium rounded-xl shrink-0"
-                      title="Auto-assign specific return reasons to unclassified items"
-                    >
-                      <Sparkles className={`h-3.5 w-3.5 ${isAutoClassifying ? 'animate-spin' : ''}`} />
-                      <span>Auto-Assign ({otherReturnsCount})</span>
-                    </Button>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="p-6 space-y-5">
-                {returns.length === 0 ? (
-                  <div className="text-center py-16 text-muted-foreground border border-dashed border-border/60 rounded-2xl flex flex-col items-center justify-center gap-2">
-                    <RotateCcw className="w-8 h-8 text-muted-foreground/40" />
-                    <p className="text-xs font-semibold text-foreground/80">No returns logged yet</p>
-                    <p className="text-[11px] text-muted-foreground max-w-[200px]">Return reasons and volume breakdown will appear here once returns are recorded.</p>
-                  </div>
-                ) : (
-                  reasonBreakdown.map((item, index) => {
-                    const isOther = item.name === 'Other';
-                    return (
-                      <div key={index} className="space-y-1.5">
-                        <div className="flex justify-between text-xs font-semibold">
-                          <div className="flex items-center gap-1.5">
-                            <span className="truncate">{item.name}</span>
-                            {isOther && item.qty > 0 && (
-                              <span className="text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.2 rounded font-normal">
-                                Needs reason
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-muted-foreground">{item.qty} units ({item.percentage}%)</span>
-                        </div>
-                        <div className="h-2.5 w-full bg-secondary/60 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-500 shadow-sm ${
-                              isOther && item.qty > 0 ? 'bg-amber-500/70' : 'bg-primary'
-                            }`}
-                            style={{ width: `${item.percentage}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </CardContent>
-            </div>
-          </Card>
-        </div>
       </div>
 
       {/* Log Return Dialog */}

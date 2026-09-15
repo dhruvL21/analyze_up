@@ -6,9 +6,7 @@ import { useUser, useFirestore, useDoc } from '@/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { Sparkles, AlertTriangle, Coins, Loader2, RefreshCw, Lock, ArrowRight, Clock, CheckCircle2 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
-import { Badge } from '@/components/ui/badge';
 import { calculateDynamicBrief, type AIBriefOutput } from '@/ai/flows/ai-brief-generator';
-import { ThreeTierBadge } from '@/components/three-tier-badge';
 import { serializePlainData } from '@/lib/utils';
 import type { Product, Transaction } from '@/lib/types';
 
@@ -216,18 +214,13 @@ export function AIBrief() {
             /* Left 2 Columns: Learning Stage Card for Predictive Stockout & Velocity */
             <div className="sm:col-span-2 relative group flex p-4 rounded-2xl border border-amber-500/25 bg-zinc-900/60 hover:bg-zinc-900/90 transition-all duration-200 flex-col justify-between shadow-sm space-y-3">
               <div className="space-y-2.5">
-                <div className="flex items-center justify-between gap-1 flex-wrap pb-2 border-b border-border/30">
-                  <div className="flex items-center gap-2">
-                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
-                      <Clock className="h-3.5 w-3.5" />
-                    </div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
-                      Stockout & Velocity Intelligence: Learning Stage
-                    </span>
+                <div className="flex items-center gap-2 pb-2 border-b border-border/30">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
+                    <Clock className="h-3.5 w-3.5" />
                   </div>
-                  <Badge variant="outline" className="bg-amber-500/15 text-amber-300 border-amber-500/30 text-[10px] font-semibold">
-                    Calibrating Baseline
-                  </Badge>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
+                    Stockout & Velocity Intelligence: Learning Stage
+                  </span>
                 </div>
 
                 <div className="space-y-1">
@@ -268,17 +261,11 @@ export function AIBrief() {
               {/* Left Column: Stockout Risk */}
               <div className="relative group flex p-4 rounded-2xl border border-rose-500/20 bg-zinc-900/60 hover:bg-zinc-900/90 hover:border-rose-500/40 transition-all duration-200 flex-1 flex-col justify-between shadow-sm">
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-1 flex-wrap pb-2 border-b border-border/30">
-                    <div className="flex items-center gap-1.5">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-rose-500/15 text-rose-400">
-                        <AlertTriangle className="h-3.5 w-3.5" />
-                      </div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-rose-400">Stockout Risk</span>
+                  <div className="flex items-center gap-1.5 pb-2 border-b border-border/30">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-rose-500/15 text-rose-400">
+                      <AlertTriangle className="h-3.5 w-3.5" />
                     </div>
-                    <ThreeTierBadge
-                      tier={Boolean(capabilities?.stockoutPrediction && !activeBrief.stockoutItem.riskText.includes('Out of stock')) ? "MODEL_2_PREDICTION" : "ACTUAL_DATA"}
-                      size="sm"
-                    />
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-rose-400">Stockout Risk</span>
                   </div>
                   <h4 className="font-bold text-sm text-zinc-100 leading-snug line-clamp-2 pt-0.5">{activeBrief.stockoutItem.name}</h4>
                   <div className="space-y-1 text-xs">
@@ -298,19 +285,13 @@ export function AIBrief() {
               {/* Middle Column: Dead Stock / Slow Sales */}
               <div className="relative group flex p-4 rounded-2xl border border-amber-500/20 bg-zinc-900/60 hover:bg-zinc-900/90 hover:border-amber-500/40 transition-all duration-200 flex-1 flex-col justify-between shadow-sm">
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-1 flex-wrap pb-2 border-b border-border/30">
-                    <div className="flex items-center gap-1.5">
-                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
-                        <Coins className="h-3.5 w-3.5" />
-                      </div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
-                        {Boolean(capabilities?.slowMoverDetection && dataReadiness?.level !== 'LEARNING') ? 'Slow-Moving' : 'Capital Asset'}
-                      </span>
+                  <div className="flex items-center gap-1.5 pb-2 border-b border-border/30">
+                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
+                      <Coins className="h-3.5 w-3.5" />
                     </div>
-                    <ThreeTierBadge
-                      tier={Boolean(capabilities?.slowMoverDetection && dataReadiness?.level !== 'LEARNING') ? "MODEL_2_PREDICTION" : "ACTUAL_DATA"}
-                      size="sm"
-                    />
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
+                      {Boolean(capabilities?.slowMoverDetection && dataReadiness?.level !== 'LEARNING') ? 'Slow-Moving' : 'Capital Asset'}
+                    </span>
                   </div>
                   <h4 className="font-bold text-sm text-zinc-100 leading-snug line-clamp-2 pt-0.5">{activeBrief.slowMovingItem.name}</h4>
                   <div className="space-y-1 text-xs">
@@ -341,14 +322,11 @@ export function AIBrief() {
           {/* Right Column: Customer Returns */}
           <div className="relative group flex p-4 rounded-2xl border border-emerald-500/20 bg-zinc-900/60 hover:bg-zinc-900/90 hover:border-emerald-500/40 transition-all duration-200 flex-1 flex-col justify-between shadow-sm">
             <div className="space-y-2">
-              <div className="flex items-center justify-between gap-1 flex-wrap pb-2 border-b border-border/30">
-                <div className="flex items-center gap-1.5">
-                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
-                    <RefreshCw className="h-3.5 w-3.5 text-emerald-400" />
-                  </div>
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Returns</span>
+              <div className="flex items-center gap-1.5 pb-2 border-b border-border/30">
+                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
+                  <RefreshCw className="h-3.5 w-3.5 text-emerald-400" />
                 </div>
-                <ThreeTierBadge tier="ACTUAL_DATA" size="sm" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Returns</span>
               </div>
               <h4 className="font-bold text-sm text-zinc-100 leading-snug line-clamp-2 pt-0.5">
                 {returnedQty > 0 ? `${returnedQty} Items Returned` : 'No Recent Returns'}

@@ -129,10 +129,10 @@ export default function DashboardPage() {
 
         {/* Today's AI Brief & Business Health Score Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-          <div className="lg:col-span-7">
+          <div className="lg:col-span-7 min-w-0">
             <AIBrief />
           </div>
-          <div className="lg:col-span-5">
+          <div className="lg:col-span-5 min-w-0">
             <BusinessHealthCard />
           </div>
         </div>
@@ -155,10 +155,10 @@ export default function DashboardPage() {
 
       {/* FEATURE 6 & 11: Inventory Quality Snapshot & Activity Timeline */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-        <div className="flex flex-col">
+        <div className="flex flex-col min-w-0">
           <InventoryQualitySnapshot />
         </div>
-        <div className="flex flex-col">
+        <div className="flex flex-col min-w-0">
           <BusinessActivityTimeline />
         </div>
       </div>

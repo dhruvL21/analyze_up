@@ -106,7 +106,10 @@ export function Header() {
       if (cancelled) return;
       const businessEvents = detectBusinessEvents(products, transactions, suppliers, orders, returns, businessProfile);
       const statuses = getStoredEventStatuses();
-      const activeAlertCount = businessEvents.filter((event) => (statuses[event.id] || event.status) !== 'RESOLVED').length;
+      const activeAlertCount = businessEvents.filter((event) => {
+        const status = statuses[event.id] || event.status;
+        return status !== 'RESOLVED' && status !== 'ACTION_TAKEN';
+      }).length;
       const healthLogoColor = computeBusinessHealth(products, transactions, suppliers, returns).color;
       if (!cancelled) setHeaderMetrics({ activeAlertCount, healthLogoColor });
     };

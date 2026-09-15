@@ -43,45 +43,45 @@ export function InventoryQualitySnapshot() {
 
         <CardContent className="p-0 pt-3 space-y-4 text-xs">
           {/* Quality Badges Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-            <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 space-y-1">
-              <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5">
-                <PackageCheck className="w-4 h-4 text-emerald-400" /> Healthy Stock
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-2.5">
+            <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 space-y-1">
+              <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5 whitespace-nowrap">
+                <PackageCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> <span>Healthy Stock</span>
               </span>
               <p className="text-2xl font-extrabold text-emerald-400">{quality.healthyCount}</p>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 space-y-1">
-              <span className="text-xs font-semibold text-amber-400 flex items-center gap-1.5">
-                <AlertTriangle className="w-4 h-4 text-amber-400" /> Low Stock
+            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/25 space-y-1">
+              <span className="text-xs font-semibold text-amber-400 flex items-center gap-1.5 whitespace-nowrap">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" /> <span>Low Stock</span>
               </span>
               <p className="text-2xl font-extrabold text-amber-400">{quality.lowStockCount}</p>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-rose-500/15 border border-rose-500/30 space-y-1">
-              <span className="text-xs font-semibold text-rose-400 flex items-center gap-1.5">
-                <XCircle className="w-4 h-4 text-rose-400" /> Out of Stock
+            <div className="p-3 rounded-2xl bg-rose-500/15 border border-rose-500/30 space-y-1">
+              <span className="text-xs font-semibold text-rose-400 flex items-center gap-1.5 whitespace-nowrap">
+                <XCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" /> <span>Out of Stock</span>
               </span>
               <p className="text-2xl font-extrabold text-rose-400">{quality.criticalStockCount}</p>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-slate-500/10 border border-slate-500/25 space-y-1 overflow-hidden">
-              <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
-                <Clock className="w-4 h-4 text-slate-400 shrink-0" />
+            <div className="p-3 rounded-2xl bg-slate-500/10 border border-slate-500/25 space-y-1 overflow-hidden">
+              <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5 whitespace-nowrap">
+                <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
                 <span>Dead Stock</span>
               </span>
-              <div className="flex items-baseline gap-2 pt-0.5">
+              <div className="flex items-center gap-1.5 pt-0.5 flex-wrap">
                 <p className="text-2xl font-extrabold text-slate-300">
                   {isDeadStockActive ? quality.deadStockCount : 0}
                 </p>
                 {!isDeadStockActive && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 font-bold border border-amber-500/30 whitespace-nowrap">
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 font-bold border border-amber-500/30 whitespace-nowrap shrink-0">
                     Observing
                   </span>
                 )}
               </div>
               {!isDeadStockActive && (
-                <p className="text-[10px] text-muted-foreground truncate" title={`Requires 30d baseline (${dataReadiness?.historicalDays || 0}/30d)`}>
+                <p className="text-[10px] text-muted-foreground leading-tight" title={`Requires 30d baseline (${dataReadiness?.historicalDays || 0}/30d)`}>
                   Requires 30d baseline ({dataReadiness?.historicalDays || 0}/30d)
                 </p>
               )}

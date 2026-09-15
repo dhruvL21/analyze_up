@@ -84,16 +84,16 @@ export function NotificationCenterDrawer({ open, onOpenChange }: NotificationCen
     }));
   }, [detectedEvents, eventStatuses]);
 
-  // Filter events (exclude RESOLVED/dismissed notifications)
+  // Filter events (exclude RESOLVED/dismissed/executed notifications)
   const filteredEvents = useMemo(() => {
     return events.filter(e => {
-      if (e.status === 'RESOLVED') return false;
+      if (e.status === 'RESOLVED' || e.status === 'ACTION_TAKEN') return false;
       if (selectedSeverity === 'ALL') return true;
       return e.severity === selectedSeverity;
     });
   }, [events, selectedSeverity]);
 
-  const activeCount = events.filter(e => e.status !== 'RESOLVED').length;
+  const activeCount = events.filter(e => e.status !== 'RESOLVED' && e.status !== 'ACTION_TAKEN').length;
 
   const handleAcknowledge = (eventId: string) => {
     saveEventStatus(eventId, 'ACKNOWLEDGED');
@@ -119,14 +119,21 @@ export function NotificationCenterDrawer({ open, onOpenChange }: NotificationCen
   };
 
   const handleExecuteAction = (event: BusinessEvent) => {
-    setEventStatuses(prev => ({ ...prev, [event.id]: 'ACTION_TAKEN' }));
+    // Persist as RESOLVED so it permanently disappears from active alerts
+    saveEventStatus(event.id, 'RESOLVED');
+    setEventStatuses(prev => ({ ...prev, [event.id]: 'RESOLVED' }));
 
     if (event.actionPayload?.targetRoute) {
       router.push(event.actionPayload.targetRoute);
       onOpenChange(false);
       toast({
-        title: `Executing Action: ${event.title}`,
-        description: `Navigating to target module.`,
+        title: `Action Executed: ${event.title}`,
+        description: `Navigating to target module. Alert resolved.`,
+      });
+    } else {
+      toast({
+        title: `Action Executed: ${event.title}`,
+        description: `Alert marked as resolved.`,
       });
     }
   };
