@@ -52,6 +52,11 @@ export interface DomainTransaction {
   transactionDate: string;
   paymentMethod: string;
   status: string;
+  fulfillmentStatus?: string;
+  financialStatus?: string;
+  deliveryStatus?: string;
+  isRevenueRecognized?: boolean;
+  paymentReceived?: boolean;
   createdAt: string;
 }
 
@@ -212,6 +217,11 @@ export function toDomainTransaction(t: any): DomainTransaction {
     transactionDate: normalizeDate(t.transactionDate || t.sale_date || t.orderDate || t.date || t.created_at),
     paymentMethod: t.paymentMethod || t.payment_method || t.paymentMode || 'UPI',
     status: t.status || 'Completed',
+    fulfillmentStatus: t.fulfillmentStatus,
+    financialStatus: t.financialStatus,
+    deliveryStatus: t.deliveryStatus,
+    isRevenueRecognized: t.isRevenueRecognized,
+    paymentReceived: t.paymentReceived,
     createdAt: normalizeDate(t.createdAt || t.created_at),
   };
 }

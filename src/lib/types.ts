@@ -54,7 +54,9 @@ export interface Product {
   barcode?: string;
   imageUrl?: string;
   status?: string;
-  source?: 'CSV' | 'SHOPIFY' | 'GDRIVE' | 'MANUAL' | string;
+  source?: 'CSV' | 'SHOPIFY' | 'GOOGLE_DRIVE' | 'GDRIVE' | 'MANUAL' | string;
+  importSource?: 'shopify' | 'drive' | 'csv' | string;
+  driveFileId?: string;
   shopifyProductId?: string;
   shopifyVariantId?: string;
   compareAtPrice?: number;
@@ -101,6 +103,11 @@ export interface Transaction {
   userId?: string;
   tenantId?: string;
   status?: string;
+  fulfillmentStatus?: 'FULFILLED' | 'UNFULFILLED' | 'PARTIAL' | 'DELIVERED' | 'SHIPPED' | string;
+  financialStatus?: 'PAID' | 'PENDING' | 'AUTHORIZED' | 'REFUNDED' | 'PARTIALLY_REFUNDED' | string;
+  deliveryStatus?: 'DELIVERED' | 'IN_TRANSIT' | 'OUT_FOR_DELIVERY' | 'PENDING' | string;
+  isRevenueRecognized?: boolean;
+  paymentReceived?: boolean;
   paymentMethod?: string;
   customerName?: string;
   notes?: string;

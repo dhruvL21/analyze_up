@@ -58,7 +58,7 @@ import {
 } from '@/components/ui/dialog';
 
 export default function AIAdvisorPage() {
-  const { products, transactions, suppliers, orders, returns = [], activePlan, setShowSubscriptionModal, businessProfile, updateProduct, addOrder } = useData();
+  const { products, transactions, suppliers, orders, returns = [], activePlan, setShowSubscriptionModal, businessProfile, updateProduct, addOrder, incrementAiQueryCount } = useData();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -116,6 +116,7 @@ export default function AIAdvisorPage() {
     setChatMessage('');
     const userMsg: ChatMessage = { role: 'user', content: text };
     setChatHistory(prev => [...prev, userMsg]);
+    incrementAiQueryCount(1);
 
     // 1. Calculate deterministic copilot response immediately in milliseconds
     const copilotRes = processCopilotQuery(

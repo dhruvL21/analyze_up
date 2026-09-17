@@ -358,5 +358,31 @@ describe('AnalyzeUp — Adaptive Intelligence & Data Maturity Engine', () => {
       expect(health.factors.deadStockRatio).toBe(100);
       expect(health.score).toBeGreaterThanOrEqual(70);
     });
+
+    it('Scenario 16: Low readiness store (e.g. score ~42, 14 days, 26 orders) keeps deadStockDetection strictly false and items Healthy', () => {
+      const products = generateProducts(10);
+      // 26 orders over 14 days
+      const transactions = generateTransactions(26, 14);
+
+      const readiness = evaluateDataReadiness(products, transactions);
+
+      expect(readiness.level).toBe<IntelligenceLevel>('LEARNING');
+      expect(readiness.score).toBeLessThan(50);
+      expect(readiness.capabilities.deadStockDetection).toBe(false);
+
+      // Product with 0 sales in this catalog
+      const unsoldProduct = products[0];
+      const pTx: Transaction[] = []; // zero sales transactions
+      const report = computeProductIntelligence(unsoldProduct, pTx, [], [], {
+        isDeadStockEnabled: readiness.capabilities.deadStockDetection,
+        isVelocityEnabled: readiness.capabilities.trendAnalysis,
+        historicalDays: readiness.historicalDays,
+      });
+
+      expect(report.healthStatus).toBe('Healthy');
+      expect(report.tags).not.toContain('Dead Stock');
+      expect(report.opportunityAdvice.type).not.toBe('clearance');
+      expect(report.executiveSummary).not.toContain('Launch a clearance promo');
+    });
   });
 });

@@ -123,6 +123,7 @@ import {
   WorkspaceInvitation,
   WorkspaceRole,
   logWorkspaceAction,
+  getStoredWorkspaceMembers,
 } from '@/lib/saas-engine';
 import { CreatePurchaseOrderModal } from '@/components/create-purchase-order-modal';
 import {
@@ -135,7 +136,23 @@ import {
 import { cn } from '@/lib/utils';
 
 function ExecutiveIntelligencePageContent() {
-  const { products, transactions, suppliers, orders, returns, businessProfile, activePlan, handleUpgrade, isProcessingPayment, aiQueryCount, capabilities, dataReadiness } = useData();
+  const {
+    products,
+    transactions,
+    suppliers,
+    orders,
+    returns,
+    businessProfile,
+    activePlan,
+    handleUpgrade,
+    isProcessingPayment,
+    aiQueryCount,
+    reportCount,
+    incrementReportCount,
+    updateActivePlan,
+    capabilities,
+    dataReadiness,
+  } = useData();
   const { user } = useUser();
   const { toast } = useToast();
   const searchParams = useSearchParams();
@@ -357,14 +374,22 @@ function ExecutiveIntelligencePageContent() {
   // Dynamic Billing usage calculations
   const productCount = products.length;
   const currentAiQueryCount = aiQueryCount;
-  const reportCount = reportHistory.length || 1;
+  const currentReportCount = reportCount;
+  const [teamMemberCount, setTeamMemberCount] = useState<number>(1);
+
+  React.useEffect(() => {
+    setTeamMemberCount(getStoredWorkspaceMembers(user ? { uid: user.uid, email: user.email || '', displayName: user.displayName || '' } : undefined).length);
+  }, [user]);
 
   const productUsage = checkUsageLimit(currentPlanKey, 'products', productCount);
   const aiUsage = checkUsageLimit(currentPlanKey, 'aiQueries', currentAiQueryCount);
+  const reportUsage = checkUsageLimit(currentPlanKey, 'reports', currentReportCount);
+  const teamUsage = checkUsageLimit(currentPlanKey, 'teamMembers', teamMemberCount);
 
   // Handlers
   const handleGenerateSnapshot = (type: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'QUARTERLY') => {
     const snap = createReportSnapshot(type, products, transactions, suppliers, orders, returns, businessProfile);
+    incrementReportCount(1);
     setSelectedSnapshot(snap);
     toast({
       title: `📷 Report Snapshot Generated`,
@@ -427,6 +452,7 @@ function ExecutiveIntelligencePageContent() {
     const plan = PLAN_CONFIGS[planKey];
     try {
       await handleUpgrade(`${planKey.toLowerCase()}_monthly`, plan.priceMonthly, plan.name);
+      await updateActivePlan(plan.name);
       setCurrentPlanKey(planKey);
       toast({
         title: `🎉 Subscribed to ${plan.name}`,
@@ -1076,22 +1102,77 @@ function ExecutiveIntelligencePageContent() {
                 <CardTitle className="text-base font-bold flex items-center gap-2">
                   <Zap className="w-5 h-5 text-amber-400" /> Live Workspace Usage Limits
                 </CardTitle>
+                <CardDescription className="text-xs">
+                  Current monthly utilization against your active workspace subscription limits.
+                </CardDescription>
               </CardHeader>
               <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                <div className="p-3 rounded-xl bg-secondary/30 border border-border/30 space-y-1.5">
+                {/* Products Meter */}
+                <div className="p-3.5 rounded-xl bg-secondary/30 border border-border/40 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-foreground text-xs">Products & SKUs</span>
-                    <span className="font-bold text-foreground text-xs">{productCount} / {productUsage.limit}</span>
+                    <span className="font-semibold text-foreground flex items-center gap-1.5 text-xs">
+                      <Boxes className="w-4 h-4 text-primary" /> Products & SKUs
+                    </span>
+                    <span className="font-bold text-foreground text-xs">
+                      {productCount} / {productUsage.limit}
+                    </span>
                   </div>
                   <Progress value={productUsage.usagePercent} className="h-2" />
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>{productUsage.usagePercent}% used</span>
+                    <span>{Math.max(0, productUsage.limit - productCount)} remaining</span>
+                  </div>
                 </div>
 
-                <div className="p-3 rounded-xl bg-secondary/30 border border-border/30 space-y-1.5">
+                {/* AI Queries Meter */}
+                <div className="p-3.5 rounded-xl bg-secondary/30 border border-border/40 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="font-semibold text-foreground text-xs">AI Copilot Queries</span>
-                    <span className="font-bold text-foreground text-xs">{aiQueryCount} / {aiUsage.limit}</span>
+                    <span className="font-semibold text-foreground flex items-center gap-1.5 text-xs">
+                      <Sparkles className="w-4 h-4 text-primary" /> AI Copilot Queries
+                    </span>
+                    <span className="font-bold text-foreground text-xs">
+                      {currentAiQueryCount} / {aiUsage.limit}
+                    </span>
                   </div>
                   <Progress value={aiUsage.usagePercent} className="h-2" />
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>{aiUsage.usagePercent}% used</span>
+                    <span>{Math.max(0, aiUsage.limit - currentAiQueryCount)} remaining</span>
+                  </div>
+                </div>
+
+                {/* Executive Reports Meter */}
+                <div className="p-3.5 rounded-xl bg-secondary/30 border border-border/40 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-foreground flex items-center gap-1.5 text-xs">
+                      <FileText className="w-4 h-4 text-primary" /> Executive Reports
+                    </span>
+                    <span className="font-bold text-foreground text-xs">
+                      {currentReportCount} / {reportUsage.limit}
+                    </span>
+                  </div>
+                  <Progress value={reportUsage.usagePercent} className="h-2" />
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>{reportUsage.usagePercent}% used</span>
+                    <span>{Math.max(0, reportUsage.limit - currentReportCount)} remaining</span>
+                  </div>
+                </div>
+
+                {/* Team Members Meter */}
+                <div className="p-3.5 rounded-xl bg-secondary/30 border border-border/40 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-foreground flex items-center gap-1.5 text-xs">
+                      <Users className="w-4 h-4 text-primary" /> Team Seats
+                    </span>
+                    <span className="font-bold text-foreground text-xs">
+                      {teamMemberCount} / {teamUsage.limit}
+                    </span>
+                  </div>
+                  <Progress value={teamUsage.usagePercent} className="h-2" />
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>{teamUsage.usagePercent}% used</span>
+                    <span>{Math.max(0, teamUsage.limit - teamMemberCount)} remaining</span>
+                  </div>
                 </div>
               </CardContent>
             </Card>

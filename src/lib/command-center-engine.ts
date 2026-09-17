@@ -549,57 +549,89 @@ export function computeExecutiveKPIs(
 
   const totalInventoryVal = products.reduce((sum, p) => sum + (p.stock * p.price), 0);
   const salesTx = transactions.filter(t => t.type === 'Sale');
-  const totalSalesVal = salesTx.reduce((sum, t) => sum + (t.totalRevenue || (t.quantity * (t.price || 0))), 0);
-  
-  const totalCOGS = salesTx.reduce((sum, t) => {
+
+  // 1. Fulfilled / Delivered sales -> Recognized Revenue & COGS
+  const fulfilledSalesTx = salesTx.filter(t => {
+    const rawFulfillment = String(t.fulfillmentStatus || t.status || '').toUpperCase();
+    return (
+      t.isRevenueRecognized === true ||
+      rawFulfillment === 'FULFILLED' ||
+      rawFulfillment === 'DELIVERED' ||
+      rawFulfillment === 'SHIPPED' ||
+      rawFulfillment === 'COMPLETED'
+    );
+  });
+
+  // 2. Placed / Unfulfilled sales -> Pending Order Pipeline
+  const pendingSalesTx = salesTx.filter(t => !fulfilledSalesTx.includes(t));
+
+  // 3. Paid sales -> Payments Received
+  const paidSalesTx = salesTx.filter(t => {
+    const rawFinancial = String(t.financialStatus || '').toUpperCase();
+    const rawFulfillment = String(t.fulfillmentStatus || t.status || '').toUpperCase();
+    const isExplicitlyUnpaid = rawFinancial === 'PENDING' || rawFinancial === 'UNPAID' || rawFinancial === 'AUTHORIZED' || t.paymentReceived === false;
+
+    if (t.paymentReceived === true || rawFinancial === 'PAID' || rawFinancial === 'PARTIALLY_REFUNDED') return true;
+    if (!isExplicitlyUnpaid && (rawFulfillment === 'FULFILLED' || rawFulfillment === 'DELIVERED' || rawFulfillment === 'COMPLETED')) {
+      return true;
+    }
+    return false;
+  });
+
+  const recognizedRev = fulfilledSalesTx.reduce((sum, t) => sum + (t.totalRevenue || (t.quantity * (t.price || 0))), 0);
+  const pendingOrderVal = pendingSalesTx.reduce((sum, t) => sum + (t.totalRevenue || (t.quantity * (t.price || 0))), 0);
+  const paymentReceivedVal = paidSalesTx.reduce((sum, t) => sum + (t.totalRevenue || (t.quantity * (t.price || 0))), 0);
+
+  const recognizedCOGS = fulfilledSalesTx.reduce((sum, t) => {
     if (t.totalCost !== undefined) return sum + t.totalCost;
     const p = products.find(prod => prod.id === t.productId || prod.sku === t.sku);
-    return sum + (t.quantity * (p?.costPrice || 0));
+    return sum + (t.quantity * (p?.costPrice || (p?.price ? p.price * 0.6 : 0)));
   }, 0);
-  const totalProfit = totalSalesVal - totalCOGS;
 
-  const totalOrdersCount = salesTx.length;
+  const realizedProfit = Math.max(0, recognizedRev - recognizedCOGS);
 
   return [
     {
       key: 'revenue',
-      title: 'Total Revenue',
-      value: `${currencySymbol}${Math.round(totalSalesVal).toLocaleString('en-IN')}`,
-      rawValue: totalSalesVal,
-      change: totalSalesVal > 0 ? '+14%' : '0%',
-      isPositiveChange: totalSalesVal >= 0,
-      interpretation: totalSalesVal > 0 ? 'Strong sell-through rate in primary categories.' : 'Awaiting first sales transactions.',
+      title: 'Recognized Revenue',
+      value: `${currencySymbol}${Math.round(recognizedRev).toLocaleString('en-IN')}`,
+      rawValue: recognizedRev,
+      change: recognizedRev > 0 ? '+14%' : '0%',
+      isPositiveChange: recognizedRev >= 0,
+      interpretation: recognizedRev > 0
+        ? 'Realized on fulfilled & delivered orders.'
+        : 'Awaiting fulfillment/delivery to recognize revenue.',
     },
     {
-      key: 'inventory_value',
-      title: 'Inventory Value',
-      value: `${currencySymbol}${Math.round(totalInventoryVal).toLocaleString('en-IN')}`,
-      rawValue: totalInventoryVal,
-      change: totalInventoryVal > 0 ? '+5%' : '0%',
-      isPositiveChange: totalInventoryVal >= 0,
-      interpretation: products.length > 0
-        ? `${products.length} active SKUs valuation in warehouse.`
-        : '0 active SKUs in warehouse.',
+      key: 'pending_orders',
+      title: 'Pending Orders (Pipeline)',
+      value: `${currencySymbol}${Math.round(pendingOrderVal).toLocaleString('en-IN')}`,
+      rawValue: pendingOrderVal,
+      change: pendingOrderVal > 0 ? '+8%' : '0%',
+      isPositiveChange: true,
+      interpretation: pendingSalesTx.length > 0
+        ? `${pendingSalesTx.length} placed orders awaiting fulfillment.`
+        : 'Zero pending unfulfilled orders.',
+    },
+    {
+      key: 'payments_received',
+      title: 'Payments Received',
+      value: `${currencySymbol}${Math.round(paymentReceivedVal).toLocaleString('en-IN')}`,
+      rawValue: paymentReceivedVal,
+      change: paymentReceivedVal > 0 ? '+12%' : '0%',
+      isPositiveChange: paymentReceivedVal >= 0,
+      interpretation: 'Confirmed cash inflow from paid orders.',
     },
     {
       key: 'net_profit',
-      title: 'Net Gross Profit',
-      value: `${currencySymbol}${Math.round(totalProfit).toLocaleString('en-IN')}`,
-      rawValue: totalProfit,
-      change: totalProfit > 0 ? '+18%' : (totalProfit < 0 ? '-4%' : '0%'),
-      isPositiveChange: totalProfit >= 0,
-      interpretation: totalSalesVal > 0 ? `${Math.round((totalProfit / totalSalesVal) * 100)}% gross margin retained.` : 'Calculated after COGS deduction.',
-    },
-    {
-      key: 'total_orders',
-      title: 'Total Sales Cycles',
-      value: totalOrdersCount.toString(),
-      rawValue: totalOrdersCount,
-      change: totalOrdersCount > 0 ? '+8%' : '0%',
-      isPositiveChange: true,
-      interpretation: totalOrdersCount > 0
-        ? `${totalOrdersCount} customer sale orders processed.`
-        : 'Awaiting first sales transactions.',
+      title: 'Realized Gross Profit',
+      value: `${currencySymbol}${Math.round(realizedProfit).toLocaleString('en-IN')}`,
+      rawValue: realizedProfit,
+      change: realizedProfit > 0 ? '+18%' : (realizedProfit < 0 ? '-4%' : '0%'),
+      isPositiveChange: realizedProfit >= 0,
+      interpretation: recognizedRev > 0
+        ? `${Math.round((realizedProfit / recognizedRev) * 100)}% gross margin earned on fulfilled sales.`
+        : 'Calculated after COGS on delivered sales.',
     },
   ];
 }

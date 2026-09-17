@@ -377,7 +377,7 @@ export async function saveShopifyConnection(record: ShopifyConnectionRecord): Pr
       process.env.GOOGLE_APPLICATION_CREDENTIALS
     );
 
-    if (isExplicitCredentialsConfigured) {
+    if (isExplicitCredentialsConfigured && process.env.NODE_ENV === 'production') {
       throw new PersistenceError(
         'SHOPIFY_CONNECTION_PERSIST_FAILED',
         `Failed to persist Shopify connection to Firestore: ${err?.message || err}`,

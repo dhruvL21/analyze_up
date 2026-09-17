@@ -119,6 +119,11 @@ export function convertShopifyToCanonicalProducts(shopifyProducts: any[]): Produ
       const sku = String(v.sku || (v.barcode ? v.barcode : `SKU-${p.id}-${v.id || '0'}`));
       const name = variants.length > 1 && v.title ? `${title} (${v.title})` : title;
 
+      const variantImg = v.image_id && Array.isArray(p.images)
+        ? p.images.find((img: any) => img.id === v.image_id)?.src
+        : null;
+      const imageUrl = variantImg || p.image?.src || (Array.isArray(p.images) && p.images[0]?.src) || p.featured_image || '';
+
       products.push({
         id: `shopify_${p.id}_${v.id || 'default'}`,
         name,
@@ -130,9 +135,11 @@ export function convertShopifyToCanonicalProducts(shopifyProducts: any[]): Produ
         reorderPoint: Math.max(5, Math.round(stock * 0.2)),
         supplier: vendor,
         source: 'SHOPIFY',
+        importSource: 'shopify',
         shopifyProductId: String(p.id),
         shopifyVariantId: v.id ? String(v.id) : undefined,
         compareAtPrice: v.compare_at_price ? Number(v.compare_at_price) : undefined,
+        imageUrl: imageUrl || undefined,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
@@ -177,6 +184,15 @@ export function convertShopifyToCanonicalTransactions(shopifyOrders: any[]): Tra
             },
           ];
 
+    const rawFinancial = String(order.financial_status || order.displayFinancialStatus || 'PENDING').toUpperCase();
+    const rawFulfillment = String(order.fulfillment_status || order.displayFulfillmentStatus || 'UNFULFILLED').toUpperCase();
+    const isFulfilled = rawFulfillment === 'FULFILLED' || rawFulfillment === 'DELIVERED';
+    const isPaid = rawFinancial === 'PAID';
+    const fulfillmentStatus = isFulfilled ? 'FULFILLED' : 'UNFULFILLED';
+    const financialStatus = isPaid ? 'PAID' : (rawFinancial === 'REFUNDED' ? 'REFUNDED' : 'PENDING');
+    const deliveryStatus = isFulfilled ? 'DELIVERED' : 'PENDING';
+    const status = isFulfilled ? 'Delivered' : 'Pending';
+
     lineItems.forEach((item: any, idx: number) => {
       const qty = Math.max(1, Number(item.quantity || 1));
       const unitPrice = Number(item.price || 0);
@@ -202,6 +218,12 @@ export function convertShopifyToCanonicalTransactions(shopifyOrders: any[]): Tra
         customerName: customer,
         paymentMethod,
         source: 'SHOPIFY',
+        status,
+        fulfillmentStatus,
+        financialStatus,
+        deliveryStatus,
+        isRevenueRecognized: isFulfilled,
+        paymentReceived: isPaid,
         createdAt: dateStr,
         updatedAt: dateStr,
       });

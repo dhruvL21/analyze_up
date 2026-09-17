@@ -25,7 +25,32 @@ import {
   Truck,
   AlertTriangle,
   CheckCircle2,
+  ZoomIn,
+  Camera,
+  ImageIcon,
 } from 'lucide-react';
+
+/**
+ * Resolves product image from multiple canonical and raw source attributes
+ */
+function resolveProductImage(p: Product | null | undefined): string | null {
+  if (!p) return null;
+  if (typeof p.imageUrl === 'string' && p.imageUrl.trim()) return p.imageUrl.trim();
+  const rawObj = p as Record<string, any>;
+  if (typeof rawObj.image === 'string' && rawObj.image.trim()) return rawObj.image.trim();
+  if (typeof rawObj.image_url === 'string' && rawObj.image_url.trim()) return rawObj.image_url.trim();
+  if (typeof rawObj.thumbnail === 'string' && rawObj.thumbnail.trim()) return rawObj.thumbnail.trim();
+  if (Array.isArray(rawObj.images) && rawObj.images.length > 0) {
+    const first = rawObj.images[0];
+    if (typeof first === 'string' && first.trim()) return first.trim();
+    if (first?.src && typeof first.src === 'string') return first.src.trim();
+    if (first?.url && typeof first.url === 'string') return first.url.trim();
+  }
+  const rawAttrs = rawObj.rawAttributes || rawObj.customAttributes || {};
+  const rawSrc = rawAttrs['Image Src'] || rawAttrs['image_src'] || rawAttrs['Image URL'] || rawAttrs['image_url'] || rawAttrs['Image'] || rawAttrs['image'];
+  if (typeof rawSrc === 'string' && rawSrc.trim()) return rawSrc.trim();
+  return null;
+}
 
 interface ProductIntelligenceDrawerProps {
   product: Product | null;
@@ -44,6 +69,15 @@ export function ProductIntelligenceDrawer({ product, open, onOpenChange }: Produ
   } | null>(null);
 
   const [recentLogs, setRecentLogs] = React.useState<BusinessAuditLog[]>([]);
+  const [imageError, setImageError] = React.useState(false);
+  const [isZoomOpen, setIsZoomOpen] = React.useState(false);
+  const [isEditingImage, setIsEditingImage] = React.useState(false);
+  const [imageUrlInput, setImageUrlInput] = React.useState('');
+  const [isSavingImage, setIsSavingImage] = React.useState(false);
+
+  React.useEffect(() => {
+    setImageError(false);
+  }, [product?.id]);
 
   React.useEffect(() => {
     setRecentLogs(getAuditLogs());
@@ -57,9 +91,40 @@ export function ProductIntelligenceDrawer({ product, open, onOpenChange }: Produ
   // Always resolve live, real-time product from React context / Firestore
   const liveProduct = products.find((p) => p.id === product.id || (p.sku && product.sku && p.sku === product.sku)) || product;
 
+  const productImage = !imageError ? resolveProductImage(liveProduct) : null;
+
+  const handleSaveImageUrl = async () => {
+    if (!imageUrlInput.trim()) return;
+    setIsSavingImage(true);
+    try {
+      await updateProduct(
+        {
+          ...liveProduct,
+          imageUrl: imageUrlInput.trim(),
+          updatedAt: new Date().toISOString(),
+        },
+        { silentToast: false }
+      );
+      setImageError(false);
+      setIsEditingImage(false);
+      toast({
+        title: 'Product Image Saved ✨',
+        description: `Updated image URL for "${liveProduct.name}".`,
+      });
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Failed to update image',
+        description: err?.message || 'Could not save image URL.',
+      });
+    } finally {
+      setIsSavingImage(false);
+    }
+  };
+
   const currencySymbol = businessProfile?.currency?.includes('USD') ? '$' : '₹';
   const report = computeProductIntelligence(liveProduct, transactions, returns, suppliers, {
-    isDeadStockEnabled: capabilities?.deadStockDetection,
+    isDeadStockEnabled: Boolean(capabilities?.deadStockDetection && dataReadiness?.level !== 'LEARNING'),
     isVelocityEnabled: capabilities?.trendAnalysis,
     historicalDays: dataReadiness?.historicalDays,
   });
@@ -199,16 +264,87 @@ export function ProductIntelligenceDrawer({ product, open, onOpenChange }: Produ
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-background/95 border border-border/60 rounded-3xl ios-glass shadow-2xl p-6 space-y-4">
-          <DialogHeader className="space-y-2 border-b border-border/40 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-400 font-extrabold flex items-center justify-center text-base border border-amber-500/30 shrink-0">
-                {liveProduct.name.charAt(0).toUpperCase()}
+          <DialogHeader className="space-y-3 border-b border-border/40 pb-4">
+            <div className="flex items-start gap-3.5">
+              {/* Product Image Thumbnail with Lightbox & Inline Edit */}
+              <div className="relative group shrink-0">
+                <div
+                  onClick={() => {
+                    if (productImage) {
+                      setIsZoomOpen(true);
+                    } else {
+                      setImageUrlInput(liveProduct.imageUrl || '');
+                      setIsEditingImage(true);
+                    }
+                  }}
+                  className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl overflow-hidden border border-border/60 bg-secondary/50 shadow-md flex items-center justify-center cursor-pointer transition-all duration-300 hover:ring-2 hover:ring-primary/40 hover:border-primary/50 relative"
+                  title={productImage ? 'Click to enlarge product image' : 'Click to add product image'}
+                >
+                  {productImage ? (
+                    <>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={productImage}
+                        alt={liveProduct.name}
+                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        onError={() => setImageError(true)}
+                      />
+                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                        <ZoomIn className="w-5 h-5 drop-shadow-md" />
+                      </div>
+                    </>
+                  ) : (
+                    <div className="w-full h-full bg-gradient-to-br from-amber-500/20 to-amber-600/10 text-amber-400 font-black flex flex-col items-center justify-center border border-amber-500/30 gap-1 p-1 text-center">
+                      <span className="text-xl leading-none font-extrabold">{liveProduct.name.charAt(0).toUpperCase()}</span>
+                      <span className="text-[9px] text-muted-foreground font-medium flex items-center gap-0.5">
+                        <ImageIcon className="w-2.5 h-2.5" /> Add Image
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Edit / Set Image Button */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setImageUrlInput(liveProduct.imageUrl || productImage || '');
+                    setIsEditingImage(true);
+                  }}
+                  className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-background border border-border/60 shadow-md flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/50 transition-colors"
+                  title={productImage ? 'Change Image URL' : 'Add Image URL'}
+                >
+                  <Camera className="w-3 h-3" />
+                </button>
               </div>
-              <div className="min-w-0 flex-1">
-                <DialogTitle className="text-lg font-bold text-foreground truncate">{liveProduct.name}</DialogTitle>
-                <DialogDescription className="text-xs text-muted-foreground">
-                  SKU: {liveProduct.sku || 'N/A'} • {liveProduct.categoryId || 'General Category'} • {liveProduct.brand || 'Brand'}
+
+              {/* Title & Metadata */}
+              <div className="min-w-0 flex-1 space-y-1.5 pr-8">
+                <div className="flex flex-wrap items-center gap-2">
+                  <DialogTitle className="text-base sm:text-lg font-bold text-foreground leading-snug">
+                    {liveProduct.name}
+                  </DialogTitle>
+                  <Badge className={`${report.badgeClass} text-[10px] px-2.5 py-0.5 font-semibold shrink-0 rounded-full shadow-sm`}>
+                    {report.healthStatus}
+                  </Badge>
+                </div>
+                <DialogDescription className="text-xs text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                  <span className="font-mono text-foreground/80">SKU: {liveProduct.sku || 'N/A'}</span>
+                  <span>•</span>
+                  <span>{liveProduct.category || liveProduct.categoryId || 'General Category'}</span>
+                  <span>•</span>
+                  <span>{liveProduct.brand || liveProduct.supplier || 'Brand'}</span>
                 </DialogDescription>
+                <div className="flex items-center gap-2 pt-0.5">
+                  <span className="text-sm font-bold text-foreground">
+                    {currencySymbol}{Number(liveProduct.price || 0).toLocaleString('en-IN')}
+                  </span>
+                  {liveProduct.compareAtPrice && liveProduct.compareAtPrice > liveProduct.price && (
+                    <span className="text-xs text-muted-foreground line-through">
+                      {currencySymbol}{Number(liveProduct.compareAtPrice).toLocaleString('en-IN')}
+                    </span>
+                  )}
+                </div>
               </div>
             </div>
           </DialogHeader>
@@ -398,6 +534,106 @@ export function ProductIntelligenceDrawer({ product, open, onOpenChange }: Produ
               className="bg-amber-500 hover:bg-amber-600 text-black font-extrabold rounded-xl text-xs px-4"
             >
               Confirm & Apply
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Product Image Lightbox / Zoom Dialog */}
+      <Dialog open={isZoomOpen} onOpenChange={setIsZoomOpen}>
+        <DialogContent className="max-w-md bg-background/95 border border-border/60 rounded-3xl ios-glass p-5 text-center space-y-3">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-bold truncate">{liveProduct.name}</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              SKU: {liveProduct.sku || 'N/A'} • {currencySymbol}{Number(liveProduct.price || 0).toLocaleString('en-IN')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="relative aspect-square w-full rounded-2xl overflow-hidden border border-border/40 bg-secondary/30 flex items-center justify-center">
+            {productImage && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={productImage}
+                alt={liveProduct.name}
+                className="w-full h-full object-contain p-2"
+              />
+            )}
+          </div>
+          <div className="flex items-center justify-between pt-1">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setIsZoomOpen(false);
+                setImageUrlInput(liveProduct.imageUrl || productImage || '');
+                setIsEditingImage(true);
+              }}
+              className="rounded-xl text-xs gap-1.5"
+            >
+              <Camera className="w-3.5 h-3.5" />
+              Change Image
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => setIsZoomOpen(false)}
+              className="rounded-xl text-xs"
+            >
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit / Set Product Image URL Dialog */}
+      <Dialog open={isEditingImage} onOpenChange={setIsEditingImage}>
+        <DialogContent className="max-w-sm bg-background/95 border border-border/60 rounded-3xl ios-glass p-5 space-y-4">
+          <DialogHeader>
+            <DialogTitle className="text-sm font-bold flex items-center gap-1.5">
+              <Camera className="w-4 h-4 text-primary" />
+              Update Product Image
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Provide a direct image URL for &quot;{liveProduct.name}&quot;.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <input
+              type="url"
+              placeholder="https://example.com/product-image.jpg"
+              value={imageUrlInput}
+              onChange={(e) => setImageUrlInput(e.target.value)}
+              className="w-full text-xs px-3 py-2.5 rounded-xl bg-secondary/50 border border-border/60 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+            />
+            {imageUrlInput.trim() && (
+              <div className="relative aspect-video w-full rounded-xl overflow-hidden border border-border/40 bg-secondary/20 flex items-center justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={imageUrlInput.trim()}
+                  alt="Preview"
+                  className="w-full h-full object-contain p-1"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = 'none';
+                  }}
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter className="flex gap-2 pt-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsEditingImage(false)}
+              className="rounded-xl text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSaveImageUrl}
+              disabled={isSavingImage || !imageUrlInput.trim()}
+              className="rounded-xl text-xs bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+            >
+              {isSavingImage ? 'Saving...' : 'Save Image'}
             </Button>
           </DialogFooter>
         </DialogContent>

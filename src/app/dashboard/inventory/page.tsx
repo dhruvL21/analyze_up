@@ -62,7 +62,37 @@ import { OperationsSubNav } from '@/components/operations-sub-nav';
 
 function InventoryPageContent() {
   const searchParams = useSearchParams();
-  const { products, addProduct, updateProduct, deleteProduct, recordSale, isLoading, categories, suppliers, addCategory, addSupplier, transactions, returns, businessProfile, capabilities, dataReadiness } = useData();
+  const {
+    products,
+    addProduct,
+    updateProduct,
+    deleteProduct,
+    recordSale,
+    isLoading,
+    categories,
+    suppliers,
+    addCategory,
+    addSupplier,
+    transactions,
+    returns,
+    businessProfile,
+    capabilities,
+    dataReadiness,
+    businessBuddyCalibration,
+  } = useData();
+
+  // Intelligence active flag: only show quick prediction/dead-stock queries when learning phase completes & predictive capabilities unlock
+  const isIntelligenceActive = useMemo(() => {
+    if (!dataReadiness) return false;
+    const isLearning = dataReadiness.level === 'LEARNING' || businessBuddyCalibration?.status === 'LEARNING';
+    const hasActivePredictiveCapabilities = Boolean(
+      capabilities?.deadStockDetection ||
+      capabilities?.demandForecasting ||
+      capabilities?.trendAnalysis ||
+      capabilities?.stockoutPrediction
+    );
+    return !isLearning && hasActivePredictiveCapabilities;
+  }, [dataReadiness, businessBuddyCalibration, capabilities]);
 
   const [isFormDialogOpen, setIsFormDialogOpen] = useState(false);
   const [isSellDialogOpen, setIsSellDialogOpen] = useState(false);
@@ -223,7 +253,7 @@ function InventoryPageContent() {
       const pTx = transactionsByProduct.get(p.id) || transactionsByProduct.get(p.sku || '') || [];
       const pRet = returnsByProduct.get(p.id) || [];
       const report = computeProductIntelligence(p, pTx, pRet, suppliers, {
-        isDeadStockEnabled: capabilities?.deadStockDetection,
+        isDeadStockEnabled: Boolean(capabilities?.deadStockDetection && dataReadiness?.level !== 'LEARNING'),
         isVelocityEnabled: capabilities?.trendAnalysis,
         historicalDays: dataReadiness?.historicalDays,
       });
@@ -324,38 +354,40 @@ function InventoryPageContent() {
               </div>
             </div>
 
-            {/* Quick NL Queries Option Bar */}
-            <div className="flex items-center gap-2 overflow-x-auto pt-1 pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden text-[11px]">
-              <span className="text-muted-foreground font-semibold shrink-0 flex items-center gap-1.5 text-xs">
-                <Filter className="w-3.5 h-3.5 text-muted-foreground" /> Quick NL Queries:
-              </span>
+            {/* Quick NL Queries Option Bar - Only shown when app starts showing predictions and dead stocks */}
+            {isIntelligenceActive && (
+              <div className="flex items-center gap-2 overflow-x-auto pt-1 pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden text-[11px]">
+                <span className="text-muted-foreground font-semibold shrink-0 flex items-center gap-1.5 text-xs">
+                  <Filter className="w-3.5 h-3.5 text-muted-foreground" /> Quick NL Queries:
+                </span>
 
-              {PRESET_QUICK_QUERIES.map((preset) => {
-                const isActive = searchQuery.toLowerCase() === preset.query.toLowerCase();
-                return (
+                {PRESET_QUICK_QUERIES.map((preset) => {
+                  const isActive = searchQuery.toLowerCase() === preset.query.toLowerCase();
+                  return (
+                    <button
+                      key={preset.label}
+                      onClick={() => setSearchQuery(isActive ? '' : preset.query)}
+                      className={`px-3 py-1.5 rounded-xl font-medium border text-xs transition-all shrink-0 cursor-pointer ${
+                        isActive
+                          ? 'bg-primary text-primary-foreground border-primary shadow-sm font-semibold'
+                          : 'bg-secondary/40 border-border/40 text-muted-foreground hover:text-foreground hover:bg-secondary/80'
+                      }`}
+                    >
+                      {preset.label}
+                    </button>
+                  );
+                })}
+
+                {searchQuery && (
                   <button
-                    key={preset.label}
-                    onClick={() => setSearchQuery(isActive ? '' : preset.query)}
-                    className={`px-3 py-1.5 rounded-xl font-medium border text-xs transition-all shrink-0 cursor-pointer ${
-                      isActive
-                        ? 'bg-primary text-primary-foreground border-primary shadow-sm font-semibold'
-                        : 'bg-secondary/40 border-border/40 text-muted-foreground hover:text-foreground hover:bg-secondary/80'
-                    }`}
+                    onClick={() => setSearchQuery('')}
+                    className="px-2.5 py-1.5 rounded-xl font-medium text-xs text-muted-foreground hover:text-rose-400 border border-dashed border-border/60 hover:border-rose-500/40 hover:bg-rose-500/10 transition-all shrink-0 flex items-center gap-1 cursor-pointer"
                   >
-                    {preset.label}
+                    <X className="w-3 h-3" /> Clear filter
                   </button>
-                );
-              })}
-
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="px-2.5 py-1.5 rounded-xl font-medium text-xs text-muted-foreground hover:text-rose-400 border border-dashed border-border/60 hover:border-rose-500/40 hover:bg-rose-500/10 transition-all shrink-0 flex items-center gap-1 cursor-pointer"
-                >
-                  <X className="w-3 h-3" /> Clear filter
-                </button>
-              )}
-            </div>
+                )}
+              </div>
+            )}
           </CardHeader>
           <CardContent className="p-0">
             {/* Desktop Table View */}

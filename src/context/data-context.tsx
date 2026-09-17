@@ -4,7 +4,7 @@ import { createContext, useContext, useState, ReactNode, useMemo, useCallback, u
 import type { Product, PurchaseOrder, Supplier, Transaction, Category, ProductReturn, CustomAttribute, BusinessProfile, BusinessType } from '@/lib/types';
 import { useToast } from '@/hooks/use-toast';
 import { useUser, useFirestore, useDoc } from '@/firebase';
-import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch, setDoc, onSnapshot, getDocs, getDoc, deleteField } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBatch, setDoc, onSnapshot, getDocs, getDoc, deleteField, increment } from 'firebase/firestore';
 import { useCollection } from '@/firebase/firestore/use-collection';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
@@ -27,6 +27,11 @@ import {
   reconcileDuplicateProducts,
 } from '@/lib/ingestion/order-deduplication-engine';
 import { sanitizePlainData } from '@/lib/utils';
+import {
+  type MonthlyUsageRecord,
+  getCurrentBillingMonth,
+  createInitialMonthlyUsage,
+} from '@/lib/saas-engine';
 
 import {
   getBusinessBuddyCalibration,
@@ -107,6 +112,10 @@ interface DataContextProps {
   activePlanLimit: number;
   aiQueryCount: number;
   incrementAiQueryCount: (amount?: number) => void;
+  reportCount: number;
+  incrementReportCount: (amount?: number) => void;
+  monthlyUsage: MonthlyUsageRecord;
+  updateActivePlan: (newPlan: string) => Promise<void>;
   handleUpgrade: (planId: string, amount: number, planName: string) => Promise<void>;
   analyticsSummary: AnalyticsSummary;
   refreshAnalytics: () => Promise<void>;
@@ -197,10 +206,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [firestore, user, products, transactions, suppliers, orders, returns]);
 
-  const [activePlan, setActivePlan] = useState<string>(() => {
+  const [activePlan, setActivePlanState] = useState<string>(() => {
     if (typeof window === 'undefined') return "Free Trial";
     return localStorage.getItem("analyzeup_subscription_plan") || (process.env.NODE_ENV === 'development' ? "Pro Plan" : "Free Trial");
   });
+
   const [aiQueryCount, setAiQueryCount] = useState<number>(() => {
     if (typeof window === 'undefined') return 0;
     try {
@@ -211,17 +221,188 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
   });
 
-  const incrementAiQueryCount = useCallback((amount = 1) => {
+  const [reportCount, setReportCount] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0;
+    try {
+      const saved = localStorage.getItem('analyzeup_reports_count');
+      return saved ? Math.max(0, parseInt(saved, 10)) : 0;
+    } catch {
+      return 0;
+    }
+  });
+
+  const [monthlyUsage, setMonthlyUsage] = useState<MonthlyUsageRecord>(() => createInitialMonthlyUsage());
+
+  // Real-time synchronization of account-level subscription and monthly usage limits from Firestore
+  useEffect(() => {
+    if (!user || !firestore) return;
+
+    const usageDocRef = doc(firestore, 'users', user.uid, 'subscription', 'usage');
+    const currentMonth = getCurrentBillingMonth();
+
+    const unsubscribe = onSnapshot(usageDocRef, async (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        const storedMonth = data.billingMonth;
+
+        // Reset ONLY when a new calendar month starts (e.g., September -> October)
+        if (storedMonth && storedMonth !== currentMonth) {
+          console.log(`[UsageQuota] Monthly rollover detected (${storedMonth} -> ${currentMonth}). Resetting monthly quota for account ${user.uid}.`);
+          const resetData: MonthlyUsageRecord = {
+            billingMonth: currentMonth,
+            aiQueriesCount: 0,
+            reportsCount: 0,
+            lastResetDate: new Date().toISOString(),
+            plan: data.plan || activePlan,
+            planKey: data.planKey || 'PRO',
+          };
+          setAiQueryCount(0);
+          setReportCount(0);
+          setMonthlyUsage(resetData);
+          try {
+            localStorage.setItem('analyzeup_ai_queries_count', '0');
+            localStorage.setItem('analyzeup_reports_count', '0');
+            localStorage.setItem(`analyzeup_usage_${user.uid}`, JSON.stringify(resetData));
+          } catch (e) {}
+
+          await setDoc(usageDocRef, {
+            ...resetData,
+            updatedAt: serverTimestamp(),
+          }, { merge: true }).catch(console.warn);
+        } else {
+          // SAME MONTH: Preserve exact cumulative usage for this account across all logins
+          const aiCount = typeof data.aiQueriesCount === 'number' ? data.aiQueriesCount : 0;
+          const repCount = typeof data.reportsCount === 'number' ? data.reportsCount : 0;
+          setAiQueryCount(aiCount);
+          setReportCount(repCount);
+          setMonthlyUsage({
+            billingMonth: data.billingMonth || currentMonth,
+            aiQueriesCount: aiCount,
+            reportsCount: repCount,
+            lastResetDate: data.lastResetDate || new Date().toISOString(),
+            plan: data.plan,
+            planKey: data.planKey,
+          });
+
+          if (data.plan) {
+            setActivePlanState(data.plan);
+            try {
+              localStorage.setItem('analyzeup_subscription_plan', data.plan);
+            } catch (e) {}
+          }
+
+          try {
+            localStorage.setItem('analyzeup_ai_queries_count', aiCount.toString());
+            localStorage.setItem('analyzeup_reports_count', repCount.toString());
+            localStorage.setItem(`analyzeup_usage_${user.uid}`, JSON.stringify(data));
+          } catch (e) {}
+        }
+      } else {
+        // Document does not exist yet: Seed the initial document for this user account
+        const initialPlan = localStorage.getItem('analyzeup_subscription_plan') || 
+                            (process.env.NODE_ENV === 'development' ? 'Pro Plan' : 'Free Trial');
+        const initialAi = Math.max(0, parseInt(localStorage.getItem('analyzeup_ai_queries_count') || '0', 10));
+        const initialRep = Math.max(0, parseInt(localStorage.getItem('analyzeup_reports_count') || '0', 10));
+
+        const seedUsage = {
+          plan: initialPlan,
+          billingMonth: currentMonth,
+          aiQueriesCount: initialAi,
+          reportsCount: initialRep,
+          lastResetDate: new Date().toISOString(),
+          updatedAt: serverTimestamp(),
+        };
+
+        setMonthlyUsage({
+          billingMonth: currentMonth,
+          aiQueriesCount: initialAi,
+          reportsCount: initialRep,
+          lastResetDate: seedUsage.lastResetDate,
+          plan: initialPlan,
+        });
+
+        await setDoc(usageDocRef, seedUsage, { merge: true }).catch(console.warn);
+      }
+    }, (error) => {
+      console.warn('[UsageQuota] Listener error:', error);
+    });
+
+    return () => unsubscribe();
+  }, [user, firestore]);
+
+  const incrementAiQueryCount = useCallback(async (amount = 1) => {
+    const currentMonth = getCurrentBillingMonth();
     setAiQueryCount(prev => {
       const next = prev + amount;
       try {
         localStorage.setItem('analyzeup_ai_queries_count', next.toString());
-      } catch (e) {
-        console.error('Error saving AI query count:', e);
-      }
+      } catch (e) {}
       return next;
     });
-  }, []);
+
+    if (user && firestore) {
+      try {
+        const usageDocRef = doc(firestore, 'users', user.uid, 'subscription', 'usage');
+        await setDoc(usageDocRef, {
+          aiQueriesCount: increment(amount),
+          billingMonth: currentMonth,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      } catch (err) {
+        console.error('Failed to increment AI queries in Firestore:', err);
+      }
+    }
+  }, [user, firestore]);
+
+  const incrementReportCount = useCallback(async (amount = 1) => {
+    const currentMonth = getCurrentBillingMonth();
+    setReportCount(prev => {
+      const next = prev + amount;
+      try {
+        localStorage.setItem('analyzeup_reports_count', next.toString());
+      } catch (e) {}
+      return next;
+    });
+
+    if (user && firestore) {
+      try {
+        const usageDocRef = doc(firestore, 'users', user.uid, 'subscription', 'usage');
+        await setDoc(usageDocRef, {
+          reportsCount: increment(amount),
+          billingMonth: currentMonth,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      } catch (err) {
+        console.error('Failed to increment report count in Firestore:', err);
+      }
+    }
+  }, [user, firestore]);
+
+  const updateActivePlan = useCallback(async (newPlan: string) => {
+    setActivePlanState(newPlan);
+    try {
+      localStorage.setItem('analyzeup_subscription_plan', newPlan);
+    } catch (e) {}
+
+    if (user && firestore) {
+      try {
+        const usageDocRef = doc(firestore, 'users', user.uid, 'subscription', 'usage');
+        await setDoc(usageDocRef, {
+          plan: newPlan,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+
+        // Update root user profile document too
+        await setDoc(doc(firestore, 'users', user.uid), {
+          activePlan: newPlan,
+          subscriptionPlan: newPlan,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      } catch (err) {
+        console.error('Failed to update active plan in Firestore:', err);
+      }
+    }
+  }, [user, firestore]);
 
   const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState<boolean>(false);
@@ -255,6 +436,19 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
     // Sync from Cloud Firestore for persistent state across devices & deployments
     if (firestore) {
+      // Ensure root user document exists in Firestore (resolves phantom document warnings)
+      setDoc(
+        doc(firestore, 'users', user.uid),
+        {
+          uid: user.uid,
+          email: user.email || '',
+          displayName: user.displayName || '',
+          role: 'merchant',
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      ).catch(console.warn);
+
       getDoc(doc(firestore, 'users', user.uid, 'settings', 'business_profile'))
         .then((snap) => {
           if (snap.exists()) {
@@ -571,7 +765,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     const stored = localStorage.getItem("analyzeup_subscription_plan");
     if (stored) {
-      setActivePlan(stored);
+      setActivePlanState(stored);
     }
   }, []);
 
@@ -630,8 +824,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
             const verifyData = await verifyRes.json();
             if (verifyData.success) {
-              localStorage.setItem("analyzeup_subscription_plan", planName);
-              setActivePlan(planName);
+              await updateActivePlan(planName);
               setShowSubscriptionModal(false);
               toast({
                 title: "Payment Successful!",
@@ -719,8 +912,25 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     const batch = writeBatch(firestore);
     const newProductRef = doc(productsRef);
 
+    const src = String(productData.source || '').toUpperCase();
+    const impSrc = String((productData as any).importSource || '').toLowerCase();
+    let sourceSubcol = 'csv_products';
+    let canonicalSource = 'CSV';
+    let canonicalImportSource = 'csv';
+    if (src === 'SHOPIFY' || impSrc === 'shopify' || (productData as any).shopifyProductId) {
+      sourceSubcol = 'shopify_products';
+      canonicalSource = 'SHOPIFY';
+      canonicalImportSource = 'shopify';
+    } else if (src === 'GOOGLE_DRIVE' || impSrc === 'drive' || (productData as any).driveFileId) {
+      sourceSubcol = 'drive_products';
+      canonicalSource = 'GOOGLE_DRIVE';
+      canonicalImportSource = 'drive';
+    }
+
     const newProduct: any = {
       ...productData,
+      source: canonicalSource,
+      importSource: canonicalImportSource,
       userId: user.uid,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -728,6 +938,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       leadTimeDays: Math.floor(Math.random() * 10) + 5,
     };
     batch.set(newProductRef, newProduct);
+    batch.set(doc(firestore, 'users', user.uid, sourceSubcol, newProductRef.id), newProduct);
+
+    // Touch user document
+    batch.set(doc(firestore, 'users', user.uid), { uid: user.uid, updatedAt: serverTimestamp() }, { merge: true });
 
     if (newProduct.stock > 0) {
       const transRef = doc(transactionsRef);
@@ -794,7 +1008,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       const validId = p.id && String(p.id).trim();
       if (validId) existingProductByIdMap.set(validId, p);
       if (p.shopifyVariantId) existingProductByVariantMap.set(String(p.shopifyVariantId), p);
-      if (p.shopifyProductId) existingProductByShopifyProdMap.set(String(p.shopifyProductId), p);
+      if (p.shopifyProductId && !p.shopifyVariantId) existingProductByShopifyProdMap.set(String(p.shopifyProductId), p);
       if (p.sku) existingProductSkuMap.set(p.sku.trim().toUpperCase(), p);
       if (p.name) existingProductNameMap.set(p.name.trim().toLowerCase(), p);
     });
@@ -816,13 +1030,26 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       const skuUpper = (productData.sku || '').trim().toUpperCase();
       const nameLower = (productData.name || '').trim().toLowerCase();
 
-      const existingProduct =
+      let candidate =
         (docId && existingProductByIdMap.get(docId)) ||
         (shopifyVarId && existingProductByVariantMap.get(shopifyVarId)) ||
         (skuUpper && existingProductSkuMap.get(skuUpper)) ||
-        (shopifyProdId && existingProductByShopifyProdMap.get(shopifyProdId)) ||
-        (nameLower && existingProductNameMap.get(nameLower)) ||
         null;
+
+      if (!candidate && !shopifyVarId) {
+        candidate =
+          (shopifyProdId && existingProductByShopifyProdMap.get(shopifyProdId)) ||
+          (nameLower && existingProductNameMap.get(nameLower)) ||
+          null;
+      }
+
+      if (candidate && shopifyVarId && candidate.shopifyVariantId && candidate.shopifyVariantId !== shopifyVarId) {
+        if (candidate.id !== docId) {
+          candidate = null;
+        }
+      }
+
+      const existingProduct = candidate;
 
       if (existingProduct) {
         const nameChanged = Boolean(productData.name && productData.name !== existingProduct.name);
@@ -903,7 +1130,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         if (skuUpper) existingProductSkuMap.set(skuUpper, newProductRecord);
         if (nameLower) existingProductNameMap.set(nameLower, newProductRecord);
         if (shopifyVarId) existingProductByVariantMap.set(shopifyVarId, newProductRecord);
-        if (shopifyProdId) existingProductByShopifyProdMap.set(shopifyProdId, newProductRecord);
+        if (shopifyProdId && !shopifyVarId) existingProductByShopifyProdMap.set(shopifyProdId, newProductRecord);
 
         operations.push({
           type: 'create',
@@ -933,19 +1160,57 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       const chunk = operations.slice(i, i + CHUNK_SIZE);
       const batch = writeBatch(firestore);
 
+      // Touch parent user document in the batch
+      const userDocRef = doc(firestore, 'users', user.uid);
+      batch.set(userDocRef, {
+        uid: user.uid,
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
+
       chunk.forEach(op => {
         const validId = (op.id && String(op.id).trim()) || '';
+        const rawTargetId = validId || (op.type === 'create' ? doc(productsRef).id : '');
+
+        // Categorize into destination subcollection
+        const src = String(op.data?.source || '').toUpperCase();
+        const impSrc = String(op.data?.importSource || '').toLowerCase();
+        let sourceSubcol = 'csv_products';
+        let canonicalSource = 'CSV';
+        let canonicalImportSource = 'csv';
+
+        if (src === 'SHOPIFY' || impSrc === 'shopify' || rawTargetId.startsWith('shopify_') || op.data?.shopifyProductId) {
+          sourceSubcol = 'shopify_products';
+          canonicalSource = 'SHOPIFY';
+          canonicalImportSource = 'shopify';
+        } else if (src === 'GOOGLE_DRIVE' || impSrc === 'drive' || rawTargetId.startsWith('drive_') || op.data?.driveFileId) {
+          sourceSubcol = 'drive_products';
+          canonicalSource = 'GOOGLE_DRIVE';
+          canonicalImportSource = 'drive';
+        }
+
+        const enrichedData = {
+          ...op.data,
+          source: canonicalSource,
+          importSource: canonicalImportSource,
+        };
+
         if (op.type === 'update') {
           if (validId) {
             const productRef = doc(productsRef, validId);
-            batch.set(productRef, op.data, { merge: true });
+            batch.set(productRef, enrichedData, { merge: true });
+            const sourceRef = doc(firestore, 'users', user.uid, sourceSubcol, validId);
+            batch.set(sourceRef, enrichedData, { merge: true });
           } else {
             const newProductRef = doc(productsRef);
-            batch.set(newProductRef, op.data, { merge: true });
+            batch.set(newProductRef, enrichedData, { merge: true });
+            const sourceRef = doc(firestore, 'users', user.uid, sourceSubcol, newProductRef.id);
+            batch.set(sourceRef, enrichedData, { merge: true });
           }
         } else {
           const newProductRef = validId ? doc(productsRef, validId) : doc(productsRef);
-          batch.set(newProductRef, op.data, { merge: true });
+          batch.set(newProductRef, enrichedData, { merge: true });
+          const sourceRef = doc(firestore, 'users', user.uid, sourceSubcol, newProductRef.id);
+          batch.set(sourceRef, enrichedData, { merge: true });
 
           if (op.data.stock > 0) {
             const transRef = doc(transactionsRef);
@@ -1139,8 +1404,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       if (existing) {
         const isStatusChanged = t.status && t.status !== existing.status;
         const isPaymentChanged = t.paymentMethod && t.paymentMethod !== existing.paymentMethod;
+        const isFinancialChanged = (t as any).financialStatus && (t as any).financialStatus !== (existing as any).financialStatus;
+        const isPaymentReceivedChanged = (t as any).paymentReceived !== undefined && (t as any).paymentReceived !== (existing as any).paymentReceived;
+        const isFulfillmentChanged = (t as any).fulfillmentStatus && (t as any).fulfillmentStatus !== (existing as any).fulfillmentStatus;
 
-        if (!isStatusChanged && !isPaymentChanged) {
+        if (!isStatusChanged && !isPaymentChanged && !isFinancialChanged && !isPaymentReceivedChanged && !isFulfillmentChanged) {
           skippedCount++;
           return;
         }
@@ -1154,6 +1422,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           data: cleanObject({
             ...(isStatusChanged ? { status: t.status } : {}),
             ...(isPaymentChanged ? { paymentMethod: t.paymentMethod } : {}),
+            ...(isFinancialChanged ? { financialStatus: (t as any).financialStatus } : {}),
+            ...(isPaymentReceivedChanged ? { paymentReceived: (t as any).paymentReceived } : {}),
+            ...(isFulfillmentChanged ? { fulfillmentStatus: (t as any).fulfillmentStatus } : {}),
+            ...((t as any).isRevenueRecognized !== undefined ? { isRevenueRecognized: (t as any).isRevenueRecognized } : {}),
             updatedAt: serverTimestamp(),
           }),
         });
@@ -1620,6 +1892,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         operation: 'delete',
       }));
     });
+    // Also clean up from source-specific subcollections if present
+    await deleteDoc(doc(firestore, 'users', user.uid, 'shopify_products', cleanId)).catch(() => {});
+    await deleteDoc(doc(firestore, 'users', user.uid, 'drive_products', cleanId)).catch(() => {});
+    await deleteDoc(doc(firestore, 'users', user.uid, 'csv_products', cleanId)).catch(() => {});
     toast({ title: 'Product Deleted', description: 'The product has been removed.' });
   }, [firestore, user, toast]);
 
@@ -2048,6 +2324,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         sessionStorage.clear();
         const keysToKeep = new Set([
           'analyzeup_subscription_plan',
+          'analyzeup_ai_queries_count',
+          'analyzeup_reports_count',
+          user ? `analyzeup_usage_${user.uid}` : '',
+          'analyzeup_workspace_members_v1',
           'analyzeup_just_registered',
           'analyzeup_just_logged_in',
           'analyzeup_feature_tour_seen_global',
@@ -2642,6 +2922,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                   maxStock: stockVal > 0 ? stockVal * 2 : 0,
                   unit: r.parsed.unit,
                   status: 'Active' as const,
+                  source: 'GOOGLE_DRIVE',
+                  importSource: 'drive',
                   averageDailySales: 0,
                   leadTimeDays: 0,
                 };
@@ -2934,6 +3216,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             if (dpId) {
               const dpRef = doc(firestore, 'users', user.uid, 'products', dpId);
               deleteBatch.delete(dpRef);
+              const dpShopifyRef = doc(firestore, 'users', user.uid, 'shopify_products', dpId);
+              deleteBatch.delete(dpShopifyRef);
               validDeletes++;
             }
           });
@@ -3387,6 +3671,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     activePlanLimit,
     aiQueryCount,
     incrementAiQueryCount,
+    reportCount,
+    incrementReportCount,
+    monthlyUsage,
+    updateActivePlan,
     handleUpgrade,
     analyticsSummary,
     refreshAnalytics,
@@ -3460,6 +3748,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     activePlanLimit,
     aiQueryCount,
     incrementAiQueryCount,
+    reportCount,
+    incrementReportCount,
+    monthlyUsage,
+    updateActivePlan,
     handleUpgrade,
     analyticsSummary,
     refreshAnalytics,

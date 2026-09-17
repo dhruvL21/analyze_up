@@ -34,7 +34,7 @@ export function ProductComparisonModal({ open, onOpenChange }: ProductComparison
   const productB = products.find(p => p.id === prodIdB) || products[1] || products[0];
 
   const readinessOpts = {
-    isDeadStockEnabled: capabilities?.deadStockDetection,
+    isDeadStockEnabled: Boolean(capabilities?.deadStockDetection && dataReadiness?.level !== 'LEARNING'),
     isVelocityEnabled: capabilities?.trendAnalysis,
     historicalDays: dataReadiness?.historicalDays,
   };

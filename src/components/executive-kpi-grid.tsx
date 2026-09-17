@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { computeExecutiveKPIs } from '@/lib/command-center-engine';
 import { useData } from '@/context/data-context';
-import { IndianRupee, CreditCard, ArrowUpRight, ArrowDownRight, Package, ShoppingCart } from 'lucide-react';
+import { IndianRupee, CreditCard, ArrowUpRight, ArrowDownRight, Package, ShoppingCart, Clock, TrendingUp } from 'lucide-react';
 
 export function ExecutiveKPIGrid() {
   const { products, transactions, businessProfile, analyticsSummary } = useData();
@@ -13,69 +13,77 @@ export function ExecutiveKPIGrid() {
   const currencySymbol = businessProfile?.currency?.includes('USD') ? '$' : '₹';
 
   const kpis = React.useMemo(() => {
-    // If analyticsSummary is precomputed, use it in O(1) time
+    // Dynamic calculation from live data in memory
+    const dynamicKpis = computeExecutiveKPIs(products, transactions, businessProfile);
+    const dynamicPaid = dynamicKpis.find(k => k.key === 'payments_received')?.rawValue || 0;
+    const dynamicRevenue = dynamicKpis.find(k => k.key === 'revenue')?.rawValue || 0;
+
+    // If analyticsSummary is precomputed, use it with dynamic fallback for payments & revenue
     if (analyticsSummary && (analyticsSummary.totalProducts > 0 || analyticsSummary.totalTransactions > 0)) {
-      const rev = analyticsSummary.totalRevenue;
-      const inv = analyticsSummary.inventoryValuation;
-      const profit = analyticsSummary.grossProfit;
-      const ordersCount = analyticsSummary.totalTransactions;
+      const recRev = (analyticsSummary.recognizedRevenue !== undefined && analyticsSummary.recognizedRevenue > 0)
+        ? analyticsSummary.recognizedRevenue
+        : (dynamicRevenue > 0 ? dynamicRevenue : (analyticsSummary.totalRevenue || 0));
+      const pendingVal = analyticsSummary.pendingOrderValue || 0;
+      const pendingCount = analyticsSummary.pendingOrderCount || 0;
+      const paidVal = (analyticsSummary.paymentReceived && analyticsSummary.paymentReceived > 0)
+        ? analyticsSummary.paymentReceived
+        : (dynamicPaid > 0 ? dynamicPaid : (analyticsSummary.paymentReceived || 0));
+      const profit = analyticsSummary.realizedProfit !== undefined ? analyticsSummary.realizedProfit : analyticsSummary.grossProfit;
 
       return [
         {
           key: 'revenue',
-          title: 'Total Revenue',
-          value: `${currencySymbol}${Math.round(rev).toLocaleString('en-IN')}`,
-          rawValue: rev,
-          change: rev > 0 ? '+14%' : '0%',
-          isPositiveChange: rev >= 0,
-          interpretation: rev > 0 ? 'Strong sell-through rate in primary categories.' : 'Awaiting first sales transactions.',
+          title: 'Recognized Revenue',
+          value: `${currencySymbol}${Math.round(recRev).toLocaleString('en-IN')}`,
+          rawValue: recRev,
+          change: recRev > 0 ? '+14%' : '0%',
+          isPositiveChange: recRev >= 0,
+          interpretation: recRev > 0 ? 'Realized on fulfilled & delivered orders.' : 'Awaiting fulfillment/delivery to recognize.',
         },
         {
-          key: 'inventory_value',
-          title: 'Inventory Value',
-          value: `${currencySymbol}${Math.round(inv).toLocaleString('en-IN')}`,
-          rawValue: inv,
-          change: inv > 0 ? '+5%' : '0%',
-          isPositiveChange: inv >= 0,
-          interpretation: analyticsSummary.totalProducts > 0
-            ? `${analyticsSummary.totalProducts.toLocaleString()} active SKUs valuation in warehouse.`
-            : '0 active SKUs in warehouse.',
+          key: 'pending_orders',
+          title: 'Pending Orders (Pipeline)',
+          value: `${currencySymbol}${Math.round(pendingVal).toLocaleString('en-IN')}`,
+          rawValue: pendingVal,
+          change: pendingVal > 0 ? '+8%' : '0%',
+          isPositiveChange: true,
+          interpretation: pendingCount > 0 ? `${pendingCount} placed orders awaiting fulfillment.` : 'Zero unfulfilled orders in queue.',
+        },
+        {
+          key: 'payments_received',
+          title: 'Payments Received',
+          value: `${currencySymbol}${Math.round(paidVal).toLocaleString('en-IN')}`,
+          rawValue: paidVal,
+          change: paidVal > 0 ? '+12%' : '0%',
+          isPositiveChange: paidVal >= 0,
+          interpretation: 'Confirmed cash inflow from paid orders.',
         },
         {
           key: 'net_profit',
-          title: 'Net Gross Profit',
+          title: 'Realized Gross Profit',
           value: `${currencySymbol}${Math.round(profit).toLocaleString('en-IN')}`,
           rawValue: profit,
           change: profit > 0 ? '+18%' : (profit < 0 ? '-4%' : '0%'),
           isPositiveChange: profit >= 0,
-          interpretation: rev > 0 ? `${Math.round((profit / rev) * 100)}% gross margin retained.` : 'Calculated after COGS deduction.',
-        },
-        {
-          key: 'total_orders',
-          title: 'Total Sales Cycles',
-          value: ordersCount.toLocaleString(),
-          rawValue: ordersCount,
-          change: ordersCount > 0 ? '+8%' : '0%',
-          isPositiveChange: true,
-          interpretation: ordersCount > 0
-            ? `${ordersCount.toLocaleString()} customer sale transactions processed.`
-            : 'Awaiting first sales transactions.',
+          interpretation: recRev > 0 ? `${Math.round((profit / recRev) * 100)}% gross margin on delivered sales.` : 'Calculated after COGS on delivered sales.',
         },
       ];
     }
 
     // Fallback dynamic calculation
-    return computeExecutiveKPIs(products, transactions, businessProfile);
+    return dynamicKpis;
   }, [analyticsSummary, products, transactions, businessProfile, currencySymbol]);
 
   const getIcon = (key: string) => {
     switch (key) {
       case 'revenue':
         return <IndianRupee className="w-4 h-4 text-emerald-500" />;
-      case 'inventory_value':
-        return <Package className="w-4 h-4 text-primary" />;
+      case 'pending_orders':
+        return <Clock className="w-4 h-4 text-amber-500" />;
+      case 'payments_received':
+        return <CreditCard className="w-4 h-4 text-blue-500" />;
       case 'net_profit':
-        return <CreditCard className="w-4 h-4 text-emerald-500" />;
+        return <TrendingUp className="w-4 h-4 text-emerald-500" />;
       default:
         return <ShoppingCart className="w-4 h-4 text-primary" />;
     }

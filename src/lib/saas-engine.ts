@@ -17,6 +17,37 @@ export type FeatureKey =
 
 export type UsageKey = 'products' | 'aiQueries' | 'reports' | 'teamMembers' | 'shopifySyncs';
 
+export interface MonthlyUsageRecord {
+  billingMonth: string; // e.g. "2026-09"
+  aiQueriesCount: number;
+  reportsCount: number;
+  lastResetDate: string;
+  plan?: string;
+  planKey?: PlanType;
+  updatedAt?: any;
+}
+
+export function getCurrentBillingMonth(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  return `${year}-${month}`;
+}
+
+export function isNewBillingMonth(storedMonth?: string | null): boolean {
+  if (!storedMonth) return false;
+  return storedMonth !== getCurrentBillingMonth();
+}
+
+export function createInitialMonthlyUsage(month?: string): MonthlyUsageRecord {
+  return {
+    billingMonth: month || getCurrentBillingMonth(),
+    aiQueriesCount: 0,
+    reportsCount: 0,
+    lastResetDate: new Date().toISOString(),
+  };
+}
+
 export interface WorkspacePermission {
   key: string;
   label: string;

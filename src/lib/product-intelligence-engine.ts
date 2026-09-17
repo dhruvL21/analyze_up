@@ -86,8 +86,8 @@ export function computeProductIntelligence(
   const productName = product?.name || product?.productName || product?.title || 'Selected Product';
   const stock = product?.stock !== undefined && !isNaN(product.stock) ? product.stock : 0;
 
-  const isDeadStockEnabled = options?.isDeadStockEnabled ?? true;
-  const isVelocityEnabled = options?.isVelocityEnabled ?? true;
+  const isDeadStockEnabled = Boolean(options?.isDeadStockEnabled);
+  const isVelocityEnabled = Boolean(options?.isVelocityEnabled ?? true);
 
   const pTx = allTransactions.filter(
     t => t.type === 'Sale' && (t.productId === product?.id || t.sku === product?.sku || (t.productName && product?.name && t.productName.toLowerCase() === product.name.toLowerCase()))

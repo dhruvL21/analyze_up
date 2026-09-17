@@ -70,7 +70,7 @@ export async function createSyncJob(
       process.env.FIREBASE_SERVICE_ACCOUNT_KEY ||
       process.env.GOOGLE_APPLICATION_CREDENTIALS
     );
-    if (isExplicitCredentialsConfigured) {
+    if (isExplicitCredentialsConfigured && process.env.NODE_ENV === 'production') {
       throw new PersistenceError('FIRESTORE_WRITE_FAILED', `Failed to create sync job: ${err?.message || err}`, err);
     }
   }
@@ -159,12 +159,21 @@ export async function runShopifySyncJob(
     return { success: false, jobId, errorCode: 'SHOPIFY_MISSING_SCOPE', errorMessage: errorMsg, stats };
   }
 
-  // 3. Mark job RUNNING
+  // 3. Mark job RUNNING and ensure parent user document is initialized
   await jobRef.set({
     status: 'RUNNING',
     startedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   }, { merge: true }).catch(() => {});
+
+  // Ensure root user document exists in Firestore
+  await db.collection('users').doc(tenantId).set({
+    uid: tenantId,
+    role: 'merchant',
+    connectedShopifyStore: shop,
+    shopifyConnected: true,
+    updatedAt: new Date().toISOString(),
+  }, { merge: true }).catch((e) => console.warn('[Sync Engine] Root user doc set notice:', e?.message || e));
 
   try {
     // -------------------------------------------------------------
@@ -258,9 +267,9 @@ export async function runShopifySyncJob(
             const sku = v.sku || (v.barcode ? v.barcode : `SKU-${rawProdId}-${rawVarId}`);
             const variantTitle = v.title && v.title !== 'Default Title' ? ` (${v.title})` : '';
 
-            // 1. Save product in tenant collection
+            // 1. Save product in master catalog subcollection
             const prodRef = db.collection('users').doc(tenantId).collection('products').doc(productDocId);
-            batch.set(prodRef, {
+            const prodPayload = {
               id: productDocId,
               name: `${p.title}${variantTitle}`,
               sku,
@@ -271,6 +280,7 @@ export async function runShopifySyncJob(
               reorderPoint: Math.max(5, Math.round(stock * 0.2)),
               supplier: p.vendor || 'Shopify Vendor',
               source: 'SHOPIFY',
+              importSource: 'shopify',
               shopifyProductId: rawProdId,
               shopifyVariantId: rawVarId,
               shopifyInventoryItemId: rawInvItemId,
@@ -282,8 +292,13 @@ export async function runShopifySyncJob(
               userId: tenantId,
               updatedAt: new Date().toISOString(),
               createdAt: new Date().toISOString(),
-            }, { merge: true });
-            batchCount++;
+            };
+            batch.set(prodRef, prodPayload, { merge: true });
+
+            // 1b. Save product in dedicated shopify_products subcollection
+            const shopifyProdRef = db.collection('users').doc(tenantId).collection('shopify_products').doc(productDocId);
+            batch.set(shopifyProdRef, prodPayload, { merge: true });
+            batchCount += 2;
             stats.products++;
 
             // 2. Save per-location inventory records
@@ -434,10 +449,11 @@ export async function runShopifySyncJob(
             : 'Shopify Customer';
           const totalPrice = Number(o.totalPriceSet?.shopMoney?.amount) || 0;
 
-          // 1. Save Sales Order record
+          // 1. Save Sales Order record in sales_orders and shopify_orders
           const salesOrderDocId = `order_${rawOrderId}`;
           const salesOrderRef = db.collection('users').doc(tenantId).collection('sales_orders').doc(salesOrderDocId);
-          batch.set(salesOrderRef, {
+          const shopifyOrderRef = db.collection('users').doc(tenantId).collection('shopify_orders').doc(salesOrderDocId);
+          const orderPayload = {
             id: salesOrderDocId,
             shopifyOrderId: rawOrderId,
             orderNumber: o.name || `#${rawOrderId}`,
@@ -463,11 +479,62 @@ export async function runShopifySyncJob(
             })),
             processedAt: o.processedAt || o.createdAt,
             source: 'SHOPIFY',
+            importSource: 'shopify',
             createdAt: o.createdAt,
             updatedAt: new Date().toISOString(),
-          }, { merge: true });
-          batchCount++;
+          };
+          batch.set(salesOrderRef, orderPayload, { merge: true });
+          batch.set(shopifyOrderRef, orderPayload, { merge: true });
+          batchCount += 2;
           stats.orders++;
+
+          // 1b. Populate canonical line-item transactions for analytics & executive KPI fidelity
+          const rawFinStatus = String(o.displayFinancialStatus || 'PAID').toUpperCase();
+          const rawFulStatus = String(o.displayFulfillmentStatus || 'UNFULFILLED').toUpperCase();
+          const isOrderPaid = rawFinStatus === 'PAID' || rawFinStatus === 'PARTIALLY_REFUNDED';
+          const isOrderFulfilled = rawFulStatus === 'FULFILLED' || rawFulStatus === 'DELIVERED';
+          const orderDateStr = (o.processedAt || o.createdAt || new Date().toISOString()).split('T')[0];
+
+          for (const li of o.lineItems?.nodes || []) {
+            const rawLiId = li.id.replace('gid://shopify/LineItem/', '');
+            const txDocId = `tx_shopify_${rawOrderId}_${rawLiId}`;
+            const txRef = db.collection('users').doc(tenantId).collection('transactions').doc(txDocId);
+            const unitPrice = Number(li.originalUnitPriceSet?.shopMoney?.amount) || 0;
+            const qty = Number(li.quantity) || 1;
+            const prodGid = li.product?.id ? li.product.id.replace('gid://shopify/Product/', '') : '';
+            const varGid = li.variant?.id ? li.variant.id.replace('gid://shopify/ProductVariant/', '') : '';
+            const prodDocId = varGid ? `shopify_${prodGid}_${varGid}` : (prodGid ? `shopify_${prodGid}` : `prod_${rawLiId}`);
+
+            batch.set(txRef, {
+              id: txDocId,
+              tenantId,
+              userId: tenantId,
+              orderNumber: o.name || `#${rawOrderId}`,
+              shopifyOrderId: rawOrderId,
+              productId: prodDocId,
+              productName: li.title || 'Shopify Product',
+              sku: li.sku || 'N/A',
+              type: 'Sale',
+              quantity: qty,
+              unitPrice,
+              price: unitPrice,
+              totalRevenue: unitPrice * qty,
+              costPrice: Math.round(unitPrice * 0.6),
+              totalCost: Math.round(unitPrice * 0.6 * qty),
+              customerName,
+              financialStatus: rawFinStatus,
+              fulfillmentStatus: rawFulStatus,
+              paymentReceived: isOrderPaid,
+              isRevenueRecognized: isOrderFulfilled,
+              status: isOrderFulfilled ? 'Delivered' : 'Pending',
+              deliveryStatus: isOrderFulfilled ? 'DELIVERED' : 'PENDING',
+              transactionDate: orderDateStr,
+              source: 'SHOPIFY',
+              createdAt: o.createdAt || new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }, { merge: true });
+            batchCount++;
+          }
 
           // 2. Save Refunds
           for (const ref of o.refunds || []) {

@@ -23,6 +23,12 @@ export interface AnalyticsSummary {
   totalCost: number;
   grossProfit: number;
   profitMarginPercent: number;
+  recognizedRevenue: number;
+  pendingOrderValue: number;
+  pendingOrderCount: number;
+  paymentReceived: number;
+  pendingPaymentValue: number;
+  realizedProfit: number;
   lowStockCount: number;
   criticalStockCount: number;
   outOfStockCount: number;
@@ -46,6 +52,12 @@ export const DEFAULT_ANALYTICS_SUMMARY: AnalyticsSummary = {
   totalCost: 0,
   grossProfit: 0,
   profitMarginPercent: 35,
+  recognizedRevenue: 0,
+  pendingOrderValue: 0,
+  pendingOrderCount: 0,
+  paymentReceived: 0,
+  pendingPaymentValue: 0,
+  realizedProfit: 0,
   lowStockCount: 0,
   criticalStockCount: 0,
   outOfStockCount: 0,
@@ -142,9 +154,18 @@ export async function recalculateAndSaveAnalyticsSummary(
   });
 
   // 2. Calculate Transaction & Revenue Metrics
-  let totalRevenue = 0;
-  let totalCost = 0;
+  // Earned Revenue Recognition Model:
+  // - Recognized Revenue & Realized Profit: Only recognized when fulfilled or delivered
+  // - Pending Order Value: Placed orders not yet fulfilled/delivered
+  // - Payment Received: Tracked separately where payment is confirmed (PAID)
+  let recognizedRevenue = 0;
+  let recognizedCost = 0;
   let totalUnitsSold = 0;
+  let pendingOrderValue = 0;
+  let pendingOrderCount = 0;
+  let paymentReceived = 0;
+  let pendingPaymentValue = 0;
+
   const soldProductIds = new Set<string>();
   const soldProductNames = new Set<string>();
 
@@ -156,18 +177,51 @@ export async function recalculateAndSaveAnalyticsSummary(
       const costPerUnit = Number(t.costPerUnit ?? t.costPrice ?? t.cost_per_unit ?? t.cost_price) || Math.round(price * 0.6);
       const cost = Number(t.totalCost ?? t.total_cost) || (costPerUnit * qty);
 
-      totalRevenue += rev;
-      totalCost += cost;
-      totalUnitsSold += qty;
+      // Determine fulfillment / delivery status
+      const rawFulfillment = String(t.fulfillmentStatus || t.status || '').toUpperCase();
+      const isFulfilled =
+        t.isRevenueRecognized === true ||
+        rawFulfillment === 'FULFILLED' ||
+        rawFulfillment === 'DELIVERED' ||
+        rawFulfillment === 'SHIPPED' ||
+        rawFulfillment === 'COMPLETED';
 
-      if (t.productId || t.product_id) soldProductIds.add(String(t.productId || t.product_id));
-      if (t.productName || t.product_name || t.name) soldProductNames.add(String(t.productName || t.product_name || t.name).toLowerCase());
-      if (t.sku) soldProductNames.add(String(t.sku).toLowerCase());
+      // Determine payment status
+      const rawFinancial = String(t.financialStatus || '').toUpperCase();
+      const isExplicitlyUnpaid = rawFinancial === 'PENDING' || rawFinancial === 'UNPAID' || rawFinancial === 'AUTHORIZED' || t.paymentReceived === false;
+      const isPaid = t.paymentReceived === true || rawFinancial === 'PAID' || rawFinancial === 'PARTIALLY_REFUNDED' || (!isExplicitlyUnpaid && isFulfilled);
+
+      if (isFulfilled) {
+        recognizedRevenue += rev;
+        recognizedCost += cost;
+        totalUnitsSold += qty;
+
+        if (t.productId || t.product_id) soldProductIds.add(String(t.productId || t.product_id));
+        if (t.productName || t.product_name || t.name) soldProductNames.add(String(t.productName || t.product_name || t.name).toLowerCase());
+        if (t.sku) soldProductNames.add(String(t.sku).toLowerCase());
+      } else {
+        pendingOrderValue += rev;
+        pendingOrderCount++;
+      }
+
+      if (isPaid) {
+        paymentReceived += rev;
+      } else {
+        pendingPaymentValue += rev;
+      }
     }
   });
 
-  const grossProfit = Math.max(0, totalRevenue - totalCost);
-  const profitMarginPercent = totalRevenue > 0 ? Math.round((grossProfit / totalRevenue) * 100) : 35;
+  // Returns and refunds deduct from recognized revenue
+  let totalRefunds = 0;
+  returns.forEach((r: any) => {
+    const refund = Number(r.refundAmount || r.refund_amount || r.totalRefund || 0);
+    totalRefunds += refund;
+  });
+
+  const netRecognizedRevenue = Math.max(0, recognizedRevenue - totalRefunds);
+  const realizedProfit = Math.max(0, netRecognizedRevenue - recognizedCost);
+  const profitMarginPercent = netRecognizedRevenue > 0 ? Math.round((realizedProfit / netRecognizedRevenue) * 100) : 35;
 
   // 3. Dead Stock Calculation (in stock but no sales)
   let deadStockCount = 0;
@@ -209,10 +263,16 @@ export async function recalculateAndSaveAnalyticsSummary(
     totalReturns: returns.length,
     inventoryValuation: Math.round(inventoryValuation),
     totalCostValue: Math.round(totalCostValue),
-    totalRevenue: Math.round(totalRevenue),
-    totalCost: Math.round(totalCost),
-    grossProfit: Math.round(grossProfit),
+    totalRevenue: Math.round(netRecognizedRevenue),
+    totalCost: Math.round(recognizedCost),
+    grossProfit: Math.round(realizedProfit),
     profitMarginPercent,
+    recognizedRevenue: Math.round(netRecognizedRevenue),
+    pendingOrderValue: Math.round(pendingOrderValue),
+    pendingOrderCount,
+    paymentReceived: Math.round(paymentReceived),
+    pendingPaymentValue: Math.round(pendingPaymentValue),
+    realizedProfit: Math.round(realizedProfit),
     lowStockCount,
     criticalStockCount,
     outOfStockCount,

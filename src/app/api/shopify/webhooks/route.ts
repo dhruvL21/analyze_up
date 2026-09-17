@@ -158,6 +158,11 @@ export async function POST(req: NextRequest) {
         const txDocId = `tx_shopify_${orderId}_${lineItemId}`;
         const txRef = db.collection('users').doc(tenantId).collection('transactions').doc(txDocId);
 
+        const rawFin = String(payload.financial_status || 'PAID').toUpperCase();
+        const rawFul = String(payload.fulfillment_status || 'UNFULFILLED').toUpperCase();
+        const isPaid = rawFin === 'PAID' || rawFin === 'PARTIALLY_REFUNDED';
+        const isFulfilled = rawFul === 'FULFILLED' || rawFul === 'DELIVERED';
+
         batch.set(txRef, {
           id: txDocId,
           tenantId,
@@ -175,6 +180,12 @@ export async function POST(req: NextRequest) {
           costPrice: Math.round(unitPrice * 0.6),
           totalCost: Math.round(unitPrice * 0.6 * qty),
           customerName,
+          financialStatus: rawFin,
+          fulfillmentStatus: rawFul,
+          paymentReceived: isPaid,
+          isRevenueRecognized: isFulfilled,
+          status: isFulfilled ? 'Delivered' : 'Pending',
+          deliveryStatus: isFulfilled ? 'DELIVERED' : 'PENDING',
           transactionDate: (payload.processed_at || payload.created_at || new Date().toISOString()).split('T')[0],
           source: 'SHOPIFY',
           createdAt: payload.created_at || new Date().toISOString(),
@@ -325,6 +336,10 @@ export async function POST(req: NextRequest) {
         const costPrice = Number(v.cost) || Math.round(price * 0.6);
         const stock = Math.max(0, Number(v.inventory_quantity !== undefined ? v.inventory_quantity : 0));
 
+        const prodImage = (v.image_id && Array.isArray(payload.images)
+          ? payload.images.find((img: any) => img.id === v.image_id)?.src
+          : null) || payload.image?.src || (Array.isArray(payload.images) && payload.images[0]?.src) || '';
+
         batch.set(prodRef, {
           id: docId,
           name: variantName,
@@ -338,6 +353,7 @@ export async function POST(req: NextRequest) {
           shopifyProductId: prodId,
           shopifyVariantId: varId,
           shopifyInventoryItemId: v.inventory_item_id ? String(v.inventory_item_id) : null,
+          ...(prodImage ? { imageUrl: prodImage } : {}),
           ...(v.compare_at_price ? { compareAtPrice: Number(v.compare_at_price) } : {}),
           userId: tenantId,
           updatedAt: new Date().toISOString(),

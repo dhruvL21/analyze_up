@@ -43,48 +43,80 @@ export function InventoryQualitySnapshot() {
 
         <CardContent className="p-0 pt-3 space-y-4 text-xs">
           {/* Quality Badges Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4 gap-2.5">
-            <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 space-y-1">
-              <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1.5 whitespace-nowrap">
-                <PackageCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" /> <span>Healthy Stock</span>
-              </span>
-              <p className="text-2xl font-extrabold text-emerald-400">{quality.healthyCount}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-2">
+            {/* Healthy Stock */}
+            <div 
+              className="px-2 py-2.5 sm:px-2.5 sm:py-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex flex-col justify-between min-h-[96px] transition-all hover:bg-emerald-500/15 hover:border-emerald-500/40 cursor-default"
+              title="Products with healthy inventory and active turnover"
+            >
+              <div className="flex items-center gap-1 min-w-0">
+                <PackageCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span className="text-[11px] font-semibold text-emerald-400 truncate">Healthy</span>
+              </div>
+              <p className="text-2xl sm:text-3xl font-black text-emerald-400 my-0.5 tracking-tight">{quality.healthyCount}</p>
+              <div className="flex items-center gap-1 text-[10px] text-emerald-400/90 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                <span className="truncate">Optimal stock</span>
+              </div>
             </div>
 
-            <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/25 space-y-1">
-              <span className="text-xs font-semibold text-amber-400 flex items-center gap-1.5 whitespace-nowrap">
-                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" /> <span>Low Stock</span>
-              </span>
-              <p className="text-2xl font-extrabold text-amber-400">{quality.lowStockCount}</p>
+            {/* Low Stock */}
+            <div 
+              className="px-2 py-2.5 sm:px-2.5 sm:py-3 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex flex-col justify-between min-h-[96px] transition-all hover:bg-amber-500/15 hover:border-amber-500/40 cursor-default"
+              title="Products approaching or below minimum safety stock levels"
+            >
+              <div className="flex items-center gap-1 min-w-0">
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="text-[11px] font-semibold text-amber-400 truncate">Low Stock</span>
+              </div>
+              <p className="text-2xl sm:text-3xl font-black text-amber-400 my-0.5 tracking-tight">{quality.lowStockCount}</p>
+              <div className="flex items-center gap-1 text-[10px] text-amber-400/90 font-medium">
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${quality.lowStockCount > 0 ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
+                <span className="truncate">{quality.lowStockCount > 0 ? `${quality.lowStockCount} need reorder` : 'Adequate'}</span>
+              </div>
             </div>
 
-            <div className="p-3 rounded-2xl bg-rose-500/15 border border-rose-500/30 space-y-1">
-              <span className="text-xs font-semibold text-rose-400 flex items-center gap-1.5 whitespace-nowrap">
-                <XCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" /> <span>Out of Stock</span>
-              </span>
-              <p className="text-2xl font-extrabold text-rose-400">{quality.criticalStockCount}</p>
+            {/* Out of Stock */}
+            <div 
+              className="px-2 py-2.5 sm:px-2.5 sm:py-3 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex flex-col justify-between min-h-[96px] transition-all hover:bg-rose-500/20 hover:border-rose-500/50 cursor-default"
+              title="Products with zero remaining inventory"
+            >
+              <div className="flex items-center gap-1 min-w-0">
+                <XCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                <span className="text-[11px] font-semibold text-rose-400 truncate">Out of Stock</span>
+              </div>
+              <p className="text-2xl sm:text-3xl font-black text-rose-400 my-0.5 tracking-tight">{quality.criticalStockCount}</p>
+              <div className="flex items-center gap-1 text-[10px] text-rose-400/90 font-medium">
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${quality.criticalStockCount > 0 ? 'bg-rose-400 animate-pulse' : 'bg-emerald-400'}`} />
+                <span className="truncate">{quality.criticalStockCount > 0 ? `${quality.criticalStockCount} zero stock` : 'Zero stockout'}</span>
+              </div>
             </div>
 
-            <div className="p-3 rounded-2xl bg-slate-500/10 border border-slate-500/25 space-y-1 overflow-hidden">
-              <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5 whitespace-nowrap">
+            {/* Dead Stock */}
+            <div 
+              className="px-2 py-2.5 sm:px-2.5 sm:py-3 rounded-2xl bg-slate-500/10 border border-slate-500/25 flex flex-col justify-between min-h-[96px] transition-all hover:bg-slate-500/15 hover:border-slate-500/40 cursor-default"
+              title={!isDeadStockActive ? `Learning phase: Requires 30 days of sales history (${dataReadiness?.historicalDays || 0}/30d completed)` : "Items with zero sales velocity over 60+ days"}
+            >
+              <div className="flex items-center gap-1 min-w-0">
                 <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span>Dead Stock</span>
-              </span>
-              <div className="flex items-center gap-1.5 pt-0.5 flex-wrap">
-                <p className="text-2xl font-extrabold text-slate-300">
-                  {isDeadStockActive ? quality.deadStockCount : 0}
-                </p>
-                {!isDeadStockActive && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 font-bold border border-amber-500/30 whitespace-nowrap shrink-0">
-                    Observing
-                  </span>
+                <span className="text-[11px] font-semibold text-slate-400 truncate">Dead Stock</span>
+              </div>
+              <p className="text-2xl sm:text-3xl font-black text-slate-300 my-0.5 tracking-tight">
+                {isDeadStockActive ? quality.deadStockCount : 0}
+              </p>
+              <div className="flex items-center gap-1 text-[10px] font-medium truncate">
+                {!isDeadStockActive ? (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                    <span className="text-amber-400/90 truncate">Baseline {dataReadiness?.historicalDays || 0}/30d</span>
+                  </>
+                ) : (
+                  <>
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${quality.deadStockCount > 0 ? 'bg-amber-400' : 'bg-emerald-400'}`} />
+                    <span className="text-slate-400 truncate">{quality.deadStockCount > 0 ? `${quality.deadStockCount} stagnant` : 'Zero dead stock'}</span>
+                  </>
                 )}
               </div>
-              {!isDeadStockActive && (
-                <p className="text-[10px] text-muted-foreground leading-tight" title={`Requires 30d baseline (${dataReadiness?.historicalDays || 0}/30d)`}>
-                  Requires 30d baseline ({dataReadiness?.historicalDays || 0}/30d)
-                </p>
-              )}
             </div>
           </div>
 
@@ -95,15 +127,21 @@ export function InventoryQualitySnapshot() {
             </h4>
 
             <div className="divide-y divide-border/40 rounded-2xl border border-border/40 overflow-hidden bg-secondary/20">
-              {quality.topValuableProducts.map((p, idx) => (
-                <div key={idx} className="p-2.5 flex items-center justify-between hover:bg-secondary/40 transition-colors">
-                  <div className="space-y-0.5">
-                    <p className="font-semibold text-foreground truncate max-w-[220px]">{p.name}</p>
-                    <p className="font-mono text-[10px] text-muted-foreground">{p.sku} • {p.stock} units</p>
+              {quality.topValuableProducts.length > 0 ? (
+                quality.topValuableProducts.map((p, idx) => (
+                  <div key={idx} className="p-2.5 flex items-center justify-between hover:bg-secondary/40 transition-colors">
+                    <div className="space-y-0.5 min-w-0 pr-2">
+                      <p className="font-semibold text-foreground truncate max-w-[180px] sm:max-w-[240px]">{p.name}</p>
+                      <p className="font-mono text-[10px] text-muted-foreground">{p.sku} • {p.stock} units</p>
+                    </div>
+                    <span className="font-bold text-emerald-400 shrink-0">{currencySymbol}{Math.round(p.value).toLocaleString('en-IN')}</span>
                   </div>
-                  <span className="font-bold text-emerald-400">{currencySymbol}{Math.round(p.value).toLocaleString('en-IN')}</span>
+                ))
+              ) : (
+                <div className="p-4 text-center text-xs text-muted-foreground">
+                  No inventory products recorded yet.
                 </div>
-              ))}
+              )}
             </div>
           </div>
         </CardContent>

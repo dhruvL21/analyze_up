@@ -43,7 +43,10 @@ import {
 import { PLAN_CONFIGS, PlanType, checkUsageLimit, getStoredWorkspaceMembers } from '@/lib/saas-engine';
 import { getStoredReportSnapshots } from '@/lib/executive-intelligence-engine';
 
+import { useUser } from '@/firebase';
+
 export default function BillingPage() {
+  const { user } = useUser();
   const {
     products,
     activePlan,
@@ -51,6 +54,8 @@ export default function BillingPage() {
     isProcessingPayment,
     businessProfile,
     aiQueryCount,
+    reportCount,
+    updateActivePlan,
   } = useData();
   const { toast } = useToast();
   const router = useRouter();
@@ -63,7 +68,6 @@ export default function BillingPage() {
   }, [activePlan]);
 
   const [currentPlanKey, setCurrentPlanKey] = useState<PlanType>(resolvedPlanKey);
-  const [reportCount, setReportCount] = useState<number>(0);
   const [teamMemberCount, setTeamMemberCount] = useState<number>(1);
 
   React.useEffect(() => {
@@ -71,19 +75,19 @@ export default function BillingPage() {
   }, [resolvedPlanKey]);
 
   React.useEffect(() => {
-    setReportCount(getStoredReportSnapshots().length);
-    setTeamMemberCount(getStoredWorkspaceMembers().length);
-  }, []);
+    setTeamMemberCount(getStoredWorkspaceMembers(user ? { uid: user.uid, email: user.email || '', displayName: user.displayName || '' } : undefined).length);
+  }, [user]);
 
   const currencySymbol = businessProfile?.currency?.includes('USD') ? '$' : '₹';
 
   // Live Usage Counts from actual workspace data
   const productCount = products.length;
   const currentAiQueryCount = aiQueryCount;
+  const currentReportCount = reportCount;
 
   const productUsage = checkUsageLimit(currentPlanKey, 'products', productCount);
   const aiUsage = checkUsageLimit(currentPlanKey, 'aiQueries', currentAiQueryCount);
-  const reportUsage = checkUsageLimit(currentPlanKey, 'reports', reportCount);
+  const reportUsage = checkUsageLimit(currentPlanKey, 'reports', currentReportCount);
   const teamUsage = checkUsageLimit(currentPlanKey, 'teamMembers', teamMemberCount);
 
   const nextBillingDate = React.useMemo(() => {
@@ -98,6 +102,7 @@ export default function BillingPage() {
 
     try {
       await handleUpgrade(`${planKey.toLowerCase()}_monthly`, plan.priceMonthly, plan.name);
+      await updateActivePlan(plan.name);
       setCurrentPlanKey(planKey);
       toast({
         title: `🎉 Subscribed to ${plan.name}`,

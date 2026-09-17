@@ -107,16 +107,27 @@ function InsightsPageContent() {
 
     filteredTransactions.forEach(t => {
       if (t.type === 'Sale') {
-        const itemRev = t.totalRevenue || ((t.quantity || 1) * (t.price || 0));
-        rev += itemRev;
+        const rawFulfillment = String(t.fulfillmentStatus || t.status || '').toUpperCase();
+        const isFulfilled =
+          t.isRevenueRecognized === true ||
+          rawFulfillment === 'FULFILLED' ||
+          rawFulfillment === 'DELIVERED' ||
+          rawFulfillment === 'SHIPPED' ||
+          rawFulfillment === 'COMPLETED';
 
-        if (t.totalCost !== undefined) {
-          cogs += t.totalCost;
-        } else if (t.costPerUnit !== undefined) {
-          cogs += (t.quantity || 1) * t.costPerUnit;
-        } else {
-          const product = productsMap.get(t.productId || '') || productsMap.get(t.sku || '');
-          cogs += (t.quantity || 1) * (product?.costPrice || (product?.price ? product.price * 0.6 : 0));
+        // Only recognize fulfilled / delivered sales in earned revenue & COGS
+        if (isFulfilled) {
+          const itemRev = t.totalRevenue || ((t.quantity || 1) * (t.price || 0));
+          rev += itemRev;
+
+          if (t.totalCost !== undefined) {
+            cogs += t.totalCost;
+          } else if (t.costPerUnit !== undefined) {
+            cogs += (t.quantity || 1) * t.costPerUnit;
+          } else {
+            const product = productsMap.get(t.productId || '') || productsMap.get(t.sku || '');
+            cogs += (t.quantity || 1) * (product?.costPrice || (product?.price ? product.price * 0.6 : 0));
+          }
         }
       } else if (t.type === 'Purchase') {
         exp += t.totalCost || t.totalRevenue || ((t.quantity || 1) * (t.price || 0));

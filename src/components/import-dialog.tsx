@@ -969,6 +969,17 @@ export function ImportDialog({ open, onOpenChange, presetFile, onImportComplete 
                 batchProfit += Math.max(0, saleRev - saleCost);
                 batchSalesCount++;
 
+                const rawStatus = String(rawRow['Fulfillment Status'] || rawRow['Delivery Status'] || rawRow['Order Status'] || rawRow['Status'] || rawRow.status || 'Delivered').trim();
+                const isPendingFulfillment = /pending|unfulfilled|placed|processing|open/i.test(rawStatus);
+                const fulfillmentStatus = isPendingFulfillment ? 'UNFULFILLED' : 'FULFILLED';
+                const deliveryStatus = isPendingFulfillment ? 'PENDING' : 'DELIVERED';
+                const isRevenueRecognized = !isPendingFulfillment;
+
+                const rawPayment = String(rawRow['Payment Status'] || rawRow['Payment'] || rawRow.paymentStatus || 'Paid').trim();
+                const isPaid = /paid|received|success|completed/i.test(rawPayment);
+                const financialStatus = isPaid ? 'PAID' : 'PENDING';
+                const paymentReceived = isPaid;
+
                 batch.set(
                   txRef,
                   serializePlainData({
@@ -1000,7 +1011,12 @@ export function ImportDialog({ open, onOpenChange, presetFile, onImportComplete 
                     transactionDate: sale.sale_date,
                     sale_date: sale.sale_date,
                     paymentMethod: sale.payment_method || 'UPI',
-                    status: 'Completed',
+                    status: isPendingFulfillment ? 'Pending' : 'Completed',
+                    fulfillmentStatus,
+                    financialStatus,
+                    deliveryStatus,
+                    isRevenueRecognized,
+                    paymentReceived,
                     userId: user.uid,
                     tenantId: user.uid,
                     customAttributes: rawRow,
@@ -1024,32 +1040,44 @@ export function ImportDialog({ open, onOpenChange, presetFile, onImportComplete 
                     ? rawStockVal
                     : (existingProduct ? existingProduct.stock : 0);
 
+                  const isDrive = Boolean(presetFile || (rawRow as any)?.driveFileId);
+                  const sourceSubcol = isDrive ? 'drive_products' : 'csv_products';
+                  const sourceName = isDrive ? 'GOOGLE_DRIVE' : 'CSV';
+                  const importSourceName = isDrive ? 'drive' : 'csv';
+
+                  const prodData = serializePlainData({
+                    id: prodDocId,
+                    name: sale.product_name,
+                    productName: sale.product_name,
+                    sku: sale.sku,
+                    category: sale.category || existingProduct?.category || 'General',
+                    price: sale.selling_price,
+                    costPrice: sale.cost_per_unit,
+                    stock: prodStock,
+                    minStock: rawRow.minStock !== undefined && !isNaN(Number(rawRow.minStock)) ? Number(rawRow.minStock) : (existingProduct?.reorderPoint ?? 0),
+                    safetyStock: rawRow.safetyStock !== undefined && !isNaN(Number(rawRow.safetyStock)) ? Number(rawRow.safetyStock) : ((existingProduct as any)?.safetyStock ?? 0),
+                    supplier: sale.supplier_name || existingProduct?.supplier || '',
+                    leadTimeDays: rawRow.leadTimeDays !== undefined && !isNaN(Number(rawRow.leadTimeDays)) ? Number(rawRow.leadTimeDays) : (existingProduct?.leadTimeDays ?? 0),
+                    userId: user.uid,
+                    tenantId: user.uid,
+                    status: 'Active',
+                    source: existingProduct?.source || sourceName,
+                    importSource: existingProduct?.importSource || importSourceName,
+                    customAttributes: rawRow,
+                    rawAttributes: rawRow,
+                    updatedAt: nowIso,
+                    createdAt: existingProduct?.createdAt || nowIso,
+                  });
+
                   const prodRef = doc(firestore, 'users', user.uid, 'products', prodDocId);
-                  batch.set(
-                    prodRef,
-                    serializePlainData({
-                      id: prodDocId,
-                      name: sale.product_name,
-                      productName: sale.product_name,
-                      sku: sale.sku,
-                      category: sale.category || existingProduct?.category || 'General',
-                      price: sale.selling_price,
-                      costPrice: sale.cost_per_unit,
-                      stock: prodStock,
-                      minStock: rawRow.minStock !== undefined && !isNaN(Number(rawRow.minStock)) ? Number(rawRow.minStock) : (existingProduct?.reorderPoint ?? 0),
-                      safetyStock: rawRow.safetyStock !== undefined && !isNaN(Number(rawRow.safetyStock)) ? Number(rawRow.safetyStock) : ((existingProduct as any)?.safetyStock ?? 0),
-                      supplier: sale.supplier_name || existingProduct?.supplier || '',
-                      leadTimeDays: rawRow.leadTimeDays !== undefined && !isNaN(Number(rawRow.leadTimeDays)) ? Number(rawRow.leadTimeDays) : (existingProduct?.leadTimeDays ?? 0),
-                      userId: user.uid,
-                      tenantId: user.uid,
-                      status: 'Active',
-                      customAttributes: rawRow,
-                      rawAttributes: rawRow,
-                      updatedAt: nowIso,
-                      createdAt: existingProduct?.createdAt || nowIso,
-                    }),
-                    { merge: true }
-                  );
+                  batch.set(prodRef, prodData as any, { merge: true });
+
+                  const sourceSubRef = doc(firestore, 'users', user.uid, sourceSubcol, prodDocId);
+                  batch.set(sourceSubRef, prodData as any, { merge: true });
+
+                  // Ensure parent user document exists
+                  const userDocRef = doc(firestore, 'users', user.uid);
+                  batch.set(userDocRef, { uid: user.uid, updatedAt: nowIso }, { merge: true });
                 }
 
                 batchSuccess++;
@@ -1085,36 +1113,48 @@ export function ImportDialog({ open, onOpenChange, presetFile, onImportComplete 
                 const prodRef = doc(firestore, 'users', user.uid, 'products', prodDocId);
                 batchProductCount++;
 
-                batch.set(
-                  prodRef,
-                  serializePlainData({
-                    id: prodDocId,
-                    name: prod.product_name,
-                    productName: prod.product_name,
-                    sku: prod.sku,
-                    category: prod.category || existingProduct?.category || 'General',
-                    stock: prod.inventory_quantity,
-                    minStock: prod.min_stock,
-                    maxStock: prod.max_stock,
-                    price: prod.price,
-                    costPrice: prod.cost_price,
-                    supplier: prod.supplier_name || existingProduct?.supplier || '',
-                    supplierId: prod.supplier_id || existingProduct?.supplierId || '',
-                    leadTimeDays: prod.lead_time_days,
-                    unit: prod.unit,
-                    brand: prod.brand,
-                    barcode: prod.barcode,
-                    description: prod.description,
-                    userId: user.uid,
-                    tenantId: user.uid,
-                    status: 'Active',
-                    customAttributes: rawRow,
-                    rawAttributes: rawRow,
-                    createdAt: existingProduct?.createdAt || prod.created_at || nowIso,
-                    updatedAt: nowIso,
-                  }),
-                  { merge: true }
-                );
+                const isDrive = Boolean(presetFile || (rawRow as any)?.driveFileId);
+                const sourceSubcol = isDrive ? 'drive_products' : 'csv_products';
+                const sourceName = isDrive ? 'GOOGLE_DRIVE' : 'CSV';
+                const importSourceName = isDrive ? 'drive' : 'csv';
+
+                const prodData = serializePlainData({
+                  id: prodDocId,
+                  name: prod.product_name,
+                  productName: prod.product_name,
+                  sku: prod.sku,
+                  category: prod.category || existingProduct?.category || 'General',
+                  stock: prod.inventory_quantity,
+                  minStock: prod.min_stock,
+                  maxStock: prod.max_stock,
+                  price: prod.price,
+                  costPrice: prod.cost_price,
+                  supplier: prod.supplier_name || existingProduct?.supplier || '',
+                  supplierId: prod.supplier_id || existingProduct?.supplierId || '',
+                  leadTimeDays: prod.lead_time_days,
+                  unit: prod.unit,
+                  brand: prod.brand,
+                  barcode: prod.barcode,
+                  description: prod.description,
+                  userId: user.uid,
+                  tenantId: user.uid,
+                  status: 'Active',
+                  source: existingProduct?.source || sourceName,
+                  importSource: existingProduct?.importSource || importSourceName,
+                  customAttributes: rawRow,
+                  rawAttributes: rawRow,
+                  createdAt: existingProduct?.createdAt || prod.created_at || nowIso,
+                  updatedAt: nowIso,
+                });
+
+                batch.set(prodRef, prodData as any, { merge: true });
+
+                const sourceSubRef = doc(firestore, 'users', user.uid, sourceSubcol, prodDocId);
+                batch.set(sourceSubRef, prodData as any, { merge: true });
+
+                // Ensure parent user document exists
+                const userDocRef = doc(firestore, 'users', user.uid);
+                batch.set(userDocRef, { uid: user.uid, updatedAt: nowIso }, { merge: true });
 
                 // If row has sales data, write Sale transaction too (skip if duplicate)
                 const rawQtySold = Number(rawRow['Qty Sold'] || rawRow.qtySold || rawRow.quantitySold || rawRow.unitsSold || rawRow.qty_sold || 0);
@@ -1137,6 +1177,17 @@ export function ImportDialog({ open, onOpenChange, presetFile, onImportComplete 
                     batchRevenue += itemRevenue;
                     batchProfit += Math.max(0, itemRevenue - itemCost);
                     batchSalesCount++;
+
+                    const rawStatus = String(rawRow['Fulfillment Status'] || rawRow['Delivery Status'] || rawRow['Order Status'] || rawRow['Status'] || rawRow.status || 'Delivered').trim();
+                    const isPendingFulfillment = /pending|unfulfilled|placed|processing|open/i.test(rawStatus);
+                    const fulfillmentStatus = isPendingFulfillment ? 'UNFULFILLED' : 'FULFILLED';
+                    const deliveryStatus = isPendingFulfillment ? 'PENDING' : 'DELIVERED';
+                    const isRevenueRecognized = !isPendingFulfillment;
+
+                    const rawPayment = String(rawRow['Payment Status'] || rawRow['Payment'] || rawRow.paymentStatus || 'Paid').trim();
+                    const isPaid = /paid|received|success|completed/i.test(rawPayment);
+                    const financialStatus = isPaid ? 'PAID' : 'PENDING';
+                    const paymentReceived = isPaid;
 
                     batch.set(
                       txRef,
@@ -1168,7 +1219,12 @@ export function ImportDialog({ open, onOpenChange, presetFile, onImportComplete 
                         transactionDate: orderDate,
                         sale_date: orderDate,
                         paymentMethod: String(rawRow['Payment Mode'] || rawRow.paymentMethod || 'UPI'),
-                        status: 'Completed',
+                        status: isPendingFulfillment ? 'Pending' : 'Completed',
+                        fulfillmentStatus,
+                        financialStatus,
+                        deliveryStatus,
+                        isRevenueRecognized,
+                        paymentReceived,
                         userId: user.uid,
                         tenantId: user.uid,
                         customAttributes: rawRow,
