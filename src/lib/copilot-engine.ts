@@ -1339,9 +1339,11 @@ export function processCopilotQuery(
 
     const answerMarkdown = `### BUSINESS HEALTH SCORE: ${health.score}/100 (${health.category})\n\n` +
       `- **Inventory Health:** ${health.factors.inventoryHealth}%\n` +
-      `- **Profit Margin Index:** ${health.factors.marginHealth}%\n` +
+      `- **Profitability:** ${health.factors.profitability}%\n` +
+      `- **Sales & Revenue Health:** ${health.factors.salesRevenueHealth}%\n` +
       `- **Capital Efficiency:** ${health.factors.capitalEfficiency}%\n` +
-      `- **Supplier Performance:** ${health.factors.supplierPerformance}%\n\n` +
+      `- **Supplier Performance:** ${health.factors.supplierPerformance}%\n` +
+      `- **Order/Fulfillment Health:** ${health.factors.orderFulfillmentHealth}%\n\n` +
       `**Executive Summary:** ${health.summarySentence}`;
 
     return {

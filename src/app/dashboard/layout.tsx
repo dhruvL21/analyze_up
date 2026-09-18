@@ -136,23 +136,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(timer);
   }, [user, loading, setIsTourOpen, setShowSubscriptionModal]);
 
-  // Auto-pop the subscription modal if visiting a locked feature page based on plan or product limit
+  // Prompt subscription modal if workspace product quota limit is exceeded
   useEffect(() => {
     if (isTourOpen) return;
-    const isPremiumRoute =
-      pathname.startsWith("/dashboard/ai-advisor") ||
-      pathname.startsWith("/dashboard/insights") ||
-      pathname.startsWith("/dashboard/business-health");
-
-    const isLocked = isPremiumRoute && (activePlan !== "Pro Plan" || isLimitExceeded);
-
-    if (isLocked) {
+    if (isLimitExceeded) {
       setShowSubscriptionModal(true);
-      if (!showSubscriptionModal) {
-        router.push("/dashboard");
-      }
     }
-  }, [pathname, activePlan, isLimitExceeded, showSubscriptionModal, setShowSubscriptionModal, router, isTourOpen]);
+  }, [isLimitExceeded, setShowSubscriptionModal, isTourOpen]);
 
   if (loading || !user) {
     return <DashboardLoading />;

@@ -19,29 +19,35 @@ service cloud.firestore {
       allow read, write: if isOwner(userId);
     }
 
-    // Shopify multi-tenant collections
+    // Shopify store lookup mapping: Authenticated users can read or map their own store
+    match /shopify_stores/{shop} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.resource.data.userId == request.auth.uid;
+    }
+
+    // Shopify sync jobs: Authenticated merchants can view job status; updates are handled by backend sync engine
+    match /shopify_sync_jobs/{jobId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // Sensitive server-managed Shopify infrastructure collections:
+    // Exclusively managed on the server via privileged Firebase Admin SDK (which bypasses security rules).
+    // Direct client-side reading or tampering is strictly denied.
     match /shopify_connections/{shop} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
 
     match /shopify_oauth_states/{nonce} {
-      allow read, write: if true;
-    }
-
-    match /shopify_stores/{shop} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
 
     match /shopify_processed_webhooks/{id} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
 
     match /shopify_outgoing_operations/{opId} {
-      allow read, write: if true;
-    }
-
-    match /shopify_sync_jobs/{jobId} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }

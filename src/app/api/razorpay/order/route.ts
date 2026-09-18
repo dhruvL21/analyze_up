@@ -1,9 +1,26 @@
 import { NextResponse } from 'next/server';
 import Razorpay from 'razorpay';
+import { PLAN_CONFIGS, PlanType } from '@/lib/saas-engine';
 
 export async function POST(req: Request) {
   try {
     const { planId, amount, planName } = await req.json();
+
+    // Validate and enforce server-authoritative pricing if known planId is supplied
+    let verifiedAmount = Number(amount) || 0;
+    if (planId) {
+      const parts = String(planId).toUpperCase().split('_');
+      const planKey = parts[0] as PlanType;
+      const isAnnual = parts[1] === 'ANNUAL';
+      if (PLAN_CONFIGS[planKey]) {
+        const config = PLAN_CONFIGS[planKey];
+        verifiedAmount = isAnnual ? Math.round(config.priceMonthly * 0.8 * 12) : config.priceMonthly;
+      }
+    }
+
+    if (verifiedAmount <= 0) {
+      return NextResponse.json({ success: false, error: 'Invalid plan amount' }, { status: 400 });
+    }
 
     const instance = new Razorpay({
       key_id: process.env.RAZORPAY_KEY_ID || 'rzp_test_T40kl4zsYBSbQl',
@@ -11,12 +28,12 @@ export async function POST(req: Request) {
     });
 
     const options = {
-      amount: amount * 100, // amount in paisa
+      amount: Math.round(verifiedAmount * 100), // amount in paisa
       currency: 'INR',
       receipt: `receipt_${Date.now()}`,
       notes: {
-        planId,
-        planName,
+        planId: String(planId || ''),
+        planName: String(planName || ''),
       },
     };
 

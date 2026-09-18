@@ -18,7 +18,7 @@ interface ExtendedChatMessage extends ChatMessage {
 }
 
 export function ChatWidget() {
-  const { products, transactions, suppliers, orders, returns, activePlan, setShowSubscriptionModal, businessProfile, incrementAiQueryCount } = useData();
+  const { products, transactions, suppliers, orders, returns, activePlan, setShowSubscriptionModal, businessProfile, incrementAiQueryCount, aiQueryCount } = useData();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -63,7 +63,10 @@ export function ChatWidget() {
     return () => window.removeEventListener('analyzeup_open_copilot', handleOpenCopilot);
   }, [products, transactions, suppliers, orders, returns, businessProfile]);
 
+  const FREE_TRIAL_QUERY_LIMIT = 15;
   const isPaid = activePlan !== 'Free Trial';
+  const hasTrialQuota = !isPaid && (aiQueryCount || 0) < FREE_TRIAL_QUERY_LIMIT;
+  const isAccessAllowed = isPaid || hasTrialQuota;
 
   // Auto scroll to bottom
   useEffect(() => {
@@ -99,22 +102,21 @@ export function ChatWidget() {
           sanitizePlainData(businessProfile)
         );
 
+        const assistantMsg: ExtendedChatMessage = {
+          role: 'assistant',
+          content: text,
+          citations: ragResponse?.citations,
+          ragResponse,
+        };
+
+        setMessages(prev => [...prev, assistantMsg]);
+      } catch (err: any) {
+        console.error('Chat error:', err);
         setMessages(prev => [
           ...prev,
           {
             role: 'assistant',
-            content: text,
-            citations: ragResponse?.citations,
-            ragResponse,
-          },
-        ]);
-      } catch (err) {
-        console.error('[ChatWidget] Error generating response:', err);
-        setMessages(prev => [
-          ...prev,
-          {
-            role: 'assistant',
-            content: 'I could not complete that analysis. Please verify your data and try again.',
+            content: 'I encountered an error analyzing that question against your business data. Please check your network and try again.',
           },
         ]);
       }
@@ -129,7 +131,7 @@ export function ChatWidget() {
           <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
           <div className="absolute -top-24 -left-24 h-48 w-48 rounded-full bg-primary/5 blur-[80px]" />
 
-          {!isPaid ? (
+          {!isAccessAllowed ? (
             <div className="flex-1 flex flex-col justify-between p-6 h-full relative z-10">
               <div className="flex justify-end">
                 <button
@@ -144,10 +146,10 @@ export function ChatWidget() {
                   <Lock className="h-6 w-6 animate-pulse" />
                 </div>
                 <h4 className="font-bold text-lg text-foreground tracking-tight mb-2">
-                  Unlock AI Business Copilot
+                  Trial Query Limit Reached
                 </h4>
                 <p className="text-sm text-muted-foreground leading-relaxed max-w-[280px] mb-6">
-                  Get instant grounded answers about your profits, products, vendor risks, and reorder quantities.
+                  You have used all {FREE_TRIAL_QUERY_LIMIT} free trial AI queries. Upgrade to continue asking unlimited business questions.
                 </p>
                 <button
                   onClick={() => {

@@ -23,19 +23,14 @@ export async function getValidAccessToken(userId: string, firestore: any): Promi
     return null;
   }
   
-  // Refresh token request to Google OAuth
+  // Refresh token request via backend route handler
   try {
-    const res = await fetch('https://oauth2.googleapis.com/token', {
+    const res = await fetch('/api/drive/refresh', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
+        'Content-Type': 'application/json',
       },
-      body: new URLSearchParams({
-        client_id: process.env.GOOGLE_CLIENT_ID || '',
-        client_secret: process.env.GOOGLE_CLIENT_SECRET || '',
-        refresh_token: refreshToken,
-        grant_type: 'refresh_token',
-      }),
+      body: JSON.stringify({ refreshToken }),
     });
     
     if (!res.ok) {
@@ -44,8 +39,8 @@ export async function getValidAccessToken(userId: string, firestore: any): Promi
     }
     
     const tokenData = await res.json();
-    const newAccessToken = tokenData.access_token;
-    const expiresIn = tokenData.expires_in || 3600;
+    const newAccessToken = tokenData.accessToken;
+    const expiresIn = tokenData.expiresIn || 3600;
     
     await updateDoc(connectionRef, {
       accessToken: newAccessToken,

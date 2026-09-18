@@ -11,7 +11,13 @@ export async function POST(req: Request) {
       .update(sign.toString())
       .digest('hex');
 
-    if (razorpay_signature === expectedSign) {
+    const signBuffer = Buffer.from(String(razorpay_signature || ''), 'utf8');
+    const expectedBuffer = Buffer.from(expectedSign, 'utf8');
+
+    const isValid = signBuffer.length === expectedBuffer.length &&
+      crypto.timingSafeEqual(signBuffer, expectedBuffer);
+
+    if (isValid) {
       return NextResponse.json({ success: true, message: 'Payment verified successfully' });
     } else {
       return NextResponse.json({ success: false, message: 'Invalid payment signature' }, { status: 400 });

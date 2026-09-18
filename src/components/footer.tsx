@@ -123,27 +123,27 @@ export function Footer() {
             <h4 className="text-xs font-bold text-foreground uppercase tracking-wider">Integrations</h4>
             <ul className="space-y-2 text-xs text-muted-foreground">
               <li>
-                <Link href="/dashboard/connect" className="hover:text-primary transition-colors">
+                <Link href="/dashboard/integrations" className="hover:text-primary transition-colors">
                   Shopify Store Sync
                 </Link>
               </li>
               <li>
-                <Link href="/dashboard/connect" className="hover:text-primary transition-colors">
+                <Link href="/dashboard/integrations" className="hover:text-primary transition-colors">
                   Google Drive Connection
                 </Link>
               </li>
               <li>
-                <Link href="/dashboard/connect" className="hover:text-primary transition-colors">
+                <Link href="/dashboard/integrations" className="hover:text-primary transition-colors">
                   Zoho Inventory
                 </Link>
               </li>
               <li>
-                <Link href="/dashboard/connect" className="hover:text-primary transition-colors">
+                <Link href="/dashboard/integrations" className="hover:text-primary transition-colors">
                   Tally ERP Connector
                 </Link>
               </li>
               <li>
-                <Link href="/dashboard/connect" className="hover:text-primary transition-colors">
+                <Link href="/dashboard/integrations" className="hover:text-primary transition-colors">
                   AI CSV & Excel Parser
                 </Link>
               </li>

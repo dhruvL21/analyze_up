@@ -79,7 +79,11 @@ export function getAdminApp(): App {
   // 1. Initialize with explicit Service Account credentials if provided
   if (clientEmail && rawPrivateKey) {
     try {
-      const privateKey = rawPrivateKey.replace(/\\n/g, '\n');
+      let cleanKey = rawPrivateKey.trim();
+      if ((cleanKey.startsWith('"') && cleanKey.endsWith('"')) || (cleanKey.startsWith("'") && cleanKey.endsWith("'"))) {
+        cleanKey = cleanKey.slice(1, -1);
+      }
+      const privateKey = cleanKey.replace(/\\n/g, '\n');
       adminApp = initializeApp({
         credential: cert({
           projectId,

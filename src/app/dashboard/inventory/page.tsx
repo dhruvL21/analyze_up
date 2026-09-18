@@ -2,7 +2,24 @@
 
 import Image from 'next/image';
 import React, { useState, useRef, useEffect, useMemo, Suspense } from 'react';
-import { PlusCircle, MoreHorizontal, Database, ArrowRightLeft, Eye, X, Filter, Search, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import {
+  PlusCircle,
+  MoreHorizontal,
+  Database,
+  ArrowRightLeft,
+  Eye,
+  X,
+  Filter,
+  Search,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  ShoppingBag,
+  Boxes,
+  PackageCheck,
+  AlertOctagon,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 const PRESET_QUICK_QUERIES = [
@@ -273,6 +290,57 @@ function InventoryPageContent() {
     setSellingProduct(null);
   };
 
+  // Operational Sales & Product Metrics
+  const saleTransactions = useMemo(() => {
+    return (transactions || []).filter(t => t && (t.type === 'Sale' || !t.type));
+  }, [transactions]);
+
+  const totalProductsSold = useMemo(() => {
+    return saleTransactions.reduce((sum, t) => sum + Math.max(1, Number(t.quantity) || 1), 0);
+  }, [saleTransactions]);
+
+  const totalSalesRevenue = useMemo(() => {
+    return saleTransactions.reduce(
+      (sum, t) => sum + Number(t.totalRevenue || (Number(t.price || 0) * (Number(t.quantity) || 1))),
+      0
+    );
+  }, [saleTransactions]);
+
+  const totalStockUnits = useMemo(() => {
+    return (products || []).reduce((sum, p) => sum + Math.max(0, Number(p.stock) || 0), 0);
+  }, [products]);
+
+  const totalInventoryCost = useMemo(() => {
+    return (products || []).reduce((sum, p) => {
+      const cost = Number(p.costPrice) || Math.round((Number(p.price) || 500) * 0.6);
+      return sum + (Math.max(0, Number(p.stock) || 0) * cost);
+    }, 0);
+  }, [products]);
+
+  const outOfStockCount = useMemo(() => {
+    return (products || []).filter(p => Number(p.stock) === 0 || p.stock === undefined || p.stock === null).length;
+  }, [products]);
+
+  const lowStockCount = useMemo(() => {
+    return (products || []).filter(p => {
+      const s = Number(p.stock) || 0;
+      const m = Number(p.minStock) || 5;
+      return s > 0 && s <= m;
+    }).length;
+  }, [products]);
+
+  // Product sales map (for instant lookup of units sold per product in the table)
+  const productSalesMap = useMemo(() => {
+    const map = new Map<string, number>();
+    saleTransactions.forEach(t => {
+      const qty = Math.max(1, Number(t.quantity) || 1);
+      if (t.productId) map.set(t.productId, (map.get(t.productId) || 0) + qty);
+      if (t.sku) map.set(t.sku.toLowerCase(), (map.get(t.sku.toLowerCase()) || 0) + qty);
+      if (t.productName) map.set(t.productName.toLowerCase(), (map.get(t.productName.toLowerCase()) || 0) + qty);
+    });
+    return map;
+  }, [saleTransactions]);
+
   const openProductReport = (product: Product) => {
     setDrawerProduct(product);
     setIsDrawerOpen(true);
@@ -286,14 +354,18 @@ function InventoryPageContent() {
         {/* Header Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-extrabold tracking-tight md:text-3xl flex items-center gap-2">
+            <h1 className="text-2xl font-extrabold tracking-tight md:text-3xl flex items-center gap-2 flex-wrap">
               Inventory Intelligence
               <Badge className="bg-primary/15 text-primary border-primary/30 text-xs px-2.5 py-0.5">
                 {products.length.toLocaleString()} Products
               </Badge>
+              <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-xs px-2.5 py-0.5 gap-1.5 font-bold">
+                <ShoppingBag className="w-3.5 h-3.5" />
+                {totalProductsSold.toLocaleString()} Units Sold
+              </Badge>
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Product decision engine & asset performance analytics
+              Product decision engine, stock levels & unit sales performance analytics
             </p>
           </div>
 
@@ -311,6 +383,81 @@ function InventoryPageContent() {
               Add Product
             </Button>
           </div>
+        </div>
+
+        {/* Operations Executive KPI Summary Grid */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <Card className="ios-glass rounded-2xl border border-emerald-500/25 bg-emerald-950/10 p-4 shadow-md transition-all hover:border-emerald-500/40">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] text-emerald-400 font-bold uppercase tracking-wider">Total Products Sold</p>
+                <h3 className="text-2xl font-black text-foreground mt-1 font-mono">
+                  {totalProductsSold.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">Units</span>
+                </h3>
+              </div>
+              <div className="p-2.5 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                <ShoppingBag className="w-5 h-5" />
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-2 flex items-center justify-between">
+              <span>Revenue generated:</span>
+              <strong className="text-foreground font-mono">{currencySymbol}{Math.round(totalSalesRevenue).toLocaleString('en-IN')}</strong>
+            </p>
+          </Card>
+
+          <Card className="ios-glass rounded-2xl border border-blue-500/25 bg-blue-950/10 p-4 shadow-md transition-all hover:border-blue-500/40">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] text-blue-400 font-bold uppercase tracking-wider">Active Catalog SKUs</p>
+                <h3 className="text-2xl font-black text-foreground mt-1 font-mono">
+                  {products.length.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">Products</span>
+                </h3>
+              </div>
+              <div className="p-2.5 rounded-xl bg-blue-500/15 text-blue-400 border border-blue-500/30">
+                <Boxes className="w-5 h-5" />
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-2 flex items-center justify-between">
+              <span>Categories:</span>
+              <strong className="text-foreground">{categories.length} active</strong>
+            </p>
+          </Card>
+
+          <Card className="ios-glass rounded-2xl border border-cyan-500/25 bg-cyan-950/10 p-4 shadow-md transition-all hover:border-cyan-500/40">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] text-cyan-400 font-bold uppercase tracking-wider">Physical Stock on Hand</p>
+                <h3 className="text-2xl font-black text-foreground mt-1 font-mono">
+                  {totalStockUnits.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">Units</span>
+                </h3>
+              </div>
+              <div className="p-2.5 rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
+                <PackageCheck className="w-5 h-5" />
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-2 flex items-center justify-between">
+              <span>Inventory asset value:</span>
+              <strong className="text-foreground font-mono">{currencySymbol}{Math.round(totalInventoryCost).toLocaleString('en-IN')}</strong>
+            </p>
+          </Card>
+
+          <Card className="ios-glass rounded-2xl border border-red-500/25 bg-red-950/10 p-4 shadow-md transition-all hover:border-red-500/40">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] text-red-400 font-bold uppercase tracking-wider">Stockout Radar</p>
+                <h3 className="text-2xl font-black text-foreground mt-1 font-mono">
+                  {outOfStockCount} <span className="text-xs font-normal text-muted-foreground">Out of Stock</span>
+                </h3>
+              </div>
+              <div className="p-2.5 rounded-xl bg-red-500/15 text-red-400 border border-red-500/30">
+                <AlertOctagon className="w-5 h-5" />
+              </div>
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-2 flex items-center justify-between">
+              <span>Low buffer items:</span>
+              <strong className="text-amber-400">{lowStockCount} SKUs</strong>
+            </p>
+          </Card>
         </div>
 
         {/* FEATURE 16: Live Inventory Insights Feed */}
@@ -402,6 +549,7 @@ function InventoryPageContent() {
                     <TableHead>AI Intelligence Badges</TableHead>
                     <TableHead className="text-right">Price</TableHead>
                     <TableHead className="text-right">Stock</TableHead>
+                    <TableHead className="text-right">Units Sold</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -416,12 +564,13 @@ function InventoryPageContent() {
                         <TableCell><div className='h-5 w-24 bg-secondary rounded-md animate-pulse'/></TableCell>
                         <TableCell className="text-right"><div className='h-5 w-16 bg-secondary rounded-md animate-pulse ml-auto'/></TableCell>
                         <TableCell className="text-right"><div className='h-5 w-10 bg-secondary rounded-md animate-pulse ml-auto'/></TableCell>
+                        <TableCell className="text-right"><div className='h-5 w-10 bg-secondary rounded-md animate-pulse ml-auto'/></TableCell>
                         <TableCell className="text-right"><div className='h-8 w-8 bg-secondary rounded-full animate-pulse ml-auto'/></TableCell>
                       </TableRow>
                     ))
                   ) : computedPageReports.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground text-xs">
+                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground text-xs">
                         No products match your search query. Try typing 'low stock' or 'dead stock'.
                       </TableCell>
                     </TableRow>
@@ -489,6 +638,21 @@ function InventoryPageContent() {
 
                           <TableCell className="text-right font-bold text-xs">
                             {product.stock} <span className="text-[10px] font-normal text-muted-foreground">{product.unit || 'units'}</span>
+                          </TableCell>
+
+                          <TableCell className="text-right font-bold text-xs">
+                            {(() => {
+                              const unitsSold = productSalesMap.get(product.id) ||
+                                (product.sku ? productSalesMap.get(product.sku.toLowerCase()) : 0) ||
+                                (product.name ? productSalesMap.get(product.name.toLowerCase()) : 0) || 0;
+                              return unitsSold > 0 ? (
+                                <span className="text-emerald-400 font-mono">
+                                  {unitsSold.toLocaleString()} <span className="text-[10px] font-normal text-muted-foreground">sold</span>
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground/60 text-xs font-mono">0 sold</span>
+                              );
+                            })()}
                           </TableCell>
 
                           <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>

@@ -74,10 +74,12 @@ export function generateDemoBusinessData() {
     const sku = `ANUP-${1000 + productIndex}`;
     const barcode = `89012345${10000 + productIndex}`;
     
-    // Vary stock to create fast movers, slow movers, and dead stock
+    // Vary stock to create out-of-stock, low stock, fast movers, slow movers, and dead stock
     let stock = 45;
     let minStock = 10;
-    if (i % 7 === 0) {
+    if (i === 7 || i === 21 || i === 49 || i === 84) {
+      stock = 0; // Critical Out of Stock (0 units remaining)
+    } else if (i % 7 === 0) {
       stock = 3; // Low stock alert
     } else if (i % 9 === 0) {
       stock = 140; // High inventory / slow moving

@@ -234,15 +234,22 @@ function NavContent({ isMobile = false }: { isMobile?: boolean }) {
     return searchParams?.get('tab') === expectedTab;
   };
 
-  const handleMouseEnter = (label: string) => {
+  const handleItemMouseEnter = (item: NavItem) => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
     }
-    setHoveredLabel(label);
+    if (item.children && item.children.length > 0) {
+      setHoveredLabel(item.label);
+    } else {
+      setHoveredLabel(null);
+    }
   };
 
   const handleMouseLeave = () => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
     timeoutRef.current = setTimeout(() => {
       setHoveredLabel(null);
     }, 150);
@@ -342,7 +349,10 @@ function NavContent({ isMobile = false }: { isMobile?: boolean }) {
   };
 
   return (
-    <nav className="hidden lg:flex items-center gap-0.5 xl:gap-1.5 text-xs xl:text-sm font-semibold whitespace-nowrap max-w-full overflow-x-auto scrollbar-none py-1">
+    <nav
+      className="hidden lg:flex items-center gap-0.5 xl:gap-1.5 text-xs xl:text-sm font-semibold whitespace-nowrap py-1"
+      onMouseLeave={handleMouseLeave}
+    >
       {navItems.map((item) => {
         const active = isItemActive(item);
         const hasChildren = Boolean(item.children && item.children.length > 0);
@@ -352,16 +362,17 @@ function NavContent({ isMobile = false }: { isMobile?: boolean }) {
           <div
             key={item.href}
             className="relative shrink-0"
-            onMouseEnter={() => hasChildren && handleMouseEnter(item.label)}
-            onMouseLeave={hasChildren ? handleMouseLeave : undefined}
+            onMouseEnter={() => handleItemMouseEnter(item)}
+            onMouseLeave={handleMouseLeave}
           >
-            <div className="flex items-center">
+            <div className="flex items-center relative rounded-full">
               <Link
                 href={item.href}
                 data-tour={`nav-${item.label.toLowerCase().replace(/\s+/g, '-')}`}
                 onClick={(e) => handleNavClick(e, item.href)}
                 className={cn(
-                  "group flex items-center gap-1 transition-all duration-200 hover:text-foreground/90 px-2 xl:px-3.5 py-1.5 rounded-full cursor-pointer relative whitespace-nowrap shrink-0",
+                  "group flex items-center gap-1 transition-all duration-200 hover:text-foreground/90 py-1.5 rounded-full cursor-pointer relative whitespace-nowrap shrink-0",
+                  hasChildren ? "pl-2.5 xl:pl-3.5 pr-1" : "px-2.5 xl:px-3.5",
                   active ? "text-accent-foreground font-bold" : "text-muted-foreground hover:text-foreground"
                 )}
               >
@@ -374,13 +385,6 @@ function NavContent({ isMobile = false }: { isMobile?: boolean }) {
                     item.label
                   )}
                 </span>
-                {active && (
-                  <motion.span
-                    layoutId="active-nav-link"
-                    className="absolute inset-0 bg-black/20 dark:bg-white/10 backdrop-blur-sm rounded-full -z-10 border border-border/40 shadow-sm"
-                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                  />
-                )}
               </Link>
               {hasChildren && (
                 <button
@@ -391,7 +395,10 @@ function NavContent({ isMobile = false }: { isMobile?: boolean }) {
                     setHoveredLabel(isHovered ? null : item.label);
                   }}
                   aria-label={`Toggle ${item.label} menu`}
-                  className="p-1 -ml-1 rounded-full hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
+                  className={cn(
+                    "p-1 pr-2 rounded-full hover:bg-secondary/60 transition-colors cursor-pointer",
+                    active ? "text-accent-foreground" : "text-muted-foreground hover:text-foreground"
+                  )}
                 >
                   <ChevronDown
                     className={cn(
@@ -401,6 +408,13 @@ function NavContent({ isMobile = false }: { isMobile?: boolean }) {
                   />
                 </button>
               )}
+              {active && (
+                <motion.span
+                  layoutId="active-nav-link"
+                  className="absolute inset-0 bg-black/20 dark:bg-white/10 backdrop-blur-sm rounded-full -z-10 border border-border/40 shadow-sm pointer-events-none"
+                  transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                />
+              )}
             </div>
 
             {/* Hover Dropdown Menu */}
@@ -408,16 +422,23 @@ function NavContent({ isMobile = false }: { isMobile?: boolean }) {
               <AnimatePresence>
                 {isHovered && (
                   <motion.div
-                    initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                    initial={{ opacity: 1, y: 4, scale: 0.99 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 6, scale: 0.96 }}
-                    transition={{ duration: 0.16, ease: "easeOut" }}
+                    exit={{ opacity: 0, scale: 0.98, transition: { duration: 0.06 } }}
+                    transition={{ duration: 0.1, ease: "easeOut" }}
+                    onMouseEnter={() => {
+                      if (timeoutRef.current) {
+                        clearTimeout(timeoutRef.current);
+                        timeoutRef.current = null;
+                      }
+                    }}
+                    onMouseLeave={handleMouseLeave}
                     className={cn(
                       "absolute top-full pt-2 z-50 pointer-events-auto",
                       getDropdownAlignmentClass(item.label)
                     )}
                   >
-                    <div className="w-[calc(100vw-2rem)] sm:w-72 lg:w-80 max-w-[calc(100vw-2rem)] rounded-2xl ios-glass border border-border/50 shadow-2xl p-2 bg-background/95 backdrop-blur-xl space-y-1">
+                    <div className="w-[calc(100vw-2rem)] sm:w-72 lg:w-80 max-w-[calc(100vw-2rem)] rounded-2xl ios-glass border border-border/50 shadow-2xl p-2 bg-popover dark:bg-[#15171c] backdrop-blur-xl space-y-1">
                       <div className="px-2.5 py-1 text-[10px] uppercase font-bold tracking-wider text-muted-foreground/80 border-b border-border/30 pb-1.5 mb-1">
                         <span>{item.label} Modules</span>
                       </div>

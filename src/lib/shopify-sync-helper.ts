@@ -94,7 +94,7 @@ export function getNextShopifySyncDisplay(profile?: any): string {
 
   const hasRealtime = Boolean(profile.shopifyRealtimeSyncEnabled);
   if (hasRealtime) {
-    return 'Live Active (Checking every 15s + on change)';
+    return 'Live Active (Instant on Webhook Event)';
   }
 
   if (profile.shopifyAutoSyncEnabled === false) {
@@ -226,14 +226,9 @@ export function isShopifyAutoSyncDue(profile?: any): boolean {
     return false;
   }
 
-  // If scheduled auto-sync is disabled, only real-time checks apply
-  if (!isScheduledActive && isRealtimeActive) {
-    return !lastSync || elapsedMs >= 15 * 1000;
-  }
-
-  // 1. Pure Real-Time live sync mode (checks every 15s or immediately if never synced)
+  // 1. Pure Real-Time live sync mode (cooldown of 15s already satisfied above)
   if (isRealtimeActive && (!profile.shopifySyncFrequency || profile.shopifySyncFrequency === 'realtime')) {
-    return !lastSync || elapsedMs >= 15 * 1000;
+    return true;
   }
 
   const freq = profile.shopifySyncFrequency || 'daily';

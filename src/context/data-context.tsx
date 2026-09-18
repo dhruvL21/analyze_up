@@ -874,7 +874,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsProcessingPayment(null);
     }
-  }, [toast]);
+  }, [toast, updateActivePlan]);
 
   const isLoading = !user || productsLoading || transactionsLoading;
 
@@ -3150,9 +3150,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
 
     try {
+      const idToken = user ? await user.getIdToken().catch(() => null) : null;
       const res = await fetch('/api/shopify/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
         body: JSON.stringify({ shop, ...(token ? { accessToken: token } : {}) }),
         signal: AbortSignal.timeout(25000),
       });
@@ -3354,48 +3358,38 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    const isRealtime = businessProfile?.shopifyRealtimeSyncEnabled !== false;
-    const isAutoSync = businessProfile?.shopifyAutoSyncEnabled !== false;
-    if (!isRealtime && !isAutoSync) return;
+    // Real-time synchronization is event-driven via Shopify Webhooks (products/create, orders/create, inventory, etc.)
+    // We do NOT poll Shopify on an aggressive timer (every 15s or 1min) to avoid rate limits and unnecessary memory churn.
+    
+    // 1. Initial sync: If connected store has never synced once, run initial seed sync
+    if (!businessProfile.shopifyLastSyncedAt && !isShopifySyncingRef.current) {
+      autoSyncShopifyNow(false);
+    }
+
+    // 2. Scheduled Auto-Sync: Only run if merchant explicitly enabled scheduled auto-sync (e.g. daily/weekly backup)
+    const isScheduledActive = businessProfile?.shopifyAutoSyncEnabled === true;
+    if (!isScheduledActive) {
+      return; // Zero recurring polling! Webhooks push changes directly from Shopify when events occur.
+    }
 
     let lastTrigger = 0;
-    const checkShopifyBackgroundSync = (force = false) => {
+    const checkShopifyBackgroundSync = () => {
       if (isShopifySyncingRef.current) return;
       const now = Date.now();
-      // Minimum 10s cooldown to prevent redundant overlapping calls
-      if (now - lastTrigger < 10000) return;
+      if (now - lastTrigger < 30000) return;
 
-      if (force || isShopifyAutoSyncDue(businessProfile)) {
+      if (isShopifyAutoSyncDue(businessProfile)) {
         lastTrigger = now;
-        console.log(`[Shopify Sync] ${force ? 'Instant tab focus/visibility' : 'Live heartbeat'} auto-sync triggered...`);
+        console.log('[Shopify Sync] Scheduled batch auto-sync triggered...');
         autoSyncShopifyNow(false);
       }
     };
 
-    // 1. Live interval: 15s when Real-Time sync is enabled, 60s for scheduled intervals
-    const intervalMs = isRealtime ? 15000 : 60000;
-    const intervalId = setInterval(() => checkShopifyBackgroundSync(false), intervalMs);
-
-    // 2. Instant tab focus / visibility listener:
-    // When merchant edits, adds, or deletes products in Shopify and returns to AnalyzeUp, fetch immediately!
-    const onWindowActive = () => {
-      if (document.visibilityState === 'visible' && isRealtime) {
-        const lastSync = businessProfile.shopifyLastSyncedAt
-          ? new Date(businessProfile.shopifyLastSyncedAt).getTime()
-          : 0;
-        if (Date.now() - lastSync >= 10000) {
-          checkShopifyBackgroundSync(true);
-        }
-      }
-    };
-
-    window.addEventListener('focus', onWindowActive);
-    document.addEventListener('visibilitychange', onWindowActive);
+    // Check at low frequency (once every 60s) whether a scheduled daily/weekly batch time has arrived
+    const intervalId = setInterval(checkShopifyBackgroundSync, 60000);
 
     return () => {
       clearInterval(intervalId);
-      window.removeEventListener('focus', onWindowActive);
-      document.removeEventListener('visibilitychange', onWindowActive);
     };
   }, [businessProfile, autoSyncShopifyNow]);
 

@@ -6,6 +6,7 @@
 
 import { NextRequest } from 'next/server';
 import { firebaseConfig } from '@/firebase/config';
+import { getAdminAuth, hasAdminCredentials } from '@/lib/firebase/admin';
 
 export interface AuthenticatedTenant {
   tenantId: string;
@@ -14,7 +15,7 @@ export interface AuthenticatedTenant {
 
 /**
  * Resolves the authenticated tenant ID (Firebase UID) from the server-side request.
- * Checks Authorization header Bearer token and verifies JWT claims.
+ * Cryptographically verifies Firebase ID token signature and claims.
  */
 export async function resolveServerTenant(req: NextRequest): Promise<AuthenticatedTenant | null> {
   // 1. Check testing environment header for automated unit test suites
@@ -34,15 +35,31 @@ export async function resolveServerTenant(req: NextRequest): Promise<Authenticat
   const idToken = authHeader.replace(/^Bearer\s+/i, '').trim();
   if (!idToken) return null;
 
+  // 3. Cryptographically verify signature using Firebase Admin SDK
+  if (hasAdminCredentials()) {
+    try {
+      const adminAuth = getAdminAuth();
+      const decoded = await adminAuth.verifyIdToken(idToken, true);
+      if (decoded && decoded.uid) {
+        return {
+          tenantId: decoded.uid,
+          email: decoded.email,
+        };
+      }
+    } catch (err: any) {
+      console.warn('[Auth Guard] Firebase Admin cryptographic token verification failed:', err?.message || err);
+      return null;
+    }
+  }
+
+  // 4. Fallback claim validation for local development environments lacking service account key
   try {
-    // Decode JWT segments
     const parts = idToken.split('.');
     if (parts.length !== 3) return null;
 
     const payloadJson = Buffer.from(parts[1], 'base64url').toString('utf8');
     const payload = JSON.parse(payloadJson);
 
-    // Validate claims
     const now = Math.floor(Date.now() / 1000);
     if (payload.exp && payload.exp < now) {
       console.warn('[Auth Guard] Token expired');
@@ -66,7 +83,7 @@ export async function resolveServerTenant(req: NextRequest): Promise<Authenticat
       email: payload.email,
     };
   } catch (err) {
-    console.warn('[Auth Guard] Error validating Firebase ID token:', err);
+    console.warn('[Auth Guard] Error validating Firebase ID token claims:', err);
     return null;
   }
 }

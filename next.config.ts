@@ -41,6 +41,30 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
+        hostname: 'cdn.shopify.com',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.shopify.com',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.myshopify.com',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'firebasestorage.googleapis.com',
+        port: '',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
         hostname: 'placehold.co',
         port: '',
         pathname: '/**',

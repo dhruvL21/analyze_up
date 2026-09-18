@@ -277,9 +277,13 @@ export function ShopifyConnectModal() {
     });
 
     try {
+      const idToken = user ? await user.getIdToken().catch(() => null) : null;
       const res = await fetch('/api/shopify/sync', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
         body: JSON.stringify({ shop, ...(token ? { accessToken: token } : {}) }),
       });
 

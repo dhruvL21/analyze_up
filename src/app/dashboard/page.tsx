@@ -7,6 +7,7 @@ import { AIBrief } from '@/components/ai-brief';
 import { BusinessHealthCard } from '@/components/business-health-card';
 import { AIActionCenter } from '@/components/ai-action-center';
 import { ExecutiveKPIGrid } from '@/components/executive-kpi-grid';
+import { OutOfStockSection } from '@/components/out-of-stock-section';
 import { InventoryRecommendationsPanel } from '@/components/inventory-recommendations-panel';
 import { RevenueProfitIntelligence } from '@/components/revenue-profit-intelligence';
 import { DeadStockSection } from '@/components/dead-stock-section';
@@ -152,6 +153,9 @@ export default function DashboardPage() {
 
       {/* Dead Stock Warning & Stagnant Products */}
       <DeadStockSection />
+
+      {/* Out of Stock & Urgent Restock Hub */}
+      <OutOfStockSection />
 
       {/* FEATURE 6 & 11: Inventory Quality Snapshot & Activity Timeline */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">

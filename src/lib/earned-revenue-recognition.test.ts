@@ -79,8 +79,8 @@ describe('Earned Revenue Recognition Model', () => {
     // 3. Pending Order Pipeline must track both unfulfilled placed orders (4000 + 3000 = 7000)
     expect(kpiMap.get('pending_orders')?.rawValue).toBe(7000);
 
-    // 4. Payments Received tracks only confirmed paid orders (4000)
-    expect(kpiMap.get('payments_received')?.rawValue).toBe(4000);
+    // 4. Total Orders tracks placed customer orders (2)
+    expect(kpiMap.get('total_orders')?.rawValue).toBe(2);
   });
 
   it('recognizes revenue and profit once the order is fulfilled or delivered', () => {
@@ -135,8 +135,8 @@ describe('Earned Revenue Recognition Model', () => {
     // Pending Orders pipeline = 3000
     expect(kpiMap.get('pending_orders')?.rawValue).toBe(3000);
 
-    // Payments Received tracks both paid orders (6000 + 3000 = 9000)
-    expect(kpiMap.get('payments_received')?.rawValue).toBe(9000);
+    // Total Orders tracks both placed orders (2)
+    expect(kpiMap.get('total_orders')?.rawValue).toBe(2);
   });
 
   it('preserves fulfillment and payment fields across domain transformation', () => {

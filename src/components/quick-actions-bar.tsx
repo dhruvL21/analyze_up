@@ -5,26 +5,43 @@ import { Button } from '@/components/ui/button';
 import { useData } from '@/context/data-context';
 import { AddProductModal } from '@/components/add-product-modal';
 import { AddSupplierModal } from '@/components/add-supplier-modal';
-import { DeadStockModal } from '@/components/dead-stock-modal';
 import { ImportDialog } from '@/components/import-dialog';
 import { AuditLogModal } from '@/components/audit-log-modal';
 import {
   PlusCircle,
   FileSpreadsheet,
   ShoppingBag,
-  PackageX,
   Truck,
   Zap,
   History,
+  AlertOctagon,
 } from 'lucide-react';
 
 export function QuickActionsBar() {
-  const { setShowShopifyModal } = useData();
+  const {
+    setShowShopifyModal,
+    products = [],
+    dataReadiness,
+    capabilities,
+    businessBuddyCalibration,
+  } = useData();
+
+  const isRestockUnlocked = Boolean(
+    businessBuddyCalibration?.isOverridden ||
+    (
+      (dataReadiness?.score ?? 0) >= 40 &&
+      dataReadiness?.level !== 'LEARNING' &&
+      (capabilities?.reorderRecommendations ?? false)
+    )
+  );
+
+  const outOfStockCount = React.useMemo(() => {
+    return products.filter((p) => Number(p?.stock) === 0 || p?.stock === undefined || p?.stock === null).length;
+  }, [products]);
 
   const [isAddProductOpen, setIsAddProductOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isAddSupplierOpen, setIsAddSupplierOpen] = useState(false);
-  const [isDeadStockOpen, setIsDeadStockOpen] = useState(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
 
   return (
@@ -78,15 +95,22 @@ export function QuickActionsBar() {
             Connect Shopify
           </Button>
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setIsDeadStockOpen(true)}
-            className="rounded-xl text-xs gap-1.5 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-9 px-3.5"
-          >
-            <PackageX className="w-4 h-4 text-primary" />
-            View Dead Stock
-          </Button>
+          {isRestockUnlocked && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                const el = document.getElementById('out-of-stock-hub');
+                if (el) {
+                  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }}
+              className="rounded-xl text-xs gap-1.5 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-9 px-3.5"
+            >
+              <AlertOctagon className="w-4 h-4 text-primary" />
+              <span>Out of Stock {outOfStockCount > 0 ? `(${outOfStockCount})` : ''}</span>
+            </Button>
+          )}
 
           <Button
             size="sm"
@@ -103,7 +127,6 @@ export function QuickActionsBar() {
       {/* Interactive Modals */}
       <AddProductModal open={isAddProductOpen} onOpenChange={setIsAddProductOpen} />
       <AddSupplierModal open={isAddSupplierOpen} onOpenChange={setIsAddSupplierOpen} />
-      <DeadStockModal open={isDeadStockOpen} onOpenChange={setIsDeadStockOpen} />
       <ImportDialog open={isImportOpen} onOpenChange={setIsImportOpen} />
       <AuditLogModal open={isAuditModalOpen} onOpenChange={setIsAuditModalOpen} />
     </>

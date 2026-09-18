@@ -70,7 +70,7 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
   >(
     businessProfile?.shopifySyncFrequency && businessProfile.shopifySyncFrequency !== 'custom_datetime' && businessProfile.shopifySyncFrequency !== 'realtime'
       ? (businessProfile.shopifySyncFrequency as any)
-      : '1_min'
+      : 'daily'
   );
   const [syncTime, setSyncTime] = useState(businessProfile?.shopifySyncTime || '09:00');
   const [syncDay, setSyncDay] = useState(businessProfile?.shopifySyncDay || 'monday');
@@ -215,7 +215,7 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
                   )}
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Whenever a sale happens or a product is added/updated in Shopify, immediately sync into AnalyzeUp to recalculate predictions and insights.
+                  Event-driven live sync: whenever a product is added/updated or an order is placed in Shopify, webhooks instantly update AnalyzeUp with zero background polling.
                 </p>
               </div>
               <Switch

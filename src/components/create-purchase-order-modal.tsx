@@ -29,6 +29,7 @@ interface CreatePurchaseOrderModalProps {
   onOpenChange: (open: boolean) => void;
   defaultSupplierId?: string;
   defaultProductId?: string;
+  defaultQuantity?: number;
 }
 
 export function CreatePurchaseOrderModal({
@@ -36,13 +37,14 @@ export function CreatePurchaseOrderModal({
   onOpenChange,
   defaultSupplierId,
   defaultProductId,
+  defaultQuantity,
 }: CreatePurchaseOrderModalProps) {
   const { suppliers, products, addOrder, businessProfile } = useData();
   const { toast } = useToast();
 
   const [supplierId, setSupplierId] = useState<string>(defaultSupplierId || '');
   const [productId, setProductId] = useState<string>(defaultProductId || '');
-  const [quantity, setQuantity] = useState<number>(30);
+  const [quantity, setQuantity] = useState<number>(defaultQuantity || 30);
   const [expectedLeadDays, setExpectedLeadDays] = useState<number>(5);
   const [unitCost, setUnitCost] = useState<number>(0);
   const [notes, setNotes] = useState<string>('');
@@ -58,7 +60,8 @@ export function CreatePurchaseOrderModal({
       setSupplierId(suppliers[0].id);
     }
     if (defaultProductId) setProductId(defaultProductId);
-  }, [defaultSupplierId, defaultProductId, open, suppliers, supplierId]);
+    if (defaultQuantity && defaultQuantity > 0) setQuantity(defaultQuantity);
+  }, [defaultSupplierId, defaultProductId, defaultQuantity, open, suppliers, supplierId]);
 
   // Reset confirmation state when modal opens/closes
   useEffect(() => {

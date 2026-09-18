@@ -37,6 +37,8 @@ export interface DomainProduct {
 
 export interface DomainTransaction {
   id: string;
+  orderNumber?: string;
+  orderId?: string;
   type: 'Sale' | 'Purchase';
   productId: string;
   productName: string;
@@ -46,6 +48,7 @@ export interface DomainTransaction {
   price: number;
   totalRevenue: number;
   costPerUnit: number;
+  costPrice?: number;
   totalCost: number;
   customerName: string;
   supplier: string;
@@ -202,6 +205,8 @@ export function toDomainTransaction(t: any): DomainTransaction {
 
   return {
     id: t.id || t.transactionId || t.sale_id || '',
+    orderNumber: t.orderNumber || t.order_number || '',
+    orderId: t.orderId || t.order_id || t.orderNumber || '',
     type: (t.type === 'Purchase' || t.type === 'purchase') ? 'Purchase' : 'Sale',
     productId: t.productId || t.product_id || '',
     productName: t.productName || t.product_name || t.name || 'Unnamed Item',
@@ -211,6 +216,7 @@ export function toDomainTransaction(t: any): DomainTransaction {
     price,
     totalRevenue,
     costPerUnit,
+    costPrice: costPerUnit,
     totalCost,
     customerName: t.customerName || t.customer_name || t.customer || 'Retail Customer',
     supplier: t.supplier || t.supplierName || t.supplier_name || '',

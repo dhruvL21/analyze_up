@@ -166,16 +166,34 @@ export async function recalculateAndSaveAnalyticsSummary(
   let paymentReceived = 0;
   let pendingPaymentValue = 0;
 
+  // Build product lookup map for accurate COGS
+  const prodMap = new Map<string, Product>();
+  products.forEach(p => {
+    if (p.id) prodMap.set(String(p.id).toLowerCase(), p);
+    if (p.sku) prodMap.set(String(p.sku).toLowerCase(), p);
+    if (p.name) prodMap.set(String(p.name).toLowerCase(), p);
+  });
+
   const soldProductIds = new Set<string>();
   const soldProductNames = new Set<string>();
+  const pendingOrderIds = new Set<string>();
 
   transactions.forEach((t: any) => {
-    if (t.type === 'Sale' || t.type === 'sale') {
-      const qty = Number(t.quantity ?? t.units_sold ?? t.qty ?? t.unitsSold ?? 1) || 1;
+    const txType = String(t.type || '').toLowerCase();
+    if (txType === 'sale') {
+      const qty = Number(t.quantity ?? t.units_sold ?? t.qty ?? t.unitsSold ?? 1);
       const price = Number(t.price ?? t.selling_price ?? t.sellingPrice ?? 0);
       const rev = Number(t.totalRevenue ?? t.revenue ?? t.amount) || (price * qty);
-      const costPerUnit = Number(t.costPerUnit ?? t.costPrice ?? t.cost_per_unit ?? t.cost_price) || Math.round(price * 0.6);
-      const cost = Number(t.totalCost ?? t.total_cost) || (costPerUnit * qty);
+
+      // Product cost lookup
+      const matchedP = prodMap.get(String(t.productId || t.product_id || '').toLowerCase())
+        || prodMap.get(String(t.sku || '').toLowerCase())
+        || prodMap.get(String(t.productName || t.product_name || t.name || '').toLowerCase());
+      
+      const unitCost = Number(t.costPerUnit ?? t.costPrice ?? t.cost_per_unit ?? t.cost_price ?? matchedP?.costPrice)
+        || (matchedP?.price ? Math.round(matchedP.price * 0.6) : Math.round(price * 0.6));
+      
+      const cost = (t.totalCost !== undefined && t.totalCost > 0) ? Number(t.totalCost) : (unitCost * Math.abs(qty));
 
       // Determine fulfillment / delivery status
       const rawFulfillment = String(t.fulfillmentStatus || t.status || '').toUpperCase();
@@ -193,15 +211,19 @@ export async function recalculateAndSaveAnalyticsSummary(
 
       if (isFulfilled) {
         recognizedRevenue += rev;
-        recognizedCost += cost;
-        totalUnitsSold += qty;
+        // Only add positive COGS on fulfilled units
+        if (qty > 0) {
+          recognizedCost += cost;
+          totalUnitsSold += qty;
+        }
 
         if (t.productId || t.product_id) soldProductIds.add(String(t.productId || t.product_id));
         if (t.productName || t.product_name || t.name) soldProductNames.add(String(t.productName || t.product_name || t.name).toLowerCase());
         if (t.sku) soldProductNames.add(String(t.sku).toLowerCase());
-      } else {
+      } else if (qty > 0 && rev > 0) {
         pendingOrderValue += rev;
-        pendingOrderCount++;
+        const ordId = t.orderNumber || t.orderId || t.id;
+        if (ordId) pendingOrderIds.add(String(ordId));
       }
 
       if (isPaid) {
@@ -211,6 +233,8 @@ export async function recalculateAndSaveAnalyticsSummary(
       }
     }
   });
+
+  pendingOrderCount = pendingOrderIds.size || (pendingOrderValue > 0 ? 1 : 0);
 
   // Returns and refunds deduct from recognized revenue
   let totalRefunds = 0;

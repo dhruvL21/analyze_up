@@ -1,3 +1,5 @@
+'use server';
+
 import { openai, isOpenAIConfigured } from '@/ai/openai';
 import {
   BusinessFileType,
@@ -331,7 +333,7 @@ const PRIMARY_SINGLE_ASSIGNMENT_TARGETS = new Set([
   'orderDate',
 ]);
 
-export function computeDynamicMappingWithCollisionPrevention(
+function computeDynamicMappingWithCollisionPrevention(
   externalHeaders: string[],
   targetFields: TargetFieldDef[],
   sampleRows: Record<string, any>[] = [],
@@ -607,11 +609,11 @@ function scoreHeaderMatch(profile: ColumnProfile, targetKey: string, targetLabel
   }
 }
 
-export function getFuzzyMatchForFileType(
+export async function getFuzzyMatchForFileType(
   header: string,
   targetFields: TargetFieldDef[],
   sampleRows: Record<string, any>[] = []
-): string {
+): Promise<string> {
   const result = computeDynamicMappingWithCollisionPrevention([header], targetFields, sampleRows);
   return result.mapping[header] || 'customAttribute';
 }

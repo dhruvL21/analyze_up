@@ -19,9 +19,12 @@ export interface BusinessHealthSummary {
   badgeClass: string;
   factors: {
     inventoryHealth: number;
+    profitability: number;
     marginHealth: number;
+    salesRevenueHealth: number;
     capitalEfficiency: number;
     supplierPerformance: number;
+    orderFulfillmentHealth: number;
     deadStockRatio: number;
   };
   summarySentence: string;
@@ -49,6 +52,8 @@ export interface KPICardItem {
   change: string; // e.g. "+12%" or "-8%"
   isPositiveChange: boolean;
   interpretation: string;
+  count?: number;
+  countLabel?: string;
 }
 
 export interface InventoryQualityMetrics {
@@ -79,16 +84,19 @@ export interface TodayPriorityItem {
   route: string;
 }
 
-// 1. Calculate Dynamic Business Health Score (0-100) responding to executed founder tasks
+// 1. Calculate Dynamic Business Health Score (0-100) with 6 core health metrics
 export function computeBusinessHealth(
   rawProducts: Product[],
   rawTransactions: Transaction[] = [],
   rawSuppliers: Supplier[] = [],
-  rawReturns: ProductReturn[] = []
+  rawReturns: ProductReturn[] = [],
+  rawOrders: PurchaseOrder[] = []
 ): BusinessHealthSummary {
   const products = toDomainProducts(rawProducts);
   const transactions = toDomainTransactions(rawTransactions);
   const suppliers = toDomainSuppliers(rawSuppliers);
+  const returns = rawReturns || [];
+  const orders = toDomainPurchaseOrders(rawOrders || []);
 
   if (!products || products.length === 0) {
     return {
@@ -98,27 +106,105 @@ export function computeBusinessHealth(
       badgeClass: 'bg-muted text-muted-foreground border-border',
       factors: {
         inventoryHealth: 0,
+        profitability: 0,
         marginHealth: 0,
+        salesRevenueHealth: 0,
         capitalEfficiency: 0,
         supplierPerformance: 0,
+        orderFulfillmentHealth: 0,
         deadStockRatio: 0,
       },
       summarySentence: 'Workspace has no active inventory data. Import products to begin live tracking.',
     };
   }
 
-  // Base factor calculations
+  // 1. Inventory Health: In-stock vs low-stock buffer & stockout rates
   const inStockProducts = products.filter(p => p.stock >= (p.minStock || 5));
-  let inventoryHealth = Math.round((inStockProducts.length / products.length) * 100);
+  const lowStockProducts = products.filter(p => p.stock > 0 && p.stock < (p.minStock || 5));
+  let inventoryHealth = Math.round(
+    ((inStockProducts.length * 100) + (lowStockProducts.length * 60)) / products.length
+  );
+  inventoryHealth = Math.min(100, Math.max(0, inventoryHealth));
 
+  // 2. Profitability: Gross margin across transactions vs COGS and catalog markups, adjusted for return losses
+  const productsMap = new Map<string, typeof products[0]>();
+  products.forEach(p => {
+    if (p.id) productsMap.set(p.id, p);
+    if (p.sku) productsMap.set(p.sku, p);
+  });
+
+  const saleTransactions = transactions.filter(t => t.type === 'Sale');
+  const totalSales = saleTransactions.reduce(
+    (acc, t) => acc + (t.totalRevenue || ((t.quantity || 1) * (t.price || 0))),
+    0
+  );
+  const totalCOGS = saleTransactions.reduce((acc, t) => {
+    if (t.totalCost !== undefined) return acc + t.totalCost;
+    const p = productsMap.get(t.productId || '') || productsMap.get(t.sku || '');
+    return acc + ((t.quantity || 1) * (p?.costPrice || (p?.price ? p.price * 0.6 : 0)));
+  }, 0);
+
+  let rawProfitMarginPercent = 35;
+  if (totalSales > 0) {
+    rawProfitMarginPercent = ((totalSales - totalCOGS) / totalSales) * 100;
+  } else {
+    const catalogMargins = products.map(p => {
+      const price = p.price || 0;
+      const cost = p.costPrice !== undefined ? p.costPrice : price * 0.6;
+      return price > 0 ? ((price - cost) / price) * 100 : 35;
+    });
+    rawProfitMarginPercent = catalogMargins.length > 0
+      ? catalogMargins.reduce((a, b) => a + b, 0) / catalogMargins.length
+      : 35;
+  }
+
+  // Adjust for return refund impact
+  const totalRefunds = returns
+    .filter(r => r.refundStatus === 'Refunded' || r.refundStatus === 'Store Credit')
+    .reduce((acc, r) => acc + (r.refundAmount || 0), 0);
+  const refundMarginDrag = totalSales > 0 ? Math.min(25, (totalRefunds / totalSales) * 100) : 0;
+  const netMarginPercent = Math.max(0, rawProfitMarginPercent - refundMarginDrag);
+
+  // Benchmark: 45% margin = 100 score
+  let profitability = Math.min(100, Math.max(10, Math.round((netMarginPercent / 45) * 100)));
+  const marginHealth = profitability; // Alias for backward compatibility
+
+  // 3. Sales & Revenue Health: Velocity, active catalog sell-through, and return drag
   const salesHistory = evaluateSalesHistory(rawProducts, rawTransactions);
   const isDeadStockActive = salesHistory.hasMinimumHistory;
 
-  const saleProductIds = new Set(transactions.filter(t => t.type === 'Sale').map(t => t.productId));
+  let salesRevenueHealth = 85; // Baseline healthy score for learning/nascent stores
+  if (isDeadStockActive) {
+    const soldProductIds = new Set(
+      saleTransactions.map(t => t.productId || t.sku).filter(Boolean)
+    );
+    const activeSellThroughRatio = products.length > 0
+      ? Math.round((soldProductIds.size / products.length) * 100)
+      : 50;
+
+    const returnRatePct = saleTransactions.length > 0
+      ? (returns.length / saleTransactions.length) * 100
+      : 0;
+    const returnPenalty = Math.min(25, Math.round(returnRatePct * 1.2));
+    const velocityScore = Math.min(100, Math.round(saleTransactions.length * 2.5));
+
+    salesRevenueHealth = Math.min(
+      100,
+      Math.max(20, Math.round(activeSellThroughRatio * 0.5 + velocityScore * 0.5 - returnPenalty))
+    );
+  } else {
+    const earlyTraction = saleTransactions.length > 0 ? Math.min(15, saleTransactions.length * 2) : 0;
+    const returnRatePct = saleTransactions.length > 0 ? (returns.length / saleTransactions.length) * 100 : 0;
+    const returnPenalty = Math.min(20, Math.round(returnRatePct * 1.5));
+    salesRevenueHealth = Math.min(100, Math.max(50, 80 + earlyTraction - returnPenalty));
+  }
+
+  // 4. Capital Efficiency: Circulating working capital vs dead / idle inventory
+  const saleProductIds = new Set(saleTransactions.map(t => t.productId));
   const deadStockProducts = isDeadStockActive
     ? products.filter(p => p.stock > 0 && !saleProductIds.has(p.id) && salesHistory.isProductEligibleForDeadStock(p))
     : [];
-  let deadStockRatio = isDeadStockActive
+  const deadStockRatio = isDeadStockActive
     ? Math.round(Math.max(0, 100 - (deadStockProducts.length / products.length) * 100))
     : 100;
 
@@ -128,23 +214,41 @@ export function computeBusinessHealth(
     ? (isDeadStockActive ? Math.round(Math.max(10, 100 - (deadStockValuation / totalValuation) * 100)) : 100)
     : 100;
 
-  const productsMap = new Map<string, typeof products[0]>();
-  products.forEach(p => {
-    if (p.id) productsMap.set(p.id, p);
-    if (p.sku) productsMap.set(p.sku, p);
-  });
+  // 5. Supplier Performance: Supplier lead times and PO turnaround / fulfillment rate
+  const avgSupplierLead = products.length > 0
+    ? products.reduce((acc, p) => acc + (p.leadTimeDays || 7), 0) / products.length
+    : 7;
+  const leadTimeScore = Math.min(100, Math.max(30, Math.round(100 - (avgSupplierLead - 3) * 5)));
 
-  const totalSales = transactions.filter(t => t.type === 'Sale').reduce((acc, t) => acc + (t.totalRevenue || ((t.quantity || 1) * (t.price || 0))), 0);
-  const totalCOGS = transactions.filter(t => t.type === 'Sale').reduce((acc, t) => {
-    if (t.totalCost !== undefined) return acc + t.totalCost;
-    const p = productsMap.get(t.productId || '') || productsMap.get(t.sku || '');
-    return acc + ((t.quantity || 1) * (p?.costPrice || (p?.price ? p.price * 0.6 : 0)));
-  }, 0);
-  const profitMarginPercent = totalSales > 0 ? ((totalSales - totalCOGS) / totalSales) * 100 : 35;
-  let marginHealth = Math.min(100, Math.round((profitMarginPercent / 45) * 100));
+  let supplierPerformance = leadTimeScore;
+  if (orders && orders.length > 0) {
+    const fulfilledPOs = orders.filter(o => o.status === 'Delivered' || o.status === 'Fulfilled').length;
+    const nonCancelledPOs = orders.filter(o => o.status !== 'Cancelled').length;
+    const poFulfillmentRate = nonCancelledPOs > 0 ? Math.round((fulfilledPOs / nonCancelledPOs) * 100) : 85;
+    supplierPerformance = Math.min(100, Math.max(25, Math.round(leadTimeScore * 0.5 + poFulfillmentRate * 0.5)));
+  }
 
-  const avgSupplierLead = products.reduce((acc, p) => acc + (p.leadTimeDays || 7), 0) / products.length;
-  let supplierPerformance = Math.round(Math.max(30, 100 - (avgSupplierLead - 3) * 5));
+  // 6. Order/Fulfillment Health: Customer order completion, payment receipt, and return avoidance
+  let orderFulfillmentHealth = 90;
+  if (saleTransactions.length > 0) {
+    const paidCount = saleTransactions.filter(
+      t => t.financialStatus === 'PAID' || t.paymentReceived === true || t.isRevenueRecognized === true || !t.financialStatus
+    ).length;
+    const paymentRate = (paidCount / saleTransactions.length) * 100;
+
+    const fulfilledCount = saleTransactions.filter(
+      t => t.fulfillmentStatus === 'FULFILLED' || t.fulfillmentStatus === 'DELIVERED' || !t.fulfillmentStatus
+    ).length;
+    const fulfillmentRate = (fulfilledCount / saleTransactions.length) * 100;
+
+    const returnRatio = returns.length / saleTransactions.length;
+    const returnPenalty = Math.min(30, Math.round(returnRatio * 100 * 1.5));
+
+    orderFulfillmentHealth = Math.min(
+      100,
+      Math.max(20, Math.round((paymentRate * 0.5 + fulfillmentRate * 0.5) - returnPenalty))
+    );
+  }
 
   // Dynamic Founder Execution Bonus (reads from audit logs and performed tasks)
   let executedActionCount = 0;
@@ -166,19 +270,29 @@ export function computeBusinessHealth(
   }
 
   // Boost metrics based on executed tasks
-  const executionBonus = Math.min(30, executedActionCount * 4);
-  inventoryHealth = Math.min(100, inventoryHealth + Math.round(executionBonus * 0.4));
-  capitalEfficiency = Math.min(100, capitalEfficiency + Math.round(executionBonus * 0.5));
-  marginHealth = Math.min(100, marginHealth + Math.round(executionBonus * 0.3));
+  const executionBonus = Math.min(20, executedActionCount * 3);
+  inventoryHealth = Math.min(100, inventoryHealth + Math.round(executionBonus * 0.3));
+  profitability = Math.min(100, profitability + Math.round(executionBonus * 0.3));
+  salesRevenueHealth = Math.min(100, salesRevenueHealth + Math.round(executionBonus * 0.3));
+  capitalEfficiency = Math.min(100, capitalEfficiency + Math.round(executionBonus * 0.4));
+  supplierPerformance = Math.min(100, supplierPerformance + Math.round(executionBonus * 0.3));
+  orderFulfillmentHealth = Math.min(100, orderFulfillmentHealth + Math.round(executionBonus * 0.2));
 
-  // Overall Weighted Score
+  // Overall Weighted Score (Weights sum to 100%):
+  // Inventory Health: 20%
+  // Profitability: 20%
+  // Sales & Revenue Health: 20%
+  // Capital Efficiency: 15%
+  // Supplier Performance: 15%
+  // Order/Fulfillment Health: 10%
   let score = Math.round(
-    inventoryHealth * 0.25 +
-    marginHealth * 0.25 +
-    capitalEfficiency * 0.20 +
-    deadStockRatio * 0.15 +
+    inventoryHealth * 0.20 +
+    profitability * 0.20 +
+    salesRevenueHealth * 0.20 +
+    capitalEfficiency * 0.15 +
     supplierPerformance * 0.15 +
-    executionBonus * 0.25
+    orderFulfillmentHealth * 0.10 +
+    executionBonus * 0.15
   );
 
   score = Math.min(100, Math.max(0, score));
@@ -209,13 +323,15 @@ export function computeBusinessHealth(
     badgeClass = 'bg-rose-500/15 text-rose-400 border-rose-500/30';
   }
 
-  let summarySentence = 'Operations are stable with good inventory velocity.';
+  let summarySentence = 'Operations are stable with balanced inventory velocity and healthy order fulfillment.';
   if (!isDeadStockActive) {
     summarySentence = 'Baseline learning active: observing catalog sales rhythm.';
   } else if (deadStockProducts.length > 5) {
     summarySentence = `Capital lockup detected: ${deadStockProducts.length} dead stock items require clearance.`;
   } else if (inventoryHealth < 70) {
-    summarySentence = `Stockout vulnerability: ${products.length - inStockProducts.length} items running low.`;
+    summarySentence = `Stockout vulnerability: ${products.length - inStockProducts.length} items running low or out of stock.`;
+  } else if (orderFulfillmentHealth < 70) {
+    summarySentence = 'Fulfillment risk detected: monitor unfulfilled orders and return rates.';
   } else if (score >= 90) {
     summarySentence = 'Excellent operational health and strong profit margins across SKUs.';
   }
@@ -227,9 +343,12 @@ export function computeBusinessHealth(
     badgeClass,
     factors: {
       inventoryHealth,
-      marginHealth,
+      profitability,
+      marginHealth: profitability,
+      salesRevenueHealth,
       capitalEfficiency,
       supplierPerformance,
+      orderFulfillmentHealth,
       deadStockRatio,
     },
     summarySentence,
@@ -537,6 +656,16 @@ export function generateTodayPriorities(
   return priorities.slice(0, 5);
 }
 
+// Helper to extract timestamp from transaction in ms
+function getTxTimestamp(t: Transaction): number {
+  const d: any = t.transactionDate || t.createdAt;
+  if (!d) return 0;
+  if (typeof d === 'number') return d;
+  if (d._seconds) return d._seconds * 1000;
+  const parsed = Date.parse(d);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
 // 4. Compute Executive KPI Card Interpretations
 export function computeExecutiveKPIs(
   rawProducts: Product[],
@@ -547,8 +676,15 @@ export function computeExecutiveKPIs(
   const transactions = toDomainTransactions(rawTransactions);
   const currencySymbol = businessProfile?.currency?.includes('USD') ? '$' : '₹';
 
-  const totalInventoryVal = products.reduce((sum, p) => sum + (p.stock * p.price), 0);
-  const salesTx = transactions.filter(t => t.type === 'Sale');
+  // Build high-performance product lookup map for accurate COGS
+  const productMap = new Map<string, Product>();
+  products.forEach(p => {
+    if (p.id) productMap.set(String(p.id).toLowerCase(), p);
+    if (p.sku) productMap.set(String(p.sku).toLowerCase(), p);
+    if (p.name) productMap.set(String(p.name).toLowerCase(), p);
+  });
+
+  const salesTx = transactions.filter(t => (t.type || '').toLowerCase() === 'sale');
 
   // 1. Fulfilled / Delivered sales -> Recognized Revenue & COGS
   const fulfilledSalesTx = salesTx.filter(t => {
@@ -562,33 +698,103 @@ export function computeExecutiveKPIs(
     );
   });
 
-  // 2. Placed / Unfulfilled sales -> Pending Order Pipeline
-  const pendingSalesTx = salesTx.filter(t => !fulfilledSalesTx.includes(t));
-
-  // 3. Paid sales -> Payments Received
-  const paidSalesTx = salesTx.filter(t => {
-    const rawFinancial = String(t.financialStatus || '').toUpperCase();
-    const rawFulfillment = String(t.fulfillmentStatus || t.status || '').toUpperCase();
-    const isExplicitlyUnpaid = rawFinancial === 'PENDING' || rawFinancial === 'UNPAID' || rawFinancial === 'AUTHORIZED' || t.paymentReceived === false;
-
-    if (t.paymentReceived === true || rawFinancial === 'PAID' || rawFinancial === 'PARTIALLY_REFUNDED') return true;
-    if (!isExplicitlyUnpaid && (rawFulfillment === 'FULFILLED' || rawFulfillment === 'DELIVERED' || rawFulfillment === 'COMPLETED')) {
-      return true;
-    }
-    return false;
+  // 2. Placed / Unfulfilled sales -> Pending Order Pipeline (positive sales awaiting fulfillment)
+  const pendingSalesTx = salesTx.filter(t => {
+    const isFulf = fulfilledSalesTx.includes(t);
+    const qty = Number(t.quantity ?? 1);
+    const rev = Number(t.totalRevenue ?? ((t.price || 0) * qty));
+    return !isFulf && qty > 0 && rev > 0;
   });
 
-  const recognizedRev = fulfilledSalesTx.reduce((sum, t) => sum + (t.totalRevenue || (t.quantity * (t.price || 0))), 0);
-  const pendingOrderVal = pendingSalesTx.reduce((sum, t) => sum + (t.totalRevenue || (t.quantity * (t.price || 0))), 0);
-  const paymentReceivedVal = paidSalesTx.reduce((sum, t) => sum + (t.totalRevenue || (t.quantity * (t.price || 0))), 0);
+  // Unique pending order count deduplicated by order number/id
+  const pendingOrderIds = new Set<string>();
+  pendingSalesTx.forEach(t => {
+    const id = t.orderNumber || t.orderId || t.id;
+    if (id) pendingOrderIds.add(String(id));
+  });
+  const pendingOrderCount = pendingOrderIds.size || pendingSalesTx.length;
+  const pendingOrderVal = pendingSalesTx.reduce((sum, t) => sum + Number(t.totalRevenue ?? ((t.price || 0) * (t.quantity || 1))), 0);
 
+  // 3. Total Sales Orders (deduplicated by orderNumber or id)
+  const totalOrderIds = new Set<string>();
+  salesTx.forEach(t => {
+    const id = t.orderNumber || t.orderId || t.id;
+    if (id) totalOrderIds.add(String(id));
+  });
+  const totalOrdersCount = totalOrderIds.size || salesTx.length;
+
+  const recognizedRev = fulfilledSalesTx.reduce((sum, t) => sum + Number(t.totalRevenue ?? ((t.price || 0) * (t.quantity || 1))), 0);
+
+  // Accurate COGS calculation looking up products from catalog
   const recognizedCOGS = fulfilledSalesTx.reduce((sum, t) => {
-    if (t.totalCost !== undefined) return sum + t.totalCost;
-    const p = products.find(prod => prod.id === t.productId || prod.sku === t.sku);
-    return sum + (t.quantity * (p?.costPrice || (p?.price ? p.price * 0.6 : 0)));
+    if (t.totalCost !== undefined && t.totalCost > 0) return sum + t.totalCost;
+    
+    const p = productMap.get(String(t.productId || '').toLowerCase())
+      || productMap.get(String(t.sku || '').toLowerCase())
+      || productMap.get(String(t.productName || '').toLowerCase());
+
+    const qty = Math.abs(Number(t.quantity) || 1);
+    const unitCost = Number(t.costPerUnit || t.costPrice || p?.costPrice || (p?.price ? p.price * 0.6 : (Number(t.price) || 0) * 0.6));
+    return sum + (qty * unitCost);
   }, 0);
 
-  const realizedProfit = Math.max(0, recognizedRev - recognizedCOGS);
+  const realizedProfit = Math.round(recognizedRev - recognizedCOGS);
+  const grossMarginPercent = recognizedRev > 0 ? Math.round((realizedProfit / recognizedRev) * 100) : 0;
+
+  // Real, dynamic period-over-period comparison based on actual transaction timestamps
+  const timestamps = salesTx.map(getTxTimestamp).filter(ts => ts > 0);
+  let revChange = '0%';
+  let isRevPositive = true;
+  let ordersChange = '0%';
+  let isOrdersPositive = true;
+
+  if (timestamps.length > 0) {
+    const maxTs = Math.max(...timestamps);
+    const minTs = Math.min(...timestamps);
+    const timeSpan = maxTs - minTs;
+    const windowMs = timeSpan > 14 * 24 * 3600 * 1000 ? 14 * 24 * 3600 * 1000 : 7 * 24 * 3600 * 1000;
+    const currentPeriodStart = maxTs - windowMs;
+    const priorPeriodStart = currentPeriodStart - windowMs;
+
+    const currentFulfilled = fulfilledSalesTx.filter(t => getTxTimestamp(t) >= currentPeriodStart);
+    const priorFulfilled = fulfilledSalesTx.filter(t => {
+      const ts = getTxTimestamp(t);
+      return ts >= priorPeriodStart && ts < currentPeriodStart;
+    });
+
+    const curRev = currentFulfilled.reduce((sum, t) => sum + Number(t.totalRevenue ?? ((t.price || 0) * (t.quantity || 1))), 0);
+    const prevRev = priorFulfilled.reduce((sum, t) => sum + Number(t.totalRevenue ?? ((t.price || 0) * (t.quantity || 1))), 0);
+
+    if (prevRev > 0) {
+      const diff = Math.round(((curRev - prevRev) / prevRev) * 100);
+      revChange = `${diff >= 0 ? '+' : ''}${diff}%`;
+      isRevPositive = diff >= 0;
+    } else if (curRev > 0) {
+      revChange = '+100%';
+      isRevPositive = true;
+    }
+
+    const currentSales = salesTx.filter(t => getTxTimestamp(t) >= currentPeriodStart);
+    const priorSales = salesTx.filter(t => {
+      const ts = getTxTimestamp(t);
+      return ts >= priorPeriodStart && ts < currentPeriodStart;
+    });
+
+    const currentOrderIds = new Set(currentSales.map(t => t.orderNumber || t.orderId || t.id));
+    const priorOrderIds = new Set(priorSales.map(t => t.orderNumber || t.orderId || t.id));
+
+    const curOrders = currentOrderIds.size || currentSales.length;
+    const prevOrders = priorOrderIds.size || priorSales.length;
+
+    if (prevOrders > 0) {
+      const diffOrders = Math.round(((curOrders - prevOrders) / prevOrders) * 100);
+      ordersChange = `${diffOrders >= 0 ? '+' : ''}${diffOrders}%`;
+      isOrdersPositive = diffOrders >= 0;
+    } else if (curOrders > 0) {
+      ordersChange = '+100%';
+      isOrdersPositive = true;
+    }
+  }
 
   return [
     {
@@ -596,8 +802,8 @@ export function computeExecutiveKPIs(
       title: 'Recognized Revenue',
       value: `${currencySymbol}${Math.round(recognizedRev).toLocaleString('en-IN')}`,
       rawValue: recognizedRev,
-      change: recognizedRev > 0 ? '+14%' : '0%',
-      isPositiveChange: recognizedRev >= 0,
+      change: revChange,
+      isPositiveChange: isRevPositive,
       interpretation: recognizedRev > 0
         ? 'Realized on fulfilled & delivered orders.'
         : 'Awaiting fulfillment/delivery to recognize revenue.',
@@ -607,30 +813,31 @@ export function computeExecutiveKPIs(
       title: 'Pending Orders (Pipeline)',
       value: `${currencySymbol}${Math.round(pendingOrderVal).toLocaleString('en-IN')}`,
       rawValue: pendingOrderVal,
-      change: pendingOrderVal > 0 ? '+8%' : '0%',
+      count: pendingOrderCount,
+      change: `${pendingOrderCount} ${pendingOrderCount === 1 ? 'Order' : 'Orders'}`,
       isPositiveChange: true,
-      interpretation: pendingSalesTx.length > 0
-        ? `${pendingSalesTx.length} placed orders awaiting fulfillment.`
-        : 'Zero pending unfulfilled orders.',
+      interpretation: pendingOrderCount > 0
+        ? `${pendingOrderCount} unfulfilled placed ${pendingOrderCount === 1 ? 'order' : 'orders'} in pipeline.`
+        : 'Zero unfulfilled orders in queue.',
     },
     {
-      key: 'payments_received',
-      title: 'Payments Received',
-      value: `${currencySymbol}${Math.round(paymentReceivedVal).toLocaleString('en-IN')}`,
-      rawValue: paymentReceivedVal,
-      change: paymentReceivedVal > 0 ? '+12%' : '0%',
-      isPositiveChange: paymentReceivedVal >= 0,
-      interpretation: 'Confirmed cash inflow from paid orders.',
+      key: 'total_orders',
+      title: 'Total Orders',
+      value: `${totalOrdersCount.toLocaleString('en-IN')}`,
+      rawValue: totalOrdersCount,
+      change: ordersChange,
+      isPositiveChange: isOrdersPositive,
+      interpretation: 'Confirmed orders across all sales channels.',
     },
     {
       key: 'net_profit',
       title: 'Realized Gross Profit',
       value: `${currencySymbol}${Math.round(realizedProfit).toLocaleString('en-IN')}`,
       rawValue: realizedProfit,
-      change: realizedProfit > 0 ? '+18%' : (realizedProfit < 0 ? '-4%' : '0%'),
+      change: `${grossMarginPercent}% Margin`,
       isPositiveChange: realizedProfit >= 0,
       interpretation: recognizedRev > 0
-        ? `${Math.round((realizedProfit / recognizedRev) * 100)}% gross margin earned on fulfilled sales.`
+        ? `${grossMarginPercent}% gross margin on delivered sales (${currencySymbol}${Math.round(recognizedCOGS).toLocaleString('en-IN')} COGS).`
         : 'Calculated after COGS on delivered sales.',
     },
   ];

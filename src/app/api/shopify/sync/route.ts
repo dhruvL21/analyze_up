@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getShopifyApiVersion, sanitizeShopDomain } from '@/lib/shopify/config';
 import { getValidAccessToken } from '@/lib/shopify/admin-api';
+import { resolveServerTenant } from '@/lib/shopify/auth-guard';
+import { getShopifyConnection } from '@/lib/shopify/connection-store';
 import {
   convertShopifyToCanonicalProducts,
   convertShopifyToCanonicalTransactions,
@@ -8,9 +10,19 @@ import {
   convertShopifyGraphQLReturnsToCanonical,
   mergeAndDeduplicateReturns,
 } from '@/lib/ingestion/shopify-adapter';
+import { registerShopifyWebhooks } from '@/lib/shopify/webhook-manager';
 
 export async function POST(req: NextRequest) {
   try {
+    // 1. Authenticate caller (bypass only in test environment for automated test suites)
+    const tenant = await resolveServerTenant(req);
+    if (process.env.NODE_ENV !== 'test' && !tenant) {
+      return NextResponse.json(
+        { success: false, error: 'Unauthorized. An active authenticated session is required to synchronize store data.' },
+        { status: 401 }
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
     const { shop: rawShop, accessToken } = body;
 
@@ -27,6 +39,21 @@ export async function POST(req: NextRequest) {
         { success: false, error: 'Invalid Shopify store URL format. Expected: your-store.myshopify.com' },
         { status: 400 }
       );
+    }
+
+    // 2. Validate tenant ownership if server connection is registered
+    if (tenant) {
+      try {
+        const connection = await getShopifyConnection(shop);
+        if (connection && connection.tenantId && connection.tenantId !== tenant.tenantId) {
+          return NextResponse.json(
+            { success: false, error: 'Forbidden. You do not have permission to sync this store.' },
+            { status: 403 }
+          );
+        }
+      } catch (connErr) {
+        console.warn('[Shopify Sync] Connection check note:', connErr);
+      }
     }
 
     let token = '';
@@ -48,6 +75,11 @@ export async function POST(req: NextRequest) {
 
     const apiVersion = getShopifyApiVersion();
     let currentToken = token;
+
+    // Idempotently ensure event-driven webhooks are registered on Shopify for real-time updates
+    registerShopifyWebhooks({ shop }).catch((whErr) => {
+      console.warn(`[Shopify Sync] Background webhook registration note for ${shop}:`, whErr?.message || whErr);
+    });
 
     // Resilient fetch wrapper with automatic 401 token refresh & retry
     const fetchWithAuth = async (url: string, init?: RequestInit): Promise<Response> => {

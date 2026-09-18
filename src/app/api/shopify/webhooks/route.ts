@@ -472,6 +472,20 @@ export async function POST(req: NextRequest) {
       }, { merge: true });
     }
 
+    // Update last sync timestamp on business profile and connection store so UI reflects latest webhook event
+    const nowIso = new Date().toISOString();
+    const profileRef = db.collection('users').doc(tenantId).collection('settings').doc('business_profile');
+    batch.set(profileRef, {
+      shopifyLastSyncedAt: nowIso,
+      updatedAt: nowIso,
+    }, { merge: true });
+
+    const connectionRef = db.collection('shopify_connections').doc(shop);
+    batch.set(connectionRef, {
+      lastSyncAt: nowIso,
+      updatedAt: nowIso,
+    }, { merge: true });
+
     await batch.commit();
 
     return NextResponse.json({

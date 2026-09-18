@@ -58,7 +58,7 @@ import {
 } from '@/components/ui/dialog';
 
 export default function AIAdvisorPage() {
-  const { products, transactions, suppliers, orders, returns = [], activePlan, setShowSubscriptionModal, businessProfile, updateProduct, addOrder, incrementAiQueryCount } = useData();
+  const { products, transactions, suppliers, orders, returns = [], activePlan, setShowSubscriptionModal, businessProfile, updateProduct, addOrder, incrementAiQueryCount, aiQueryCount } = useData();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -90,14 +90,17 @@ export default function AIAdvisorPage() {
 
   // Single Source-of-Truth Business Health Engine
   const healthSummary = React.useMemo(() => {
-    return computeBusinessHealth(products, transactions, suppliers, returns);
-  }, [products, transactions, suppliers, returns]);
+    return computeBusinessHealth(products, transactions, suppliers, returns, orders);
+  }, [products, transactions, suppliers, returns, orders]);
 
   const actionTasks = React.useMemo(() => {
     return generateActionTasks(products, transactions, suppliers, orders, businessProfile, returns);
   }, [products, transactions, suppliers, orders, businessProfile, returns]);
 
+  const FREE_TRIAL_QUERY_LIMIT = 15;
   const isPaid = activePlan !== 'Free Trial';
+  const hasTrialQuota = !isPaid && (aiQueryCount || 0) < FREE_TRIAL_QUERY_LIMIT;
+  const isAccessAllowed = isPaid || hasTrialQuota;
 
   // Auto scroll chat
   useEffect(() => {
@@ -288,7 +291,7 @@ export default function AIAdvisorPage() {
             </div>
 
             {/* Health parameters */}
-            <div className="space-y-3 text-xs">
+            <div className="space-y-2.5 text-xs">
               <div className="space-y-1">
                 <div className="flex justify-between font-semibold">
                   <span className="text-muted-foreground">Inventory Health</span>
@@ -298,10 +301,17 @@ export default function AIAdvisorPage() {
               </div>
               <div className="space-y-1">
                 <div className="flex justify-between font-semibold">
-                  <span className="text-muted-foreground">Profit Margin Index</span>
-                  <span className="text-primary font-bold">{healthSummary.factors.marginHealth}%</span>
+                  <span className="text-muted-foreground">Profitability</span>
+                  <span className="text-primary font-bold">{healthSummary.factors.profitability}%</span>
                 </div>
-                <Progress value={healthSummary.factors.marginHealth} className="h-1.5" />
+                <Progress value={healthSummary.factors.profitability} className="h-1.5" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between font-semibold">
+                  <span className="text-muted-foreground">Sales & Revenue Health</span>
+                  <span className="text-primary font-bold">{healthSummary.factors.salesRevenueHealth}%</span>
+                </div>
+                <Progress value={healthSummary.factors.salesRevenueHealth} className="h-1.5" />
               </div>
               <div className="space-y-1">
                 <div className="flex justify-between font-semibold">
@@ -316,6 +326,13 @@ export default function AIAdvisorPage() {
                   <span className="text-primary font-bold">{healthSummary.factors.supplierPerformance}%</span>
                 </div>
                 <Progress value={healthSummary.factors.supplierPerformance} className="h-1.5" />
+              </div>
+              <div className="space-y-1">
+                <div className="flex justify-between font-semibold">
+                  <span className="text-muted-foreground">Order / Fulfillment Health</span>
+                  <span className="text-primary font-bold">{healthSummary.factors.orderFulfillmentHealth}%</span>
+                </div>
+                <Progress value={healthSummary.factors.orderFulfillmentHealth} className="h-1.5" />
               </div>
             </div>
           </CardContent>
@@ -342,7 +359,7 @@ export default function AIAdvisorPage() {
           </CardHeader>
 
           <div className="relative flex-1 flex flex-col justify-between mt-4">
-            <div className={`flex-1 flex flex-col justify-between ${!isPaid ? 'blur-[5px] select-none pointer-events-none opacity-40' : ''}`}>
+            <div className={`flex-1 flex flex-col justify-between ${!isAccessAllowed ? 'blur-[5px] select-none pointer-events-none opacity-40' : ''}`}>
               {/* Chat Messages */}
               <div
                 ref={chatBodyRef}
@@ -448,17 +465,20 @@ export default function AIAdvisorPage() {
               </CardFooter>
             </div>
 
-            {!isPaid && (
+            {!isAccessAllowed && (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-card/10 backdrop-blur-[2px] z-10">
                 <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20 text-primary shadow-sm mb-3">
                   <Lock className="h-6 w-6 animate-pulse" />
                 </div>
-                <p className="font-bold text-base text-foreground">Premium Copilot Decision Engine</p>
+                <p className="font-bold text-base text-foreground">Trial Query Limit Reached</p>
+                <p className="text-xs text-muted-foreground mt-1 max-w-sm">
+                  You have utilized all {FREE_TRIAL_QUERY_LIMIT} free trial AI queries. Upgrade to continue asking unlimited business questions.
+                </p>
                 <Button
                   onClick={() => setShowSubscriptionModal(true)}
                   className="bg-primary text-primary-foreground font-semibold rounded-xl px-5 py-2 text-sm mt-3"
                 >
-                  Upgrade to Unlock Copilot
+                  Upgrade Plan
                 </Button>
               </div>
             )}
