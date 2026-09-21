@@ -188,7 +188,8 @@ function NavContent({ isMobile = false }: { isMobile?: boolean }) {
       href.startsWith("/dashboard/insights") ||
       href.startsWith("/dashboard/business-health");
 
-    const isLocked = isPremiumRoute && (activePlan !== "Pro Plan" || isLimitExceeded);
+    const isPro = activePlan === "Enterprise Pro" || activePlan === "Pro Plan" || activePlan === "PRO";
+    const isLocked = isPremiumRoute && (!isPro || isLimitExceeded);
 
     if (isLocked) {
       e.preventDefault();

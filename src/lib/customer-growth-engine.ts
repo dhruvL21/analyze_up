@@ -15,12 +15,24 @@ import {
 import { computeProductIntelligence } from './product-intelligence-engine';
 import { calculateSupplierPerformanceScore } from './supplier-intelligence-engine';
 
-const OPPORTUNITY_STORAGE_KEY = 'analyzeup_growth_opp_statuses_v1';
+let currentGrowthUserId: string | null = null;
 
-export function getStoredOpportunityStatuses(): Record<string, OpportunityStatus> {
+export function setActiveGrowthUserId(userId: string | null) {
+  currentGrowthUserId = userId;
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem('analyzeup_growth_opp_statuses_v1');
+      localStorage.removeItem('analyzeup_custom_opportunities');
+    } catch {}
+  }
+}
+
+export function getStoredOpportunityStatuses(userId?: string): Record<string, OpportunityStatus> {
+  const uid = userId || currentGrowthUserId;
+  if (!uid) return {};
   if (typeof window === 'undefined') return {};
   try {
-    const raw = localStorage.getItem(OPPORTUNITY_STORAGE_KEY);
+    const raw = localStorage.getItem(`analyzeup_growth_opp_statuses_${uid}`);
     if (!raw) return {};
     return JSON.parse(raw);
   } catch {
@@ -28,13 +40,15 @@ export function getStoredOpportunityStatuses(): Record<string, OpportunityStatus
   }
 }
 
-export function saveOpportunityStatus(oppId: string, status: OpportunityStatus) {
+export function saveOpportunityStatus(oppId: string, status: OpportunityStatus, userId?: string) {
+  const uid = userId || currentGrowthUserId;
+  if (!uid) return;
   try {
-    const current = getStoredOpportunityStatuses();
+    const current = getStoredOpportunityStatuses(uid);
     current[oppId] = status;
     if (typeof window !== 'undefined') {
-      localStorage.setItem(OPPORTUNITY_STORAGE_KEY, JSON.stringify(current));
-      window.dispatchEvent(new CustomEvent('analyzeup_growth_opps_updated'));
+      localStorage.setItem(`analyzeup_growth_opp_statuses_${uid}`, JSON.stringify(current));
+      window.dispatchEvent(new CustomEvent('analyzeup_growth_opps_updated', { detail: { userId: uid } }));
     }
   } catch (err) {
     console.error('Failed to save opportunity status:', err);

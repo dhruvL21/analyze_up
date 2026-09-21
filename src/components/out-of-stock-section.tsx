@@ -20,6 +20,7 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useData } from '@/context/data-context';
 import { CreatePurchaseOrderModal } from '@/components/create-purchase-order-modal';
+import { UnlockProgressCard } from '@/components/unlock-progress-card';
 import type { Product, Supplier } from '@/lib/types';
 
 export interface CriticalItemAnalysis {
@@ -51,6 +52,7 @@ export function OutOfStockSection() {
     dataReadiness,
     capabilities,
     businessBuddyCalibration,
+    activateRecommendationsNow,
   } = useData();
 
   // Progressive Feature Unlock Gate:
@@ -254,9 +256,26 @@ export function OutOfStockSection() {
     setIsReorderModalOpen(true);
   };
 
-  // If the brand does NOT come under the score required to unlock critical restock, DO NOT SHOW
+  // If the brand does NOT come under the score required to unlock critical restock, display unlock progress countdown
   if (!isRestockUnlocked) {
-    return null;
+    const currentOrders = dataReadiness?.totalOrders ?? (transactions.filter(t => t.type === 'Sale' || !t.type).length);
+    return (
+      <div id="out-of-stock-hub" className="scroll-mt-24">
+        <UnlockProgressCard
+          mode="card"
+          title="Critical Restock Radar & Predictive Reorder Engine"
+          description="AnalyzeUp calculates dynamic safety stock buffers, stockout runway, and supplier MOQ reorders based on verified sales velocity. To prevent premature inventory capital allocation, this feature unlocks when your store reaches 50 customer orders or 14 days of history."
+          currentOrders={currentOrders}
+          targetOrders={50}
+          currentDays={dataReadiness?.historicalDays ?? 0}
+          targetDays={14}
+          currentScore={dataReadiness?.score ?? 0}
+          targetScore={40}
+          accentColor="amber"
+          featureName="Critical Restock Radar"
+        />
+      </div>
+    );
   }
 
   const readinessScore = dataReadiness?.score ?? 40;

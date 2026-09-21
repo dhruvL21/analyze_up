@@ -126,6 +126,7 @@ import {
   getStoredWorkspaceMembers,
 } from '@/lib/saas-engine';
 import { CreatePurchaseOrderModal } from '@/components/create-purchase-order-modal';
+import { UnlockProgressCard } from '@/components/unlock-progress-card';
 import {
   Sheet,
   SheetContent,
@@ -156,6 +157,11 @@ function ExecutiveIntelligencePageContent() {
   const { user } = useUser();
   const { toast } = useToast();
   const searchParams = useSearchParams();
+
+  // Exact customer order density for progressive unlock counters
+  const currentOrders = useMemo(() => {
+    return dataReadiness?.totalOrders ?? (transactions || []).filter(t => t && (t.type === 'Sale' || !t.type)).length;
+  }, [dataReadiness?.totalOrders, transactions]);
 
   // Unified Navigation Tab State
   const [activeTab, setActiveTab] = useState<'overview' | 'forecasting' | 'growth' | 'simulation' | 'billing' | 'team'>('overview');
@@ -486,15 +492,10 @@ function ExecutiveIntelligencePageContent() {
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-xl font-bold tracking-tight md:text-2xl flex items-center gap-2">
-              <Crown className="w-6 h-6 text-amber-400" /> Executive Intelligence
-            </h1>
-            <Badge variant="outline" className="text-[10px] font-extrabold bg-amber-500/10 text-amber-400 border-amber-500/30">
-              C-Suite Hub
-            </Badge>
-          </div>
-          <p className="text-xs text-muted-foreground">
+          <h1 className="text-xl font-bold tracking-tight md:text-2xl">
+            Executive Intelligence
+          </h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
             Unified executive summary, predictive demand forecasting, subscription billing, and team role permissions.
           </p>
         </div>
@@ -1260,6 +1261,41 @@ function ExecutiveIntelligencePageContent() {
       {/* ========================================================================= */}
       {activeTab === 'growth' && (
         <div className="space-y-6">
+          {/* Active Unlock Countdown Banner if under 50 orders */}
+          {currentOrders < 50 && (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  <Clock className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-xs font-bold text-foreground">
+                      Customer Growth Intelligence Calibrating
+                    </h4>
+                    <Badge variant="outline" className="text-[10px] font-mono font-bold text-amber-300 border-amber-500/40 bg-amber-500/15">
+                      {currentOrders} / 50 Orders ({Math.min(100, Math.round((currentOrders / 50) * 100))}%)
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {Math.max(1, 50 - currentOrders)} more customer order{Math.max(1, 50 - currentOrders) === 1 ? '' : 's'} needed to unlock automated growth bottleneck modeling, repeat customer cohorts, and volume pricing.
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
+                <div className="w-32 bg-secondary/60 h-2 rounded-full overflow-hidden border border-border/40">
+                  <div
+                    className="bg-amber-500 h-full rounded-full transition-all duration-500"
+                    style={{ width: `${Math.max(5, Math.min(100, Math.round((currentOrders / 50) * 100)))}%` }}
+                  />
+                </div>
+                <span className="text-xs font-mono font-bold text-amber-400">
+                  {Math.min(100, Math.round((currentOrders / 50) * 100))}%
+                </span>
+              </div>
+            </div>
+          )}
+
           {/* Top Scorecard Bar */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
             <Card className="ios-glass rounded-2xl border-primary/20 col-span-2 md:col-span-1">
@@ -1336,9 +1372,20 @@ function ExecutiveIntelligencePageContent() {
               </CardHeader>
               <CardContent className="space-y-2 text-xs">
                 {growthReport.positiveDrivers.length === 0 ? (
-                  <p className="text-muted-foreground text-xs py-3 text-center">
-                    No sales transactions recorded. Upload sales history to identify expansion drivers.
-                  </p>
+                  currentOrders < 20 ? (
+                    <UnlockProgressCard
+                      mode="compact"
+                      accentColor="emerald"
+                      currentOrders={currentOrders}
+                      targetOrders={20}
+                      featureName="Positive Revenue Drivers"
+                      description="Calibrating catalog repeat purchase rates and product demand concentration to isolate positive expansion drivers."
+                    />
+                  ) : (
+                    <p className="text-muted-foreground text-xs py-3 text-center">
+                      No sales transactions recorded. Upload sales history to identify expansion drivers.
+                    </p>
+                  )
                 ) : (
                   growthReport.positiveDrivers.map((d: any, i: number) => (
                     <div key={i} className="flex items-start gap-2 p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
@@ -1352,17 +1399,45 @@ function ExecutiveIntelligencePageContent() {
 
             <Card className="ios-glass rounded-2xl border-amber-500/30">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-bold flex items-center gap-2 text-amber-400">
-                  <AlertTriangle className="w-4 h-4 text-amber-400" /> Operational Growth Bottlenecks & Risks
-                </CardTitle>
+                <div className="flex items-center justify-between gap-2">
+                  <CardTitle className="text-sm font-bold flex items-center gap-2 text-amber-400">
+                    <AlertTriangle className="w-4 h-4 text-amber-400" /> Operational Growth Bottlenecks & Risks
+                  </CardTitle>
+                  {currentOrders < 50 && (
+                    <Badge variant="outline" className="text-[10px] font-mono font-bold text-amber-400 border-amber-500/30 bg-amber-500/10">
+                      {currentOrders} / 50 Orders
+                    </Badge>
+                  )}
+                </div>
               </CardHeader>
               <CardContent className="space-y-2 text-xs">
-                {growthReport.growthBottlenecks.map((b: any, i: number) => (
-                  <div key={i} className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                    <ShieldAlert className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                    <span className="text-amber-200 leading-snug">{b}</span>
+                {currentOrders < 50 ? (
+                  <UnlockProgressCard
+                    mode="compact"
+                    accentColor="amber"
+                    currentOrders={currentOrders}
+                    targetOrders={50}
+                    featureName="Operational Bottlenecks & Risk Warnings"
+                    description="AnalyzeUp observes sales velocity, inventory depletion runway, and supplier lead-time variances. Automated detection of catalog stockout bottlenecks and supplier capacity risks unlocks at 50 recorded customer orders."
+                  />
+                ) : growthReport.growthBottlenecks.length === 0 ? (
+                  <div className="flex items-start gap-2.5 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <div>
+                      <strong className="text-emerald-400 block text-xs">Zero Operational Bottlenecks Detected</strong>
+                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
+                        All supplier lead times and catalog inventory stock levels are operating within safe expansion parameters.
+                      </p>
+                    </div>
                   </div>
-                ))}
+                ) : (
+                  growthReport.growthBottlenecks.map((b: any, i: number) => (
+                    <div key={i} className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                      <ShieldAlert className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                      <span className="text-amber-200 leading-snug">{b}</span>
+                    </div>
+                  ))
+                )}
               </CardContent>
             </Card>
           </div>
@@ -1395,8 +1470,23 @@ function ExecutiveIntelligencePageContent() {
                 <TableBody>
                   {growthReport.opportunities.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-6 text-xs text-muted-foreground">
-                        No active growth opportunities detected. Catalog operations are balanced.
+                      <TableCell colSpan={7} className="py-6 px-4">
+                        {currentOrders < 50 ? (
+                          <div className="max-w-md mx-auto py-2">
+                            <UnlockProgressCard
+                              mode="compact"
+                              accentColor="purple"
+                              currentOrders={currentOrders}
+                              targetOrders={50}
+                              featureName="Scored Growth Opportunities"
+                              description="Multi-product volume bundling, clearance arbitrage, and repeat customer retention engines activate at 50 recorded customer orders."
+                            />
+                          </div>
+                        ) : (
+                          <p className="text-center text-xs text-muted-foreground">
+                            No active growth opportunities detected. Catalog operations are balanced.
+                          </p>
+                        )}
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -1491,9 +1581,20 @@ function ExecutiveIntelligencePageContent() {
               </CardHeader>
               <CardContent className="space-y-2 text-xs">
                 {growthReport.crossSellOpportunities.length === 0 ? (
-                  <p className="text-muted-foreground text-xs py-4 text-center">
-                    No co-occurrence patterns detected yet. Record more multi-item orders.
-                  </p>
+                  currentOrders < 40 ? (
+                    <UnlockProgressCard
+                      mode="compact"
+                      accentColor="blue"
+                      currentOrders={currentOrders}
+                      targetOrders={40}
+                      featureName="Cross-Sell Affinity Matrix"
+                      description="Multi-item order co-occurrence modeling activates at 40 customer orders to recommend high-converting item bundles."
+                    />
+                  ) : (
+                    <p className="text-muted-foreground text-xs py-4 text-center">
+                      No co-occurrence patterns detected yet. Record more multi-item orders.
+                    </p>
+                  )
                 ) : (
                   growthReport.crossSellOpportunities.map((cs: any, i: number) => (
                     <div key={i} className="p-3 rounded-xl bg-secondary/30 border border-border/30 space-y-1">

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useData } from '@/context/data-context';
 import { useToast } from '@/hooks/use-toast';
+import { useUser } from '@/firebase';
 import { logBusinessAction, getAuditLogs, BusinessAuditLog } from '@/lib/audit-store';
 import { predictOptimalClearanceDiscount, ClearancePrediction } from '@/lib/ml/clearance-pricing-model';
 import { evaluateSalesHistory } from '@/lib/sales-history-helper';
@@ -33,6 +34,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { UnlockProgressCard } from '@/components/unlock-progress-card';
 
 export function DeadStockSection() {
   const {
@@ -43,7 +45,9 @@ export function DeadStockSection() {
     businessBuddyCalibration,
     dataReadiness,
     capabilities,
+    activateRecommendationsNow,
   } = useData();
+  const { user } = useUser();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -55,15 +59,21 @@ export function DeadStockSection() {
 
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [confirmPushItem, setConfirmPushItem] = useState<any | null>(null);
-  const [recentLogs, setRecentLogs] = useState<BusinessAuditLog[]>([]);
+  const [recentLogs, setRecentLogs] = useState<BusinessAuditLog[]>(() => (user?.uid ? getAuditLogs(user.uid) : []));
   const [showItemsPreview, setShowItemsPreview] = useState(false);
 
   useEffect(() => {
-    setRecentLogs(getAuditLogs());
-    const handleAudit = () => setRecentLogs(getAuditLogs());
+    setRecentLogs(user?.uid ? getAuditLogs(user.uid) : []);
+    const handleAudit = (e: Event) => {
+      const customEvt = e as CustomEvent;
+      const targetUid = customEvt.detail?.userId;
+      if (!targetUid || (user?.uid && targetUid === user.uid)) {
+        setRecentLogs(user?.uid ? getAuditLogs(user.uid) : []);
+      }
+    };
     window.addEventListener('analyzeup_audit_logged', handleAudit);
     return () => window.removeEventListener('analyzeup_audit_logged', handleAudit);
-  }, []);
+  }, [user?.uid]);
 
   const currencySymbol = businessProfile?.currency?.includes('USD') ? '$' : '₹';
 
@@ -179,6 +189,8 @@ export function DeadStockSection() {
   if (!isDeadStockActive || businessBuddyCalibration?.status === 'LEARNING') {
     const currentDayNumber = dataReadiness?.historicalDays || salesHistory.historyDays || businessBuddyCalibration?.currentDayNumber || 1;
     const targetDays = 30;
+    const currentOrders = dataReadiness?.totalOrders ?? (transactions.filter(t => t.type === 'Sale' || !t.type).length);
+    const targetOrders = 80;
     const readinessScore = dataReadiness?.score ?? 20;
     const levelLabel = dataReadiness?.level ? dataReadiness.level.replace('_', ' ') : 'LEARNING';
     const intelligence = businessBuddyCalibration?.intelligence || {
@@ -200,9 +212,12 @@ export function DeadStockSection() {
                 <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-semibold">
                   Readiness {readinessScore}/100 • {levelLabel}
                 </Badge>
+                <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 text-[10px] font-mono font-bold">
+                  {currentOrders} / {targetOrders} Orders
+                </Badge>
               </div>
               <CardDescription className="text-xs text-muted-foreground mt-0.5">
-                Clearance markdowns are safely paused to protect brand equity while observing {intelligence.detectedIndustry} purchase cycles (requires established sales velocity).
+                Clearance markdowns are safely paused to protect brand equity while observing {intelligence.detectedIndustry} purchase cycles.
               </CardDescription>
             </div>
           </div>
@@ -220,17 +235,18 @@ export function DeadStockSection() {
         </CardHeader>
 
         <CardContent className="p-0 space-y-3">
-          <div className="p-4 rounded-2xl bg-secondary/30 border border-border/30 text-xs space-y-2">
-            <div className="flex items-start gap-2.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-              <div>
-                <strong className="text-foreground">Why 20-30% markdowns are paused on newly imported inventory:</strong>
-                <p className="text-muted-foreground mt-1 leading-relaxed">
-                  For <strong>{intelligence.detectedIndustry}</strong>, standard category holding window is <strong>{intelligence.holdingPeriodDays} days</strong>. Marking freshly imported products as &quot;dead stock&quot; on Day 1 erodes up to 30% gross profit before buyers have had a natural chance to discover them.
-                </p>
-              </div>
-            </div>
-          </div>
+          <UnlockProgressCard
+            mode="compact"
+            accentColor="emerald"
+            currentOrders={currentOrders}
+            targetOrders={targetOrders}
+            currentDays={currentDayNumber}
+            targetDays={targetDays}
+            currentScore={readinessScore}
+            targetScore={60}
+            featureName="Clearance & Dead Stock Engine"
+            description={`For ${intelligence.detectedIndustry}, category holding period is ${intelligence.holdingPeriodDays} days. Marking freshly imported products as dead stock on Day 1 erodes up to 30% gross profit before buyers have had a natural chance to discover them.`}
+          />
 
           {showItemsPreview && (
             <div className="space-y-2 pt-2">

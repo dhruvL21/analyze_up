@@ -94,7 +94,7 @@ export function getNextShopifySyncDisplay(profile?: any): string {
 
   const hasRealtime = Boolean(profile.shopifyRealtimeSyncEnabled);
   if (hasRealtime) {
-    return 'Live Active (Instant on Webhook Event)';
+    return 'Live Active (Instant on Webhook Events — Zero Polling)';
   }
 
   if (profile.shopifyAutoSyncEnabled === false) {
@@ -102,6 +102,10 @@ export function getNextShopifySyncDisplay(profile?: any): string {
   }
 
   const freq = profile.shopifySyncFrequency || 'daily';
+
+  if (freq === 'realtime') {
+    return 'Live Active (Instant on Webhook Events — Zero Polling)';
+  }
 
   if (freq === 'custom_datetime' && profile.shopifyScheduledDateTime) {
     try {
@@ -115,9 +119,6 @@ export function getNextShopifySyncDisplay(profile?: any): string {
     }
   }
 
-  if (freq === 'realtime') {
-    return 'Live Active (Checking every 15s)';
-  }
   if (freq === '1_min') {
     return 'Within 1 minute';
   }
@@ -208,11 +209,17 @@ export function isShopifyAutoSyncDue(profile?: any): boolean {
     return false;
   }
 
-  const isRealtimeActive = Boolean(profile.shopifyRealtimeSyncEnabled) || profile.shopifySyncFrequency === 'realtime';
+  // REAL-TIME SYNC IS EVENT-DRIVEN VIA WEBHOOKS:
+  // We NEVER trigger periodic polling when in real-time mode to prevent continuous API calls and rate-limiting.
+  // Scheduled batch sync only runs if the user explicitly enabled scheduled auto-sync (e.g. daily/weekly backup).
   const isScheduledActive = profile.shopifyAutoSyncEnabled === false ? false : Boolean(profile.shopifyAutoSyncEnabled);
-
-  if (!isRealtimeActive && !isScheduledActive) {
+  if (!isScheduledActive) {
     return false;
+  }
+
+  const freq = profile.shopifySyncFrequency || 'daily';
+  if (freq === 'realtime') {
+    return false; // Real-time is pushed by webhooks, not pulled by intervals
   }
 
   const lastSync = profile.shopifyLastSyncedAt
@@ -226,14 +233,7 @@ export function isShopifyAutoSyncDue(profile?: any): boolean {
     return false;
   }
 
-  // 1. Pure Real-Time live sync mode (cooldown of 15s already satisfied above)
-  if (isRealtimeActive && (!profile.shopifySyncFrequency || profile.shopifySyncFrequency === 'realtime')) {
-    return true;
-  }
-
-  const freq = profile.shopifySyncFrequency || 'daily';
-
-  // 2. Specific Date & Time Sync
+  // 1. Specific Date & Time Sync
   if (freq === 'custom_datetime') {
     if (!profile.shopifyScheduledDateTime) return false;
     const scheduledTime = new Date(profile.shopifyScheduledDateTime).getTime();
@@ -242,7 +242,7 @@ export function isShopifyAutoSyncDue(profile?: any): boolean {
     return now >= scheduledTime && lastSync < scheduledTime;
   }
 
-  // 3. Fast recurring intervals
+  // 2. Fast recurring intervals (only if explicitly enabled as scheduled intervals)
   if (freq === '1_min') {
     return !lastSync || elapsedMs >= 60 * 1000;
   }
@@ -263,11 +263,6 @@ export function isShopifyAutoSyncDue(profile?: any): boolean {
   }
   if (freq === '12_hours') {
     return !lastSync || elapsedMs >= 12 * 60 * 60 * 1000;
-  }
-
-  // 4. Real-time active alongside daily/weekly recurring schedule
-  if (isRealtimeActive) {
-    return !lastSync || elapsedMs >= 15 * 1000;
   }
 
   // 3. Daily sync at set time

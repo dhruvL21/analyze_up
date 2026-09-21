@@ -10,6 +10,7 @@ import { computeProductIntelligence } from './product-intelligence-engine';
 import { calculateDynamicBrief } from '@/ai/flows/ai-brief-generator';
 import { generateBusinessForecastingReport } from './forecasting-engine';
 import { Product, Transaction } from './types';
+import { setActiveAuditUserId, getAuditLogs, logBusinessAction, clearAuditLogs } from './audit-store';
 
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
@@ -385,4 +386,60 @@ describe('AnalyzeUp — Adaptive Intelligence & Data Maturity Engine', () => {
       expect(report.executiveSummary).not.toContain('Launch a clearance promo');
     });
   });
+
+  describe('Multi-Tenant Account Isolation & Zero-State Guarantees', () => {
+    it('strictly evaluates empty accounts (0 products, 0 transactions) to 0 metrics even if previousReadiness is passed', () => {
+      // Simulate another store's high-water mark snapshot remaining in memory or cache
+      const otherAccountSnapshot = evaluateDataReadiness(generateProducts(20), generateTransactions(40, 18));
+      expect(otherAccountSnapshot.score).toBeGreaterThan(40);
+      expect(otherAccountSnapshot.totalOrders).toBe(40);
+      expect(otherAccountSnapshot.historicalDays).toBeGreaterThanOrEqual(18);
+
+      // Brand new user with 0 products and 0 transactions
+      const emptyAccountReadiness = evaluateDataReadiness([], [], {
+        previousReadiness: otherAccountSnapshot,
+        previousSnapshot: otherAccountSnapshot,
+      });
+
+      expect(emptyAccountReadiness.totalOrders).toBe(0);
+      expect(emptyAccountReadiness.historicalDays).toBe(0);
+      expect(emptyAccountReadiness.score).toBe(0);
+      expect(emptyAccountReadiness.level).toBe<IntelligenceLevel>('LEARNING');
+      expect(emptyAccountReadiness.isResiliencePreserved).toBeUndefined();
+      expect(emptyAccountReadiness.forecastingEligible).toBe(false);
+      expect(emptyAccountReadiness.deadStockEligible).toBe(false);
+      expect(emptyAccountReadiness.capabilities.reorderRecommendations).toBe(false);
+      expect(emptyAccountReadiness.capabilities.deadStockDetection).toBe(false);
+    });
+
+    it('strictly isolates business audit logs between accounts so user B never sees user A restock/PO actions', () => {
+      // User A creates a purchase order action
+      setActiveAuditUserId('tenant-user-alpha');
+      logBusinessAction({
+        title: 'Executed Reorder Purchase Order',
+        productName: 'Secret Product A',
+        actionType: 'reorder',
+        changeDetails: 'Created PO for 20 units with supplier SNKHED. Total cost: ₹79,180.',
+      }, undefined, 'tenant-user-alpha');
+
+      const userALogs = getAuditLogs('tenant-user-alpha');
+      expect(userALogs.length).toBe(1);
+      expect(userALogs[0].changeDetails).toContain('SNKHED');
+
+      // User B logs in (or unauthenticated state)
+      setActiveAuditUserId('tenant-user-beta');
+      const userBLogs = getAuditLogs('tenant-user-beta');
+      expect(userBLogs).toEqual([]);
+      expect(userBLogs.length).toBe(0);
+
+      // Null user state strictly returns empty array
+      setActiveAuditUserId(null);
+      expect(getAuditLogs()).toEqual([]);
+
+      // Cleanup
+      clearAuditLogs('tenant-user-alpha');
+      clearAuditLogs('tenant-user-beta');
+    });
+  });
 });
+

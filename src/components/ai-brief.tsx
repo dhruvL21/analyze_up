@@ -232,7 +232,12 @@ export function AIBrief() {
 
                 <div className="grid grid-cols-2 gap-2.5 pt-1">
                   <div className="p-2.5 rounded-xl bg-secondary/30 border border-border/30 space-y-0.5">
-                    <span className="text-[10px] text-muted-foreground font-semibold block">Stockout Risk Runway</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-muted-foreground font-semibold block">Stockout Risk Runway</span>
+                      <span className="text-[10px] font-bold text-amber-400 font-mono">
+                        {Math.max(0, 14 - (dataReadiness?.historicalDays ?? 0))}d left
+                      </span>
+                    </div>
                     <p className="text-xs font-bold text-foreground font-mono">
                       {dataReadiness?.historicalDays ?? 0} / 14 Days
                     </p>
@@ -240,7 +245,12 @@ export function AIBrief() {
                   </div>
 
                   <div className="p-2.5 rounded-xl bg-secondary/30 border border-border/30 space-y-0.5">
-                    <span className="text-[10px] text-muted-foreground font-semibold block">Sales Velocity Models</span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-muted-foreground font-semibold block">Sales Velocity Models</span>
+                      <span className="text-[10px] font-bold text-amber-400 font-mono">
+                        {Math.max(0, 30 - (dataReadiness?.historicalDays ?? 0))}d left
+                      </span>
+                    </div>
                     <p className="text-xs font-bold text-foreground font-mono">
                       {dataReadiness?.historicalDays ?? 0} / 30 Days
                     </p>

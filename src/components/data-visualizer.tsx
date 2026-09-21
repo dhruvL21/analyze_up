@@ -8,17 +8,8 @@ import {
   BarChart,
   Line,
   LineChart,
-  Area,
-  AreaChart,
   Pie,
   PieChart,
-  Radar,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  RadialBar,
-  RadialBarChart,
   ResponsiveContainer,
   XAxis,
   YAxis,
@@ -46,16 +37,10 @@ import { Download, ChartBar, Share2 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { useData } from '@/context/data-context';
-import { getMonthlySalesData, getStockByCategoryData, getInventoryValueData } from '@/lib/chart-utils';
+import { getMonthlySalesData, getInventoryValueData } from '@/lib/chart-utils';
 import { generateReportInsights } from '@/ai/flows/report-generator';
 
-type ChartType =
-  | 'bar'
-  | 'line'
-  | 'area'
-  | 'pie'
-  | 'radar'
-  | 'radialBar';
+type ChartType = 'bar' | 'line' | 'pie';
 
 const COLORS = [
   'hsl(var(--chart-1))',
@@ -70,7 +55,7 @@ const COLORS = [
 
 export function DataVisualizer() {
   const { transactions, products, categories, isLoading, businessProfile } = useData();
-  const [chartType, setChartType] = useState<ChartType>('area');
+  const [chartType, setChartType] = useState<ChartType>('bar');
   const [metric, setMetric] = useState<'sales' | 'expenses' | 'profit'>('sales');
   const chartRef = useRef<HTMLDivElement>(null);
   const [isExporting, setIsExporting] = useState<'downloading' | 'sharing' | null>(null);
@@ -92,13 +77,13 @@ export function DataVisualizer() {
   const data = useMemo(() => {
     if (isLoading) return [];
     
-    // Time-series charts (area, bar, line)
-    if (['bar', 'line', 'area'].includes(chartType)) {
+    // Time-series charts (bar, line)
+    if (chartType === 'bar' || chartType === 'line') {
       return getMonthlySalesData(transactions, products);
     }
 
-    // Categorical charts (pie, radar, radialBar)
-    if (['pie', 'radar', 'radialBar'].includes(chartType)) {
+    // Categorical charts (pie)
+    if (chartType === 'pie') {
       if (metric === 'expenses') {
         const catMap: { [key: string]: number } = {};
         const catIdMap = new Map(categories.map(c => [c.id, c.name]));
@@ -367,7 +352,7 @@ export function DataVisualizer() {
     const CustomTooltip = ({ active, payload, label }: any) => {
       if (active && payload && payload.length) {
         const item = payload[0].payload;
-        const isCategorical = ['pie', 'radar', 'radialBar'].includes(chartType);
+        const isCategorical = chartType === 'pie';
         
         return (
           <div className="rounded-lg border bg-popover/70 p-2 shadow-sm backdrop-blur-sm text-foreground">
@@ -406,7 +391,7 @@ export function DataVisualizer() {
         tickLine={false}
         axisLine={false}
         tickFormatter={(value: number) =>
-          chartType === 'pie' || chartType === 'radialBar' || chartType === 'radar'
+          chartType === 'pie'
             ? value.toString()
             : `${currencySymbol}${value.toLocaleString('en-IN')}`
         }
@@ -427,78 +412,34 @@ export function DataVisualizer() {
     }
     
     switch (chartType) {
-        case 'pie':
+      case 'pie':
         return (
-            <PieChart>
-                <Pie data={data} dataKey={metric} nameKey="name" cx="50%" cy="50%" outerRadius={120} label>
-                    {data.map((_, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                </Pie>
-                <Tooltip content={<CustomTooltip />} />
-                <Legend />
-            </PieChart>
+          <PieChart>
+            <Pie data={data} dataKey={metric} nameKey="name" cx="50%" cy="50%" outerRadius={120} label>
+              {data.map((_, index) => (
+                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip content={<CustomTooltip />} />
+            <Legend />
+          </PieChart>
         );
 
-        case 'radar':
-            return (
-                <RadarChart cx="50%" cy="50%" outerRadius="80%" data={data}>
-                    <PolarGrid />
-                    <PolarAngleAxis dataKey="name" />
-                    <PolarRadiusAxis />
-                    <Radar name={metric} dataKey={metric} stroke="hsl(var(--chart-1))" fill="hsl(var(--chart-1))" fillOpacity={0.6} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <Legend />
-                </RadarChart>
-            )
-        
-        case 'radialBar':
-            return (
-                <RadialBarChart 
-                    cx="50%" 
-                    cy="50%" 
-                    innerRadius="10%" 
-                    outerRadius="80%" 
-                    data={data}
-                    startAngle={180}
-                    endAngle={0}
-                >
-                    <RadialBar
-                        label={{ position: 'insideStart', fill: '#fff' }}
-                        background
-                        dataKey={metric}
-                    >
-                     {data.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                    </RadialBar>
-                    <Tooltip content={<CustomTooltip />} />
-                    <Legend iconSize={10} layout='vertical' verticalAlign='middle' align="right" />
-                </RadialBarChart>
-            );
+      case 'line':
+        return (
+          <LineChart {...commonProps}>
+            {commonChildren}
+            <Line type="monotone" dataKey={metric} stroke="hsl(var(--primary))" strokeWidth={2} activeDot={{ r: 8 }} />
+          </LineChart>
+        );
 
-        case 'line':
-             return (
-                <LineChart {...commonProps}>
-                    {commonChildren}
-                    <Line type="monotone" dataKey={metric} stroke="hsl(var(--primary))" strokeWidth={2} activeDot={{ r: 8 }} />
-                </LineChart>
-            );
-        case 'area':
-             return (
-                <AreaChart {...commonProps}>
-                    {commonChildren}
-                    <Area type="monotone" dataKey={metric} stroke="hsl(var(--primary))" fill="hsl(var(--primary))" fillOpacity={0.3} />
-                </AreaChart>
-            );
-
-        default: // bar
-            return (
-                <BarChart {...commonProps}>
-                    {commonChildren}
-                    <Bar dataKey={metric} fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-                </BarChart>
-            )
+      default: // bar
+        return (
+          <BarChart {...commonProps}>
+            {commonChildren}
+            <Bar dataKey={metric} fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        );
     }
   }
 
@@ -531,10 +472,7 @@ export function DataVisualizer() {
             <SelectContent>
               <SelectItem value="bar">Bar Chart</SelectItem>
               <SelectItem value="line">Line Chart</SelectItem>
-              <SelectItem value="area">Area Chart</SelectItem>
               <SelectItem value="pie">Pie Chart</SelectItem>
-              <SelectItem value="radar">Radar Chart</SelectItem>
-              <SelectItem value="radialBar">Radial Bar Chart</SelectItem>
             </SelectContent>
           </Select>
           <div className="flex items-center gap-2 w-full sm:w-auto">

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { generateActionTasks, ActionTask } from '@/lib/command-center-engine';
 import { useData } from '@/context/data-context';
+import { useUser } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { logBusinessAction } from '@/lib/audit-store';
 import { AuditLogModal } from '@/components/audit-log-modal';
@@ -63,6 +64,7 @@ export function AIActionCenter() {
     capabilities,
     dataReadiness,
   } = useData();
+  const { user } = useUser();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -76,15 +78,27 @@ export function AIActionCenter() {
   const [isOtherCollapsed, setIsOtherCollapsed] = useState(false);
 
   const [completedTaskIds, setCompletedTaskIds] = useState<string[]>(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && user?.uid) {
       try {
-        return JSON.parse(localStorage.getItem('analyzeup_completed_tasks') || '[]');
+        return JSON.parse(localStorage.getItem(`analyzeup_completed_tasks_${user.uid}`) || '[]');
       } catch {
         return [];
       }
     }
     return [];
   });
+
+  useEffect(() => {
+    if (user?.uid) {
+      try {
+        setCompletedTaskIds(JSON.parse(localStorage.getItem(`analyzeup_completed_tasks_${user.uid}`) || '[]'));
+      } catch {
+        setCompletedTaskIds([]);
+      }
+    } else {
+      setCompletedTaskIds([]);
+    }
+  }, [user?.uid]);
 
   const [confirmData, setConfirmData] = useState<{
     task: ActionTask;
@@ -104,8 +118,8 @@ export function AIActionCenter() {
     setCompletedTaskIds((prev) => {
       if (prev.includes(taskId)) return prev;
       const next = [...prev, taskId];
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('analyzeup_completed_tasks', JSON.stringify(next));
+      if (typeof window !== 'undefined' && user?.uid) {
+        localStorage.setItem(`analyzeup_completed_tasks_${user.uid}`, JSON.stringify(next));
       }
       return next;
     });
@@ -128,8 +142,8 @@ export function AIActionCenter() {
   const undoCompletedTask = (taskId: string, title: string) => {
     setCompletedTaskIds((prev) => {
       const next = prev.filter((id) => id !== taskId);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('analyzeup_completed_tasks', JSON.stringify(next));
+      if (typeof window !== 'undefined' && user?.uid) {
+        localStorage.setItem(`analyzeup_completed_tasks_${user.uid}`, JSON.stringify(next));
       }
       return next;
     });
@@ -142,6 +156,9 @@ export function AIActionCenter() {
   const resetCompletedTasks = () => {
     setCompletedTaskIds([]);
     if (typeof window !== 'undefined') {
+      if (user?.uid) {
+        localStorage.removeItem(`analyzeup_completed_tasks_${user.uid}`);
+      }
       localStorage.removeItem('analyzeup_completed_tasks');
     }
     setActiveTab('all');
@@ -605,7 +622,7 @@ export function AIActionCenter() {
               </div>
             </div>
           ) : isLearning ? (
-            <div className="p-8 text-center rounded-2xl bg-zinc-900/50 border border-amber-500/25 space-y-4">
+            <div className="p-6 md:p-8 text-center rounded-2xl bg-zinc-900/50 border border-amber-500/25 space-y-4">
               <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center mx-auto">
                 <Clock className="w-6 h-6 animate-pulse text-amber-400" />
               </div>
@@ -622,15 +639,31 @@ export function AIActionCenter() {
                   <p className="text-sm font-bold text-foreground font-mono">
                     {dataReadiness?.historicalDays ?? 0} / 14 Days
                   </p>
-                  <p className="text-[10px] text-amber-400">Baseline calibrating</p>
+                  {(dataReadiness?.historicalDays ?? 0) >= 14 ? (
+                    <p className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Baseline Met
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-amber-400">
+                      {Math.max(0, 14 - (dataReadiness?.historicalDays ?? 0))} days left
+                    </p>
+                  )}
                 </div>
 
                 <div className="p-3 rounded-xl bg-secondary/20 border border-border/30 space-y-1">
                   <span className="text-[10px] uppercase font-bold text-muted-foreground block">Customer Orders</span>
                   <p className="text-sm font-bold text-foreground font-mono">
-                    {dataReadiness?.totalOrders ?? 0} / 40 Orders
+                    {dataReadiness?.totalOrders ?? 0} / 80 Orders
                   </p>
-                  <p className="text-[10px] text-amber-400">Building volume</p>
+                  {(dataReadiness?.totalOrders ?? 0) >= 80 ? (
+                    <p className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
+                      <Check className="w-3 h-3" /> Volume Met
+                    </p>
+                  ) : (
+                    <p className="text-[10px] text-amber-400">
+                      {Math.max(0, 80 - (dataReadiness?.totalOrders ?? 0))} orders left
+                    </p>
+                  )}
                 </div>
 
                 <div className="p-3 rounded-xl bg-secondary/20 border border-border/30 space-y-1">
@@ -638,7 +671,9 @@ export function AIActionCenter() {
                   <p className="text-sm font-bold text-emerald-400 font-mono">
                     {dataReadiness?.score ?? 0} / 100
                   </p>
-                  <p className="text-[10px] text-muted-foreground">Level 1 • Learning</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {(dataReadiness?.score ?? 0) >= 40 ? 'Early Insights Tier' : 'Level 1 • Learning'}
+                  </p>
                 </div>
               </div>
             </div>

@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge';
 import { Product } from '@/lib/types';
 import { computeProductIntelligence } from '@/lib/product-intelligence-engine';
 import { useData } from '@/context/data-context';
+import { useUser } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { logBusinessAction, getAuditLogs, BusinessAuditLog } from '@/lib/audit-store';
 import {
@@ -62,13 +63,14 @@ export function ProductIntelligenceDrawer({ product, open, onOpenChange }: Produ
   const { products, transactions, returns, suppliers, updateProduct, addOrder, businessProfile, capabilities, dataReadiness } = useData();
   const { toast } = useToast();
 
+  const { user } = useUser();
   const [confirmData, setConfirmData] = React.useState<{
     title: string;
     description: string;
     onConfirm: () => void;
   } | null>(null);
 
-  const [recentLogs, setRecentLogs] = React.useState<BusinessAuditLog[]>([]);
+  const [recentLogs, setRecentLogs] = React.useState<BusinessAuditLog[]>(() => (user?.uid ? getAuditLogs(user.uid) : []));
   const [imageError, setImageError] = React.useState(false);
   const [isZoomOpen, setIsZoomOpen] = React.useState(false);
   const [isEditingImage, setIsEditingImage] = React.useState(false);
@@ -80,11 +82,17 @@ export function ProductIntelligenceDrawer({ product, open, onOpenChange }: Produ
   }, [product?.id]);
 
   React.useEffect(() => {
-    setRecentLogs(getAuditLogs());
-    const handleAudit = () => setRecentLogs(getAuditLogs());
+    setRecentLogs(user?.uid ? getAuditLogs(user.uid) : []);
+    const handleAudit = (e: Event) => {
+      const customEvt = e as CustomEvent;
+      const targetUid = customEvt.detail?.userId;
+      if (!targetUid || (user?.uid && targetUid === user.uid)) {
+        setRecentLogs(user?.uid ? getAuditLogs(user.uid) : []);
+      }
+    };
     window.addEventListener('analyzeup_audit_logged', handleAudit);
     return () => window.removeEventListener('analyzeup_audit_logged', handleAudit);
-  }, []);
+  }, [user?.uid]);
 
   if (!product) return null;
 

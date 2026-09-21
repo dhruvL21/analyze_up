@@ -38,6 +38,9 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
+import { useUser } from '@/firebase';
+import { Loader2 } from 'lucide-react';
 
 interface ShopifyScheduleModalProps {
   open: boolean;
@@ -51,6 +54,8 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
     autoSyncShopifyNow,
     isShopifySyncing,
   } = useData();
+  const { toast } = useToast();
+  const { user } = useUser();
 
   const [realtimeEnabled, setRealtimeEnabled] = useState(
     businessProfile?.shopifyRealtimeSyncEnabled !== undefined
@@ -74,6 +79,11 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
   );
   const [syncTime, setSyncTime] = useState(businessProfile?.shopifySyncTime || '09:00');
   const [syncDay, setSyncDay] = useState(businessProfile?.shopifySyncDay || 'monday');
+
+  // Webhook host configuration for local development / ngrok tunnels
+  const [webhookHost, setWebhookHost] = useState(businessProfile?.shopifyWebhookHost || '');
+  const [isRegisteringWebhooks, setIsRegisteringWebhooks] = useState(false);
+  const [isSimulatingOrder, setIsSimulatingOrder] = useState(false);
 
   // Default target date/time: tomorrow at 09:00 local time
   const getTomorrowDefault = () => {
@@ -120,8 +130,109 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
       if (businessProfile.shopifyScheduledDateTime) {
         setScheduledDateTime(businessProfile.shopifyScheduledDateTime);
       }
+      if (businessProfile.shopifyWebhookHost) {
+        setWebhookHost(businessProfile.shopifyWebhookHost);
+      }
     }
   }, [open, businessProfile]);
+
+  const handleRegisterWebhooksNow = async () => {
+    if (!businessProfile?.shopifyStoreUrl) {
+      toast({
+        variant: 'destructive',
+        title: 'Shopify Not Connected',
+        description: 'Connect a Shopify store first to register webhooks.',
+      });
+      return;
+    }
+
+    setIsRegisteringWebhooks(true);
+    try {
+      const res = await fetch('/api/shopify/webhooks/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shop: businessProfile.shopifyStoreUrl,
+          webhookHost: webhookHost.trim() || undefined,
+          accessToken: businessProfile?.shopifyAccessToken || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        const total = (data.registered?.length || 0) + (data.alreadyExisted?.length || 0);
+        toast({
+          title: 'Shopify Webhooks Active! ⚡',
+          description: `All ${total} topics verified and registered on ${data.shop}. Real-time events will reflect immediately with zero polling.`,
+        });
+        await updateShopifyScheduleSettings({
+          shopifyWebhooksActive: true,
+          shopifyWebhookHost: webhookHost.trim(),
+        });
+      } else if (data.isLocalhost) {
+        toast({
+          variant: 'destructive',
+          title: 'Public HTTPS Endpoint Required',
+          description: data.error || 'Shopify requires an HTTPS tunnel URL (e.g. ngrok) to deliver live webhooks.',
+        });
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Webhook Registration Notice',
+          description: data.error || 'Could not verify webhooks on Shopify.',
+        });
+      }
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Registration Error',
+        description: err.message || 'Failed to contact webhook service.',
+      });
+    } finally {
+      setIsRegisteringWebhooks(false);
+    }
+  };
+
+  const handleSimulateInstantOrder = async () => {
+    setIsSimulatingOrder(true);
+    try {
+      const idToken = user ? await user.getIdToken().catch(() => null) : null;
+      const res = await fetch('/api/shopify/webhooks/simulate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+        },
+        body: JSON.stringify({
+          shop: businessProfile?.shopifyStoreUrl,
+          eventType: 'orders/create',
+          userId: user?.uid,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        toast({
+          title: 'Instant Shopify Order Ingested! 🛍️',
+          description: `Order ${data.orderNumber} (₹${data.totalAmount}) received via Webhook. Stock & revenue updated in real time!`,
+        });
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Simulation Notice',
+          description: data.error || 'Failed to simulate webhook order.',
+        });
+      }
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Simulation Error',
+        description: err.message,
+      });
+    } finally {
+      setIsSimulatingOrder(false);
+    }
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -137,23 +248,20 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
         shopifySyncTime: syncTime,
         shopifySyncDay: syncDay,
         shopifyScheduledDateTime: scheduleType === 'custom_datetime' ? (scheduledDateTime || '') : '',
+        shopifyWebhookHost: webhookHost.trim(),
       });
 
-      // Register webhooks in background if store is connected
+      // Register webhooks in background if store is connected and public URL or live app is configured
       if (businessProfile?.shopifyStoreUrl) {
         fetch('/api/shopify/webhooks/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             shop: businessProfile.shopifyStoreUrl,
+            webhookHost: webhookHost.trim() || undefined,
             ...(businessProfile?.shopifyAccessToken ? { accessToken: businessProfile.shopifyAccessToken } : {}),
           }),
         }).catch(console.warn);
-      }
-
-      // If merchant enabled real-time sync, trigger an immediate sync to refresh state
-      if (realtimeEnabled) {
-        autoSyncShopifyNow(false).catch(console.warn);
       }
 
       onOpenChange(false);
@@ -210,12 +318,12 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
                   <span className="font-bold text-foreground text-sm">Real-Time Sync</span>
                   {realtimeEnabled && (
                     <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/40 text-[10px] py-0 px-2">
-                      Live
+                      Webhook-Driven
                     </Badge>
                   )}
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Event-driven live sync: whenever a product is added/updated or an order is placed in Shopify, webhooks instantly update AnalyzeUp with zero background polling.
+                  Event-driven live sync: whenever an order is placed or stock changes in Shopify, webhooks instantly update AnalyzeUp at that exact moment with zero recurring API polling.
                 </p>
               </div>
               <Switch
@@ -226,14 +334,69 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
             </div>
 
             {realtimeEnabled && (
-              <div className="pt-2 border-t border-emerald-500/20 grid grid-cols-2 gap-2 text-[10px] text-emerald-300">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  <span>Webhook Orders & Catalog</span>
+              <div className="pt-3 border-t border-emerald-500/20 space-y-3 text-[11px]">
+                <div className="grid grid-cols-2 gap-2 text-[10px] text-emerald-400">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>Instant Shopify Webhooks</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Zero Polling Active</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                  <span>Instant Model Ingestion</span>
+
+                {/* Public Tunnel Configuration for Local Development */}
+                <div className="p-2.5 rounded-xl bg-background/60 border border-border/50 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                      Public Webhook / Tunnel URL
+                    </span>
+                    <span className="text-[9px] text-emerald-400 font-medium">Requires HTTPS</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={webhookHost}
+                      onChange={(e) => setWebhookHost(e.target.value)}
+                      placeholder="e.g. https://your-brand.ngrok-free.app"
+                      className="h-8 text-xs bg-background/80"
+                    />
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={handleRegisterWebhooksNow}
+                      disabled={isRegisteringWebhooks || !businessProfile?.shopifyStoreUrl}
+                      className="h-8 text-[11px] font-semibold px-3 bg-emerald-600 hover:bg-emerald-500 text-white shrink-0 cursor-pointer"
+                    >
+                      {isRegisteringWebhooks ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Register'}
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    Shopify cloud pushes new orders and inventory changes to this HTTPS endpoint. For local development, start ngrok (<code className="text-emerald-400">ngrok http 9002</code>) and paste your HTTPS tunnel URL above.
+                  </p>
+                </div>
+
+                {/* Immediate Real-Time Simulation Action */}
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/20">
+                  <div>
+                    <div className="font-semibold text-foreground text-xs flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                      Test Real-Time Event
+                    </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      Simulate a live Shopify order to verify instant reflection
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={handleSimulateInstantOrder}
+                    disabled={isSimulatingOrder}
+                    className="h-7 text-[11px] font-bold border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 shrink-0 cursor-pointer"
+                  >
+                    {isSimulatingOrder ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Simulate Order ⚡'}
+                  </Button>
                 </div>
               </div>
             )}

@@ -48,9 +48,12 @@ function graphQLToTopic(gqlTopic: string): string {
 export async function registerShopifyWebhooks(options: {
   shop: string;
   appUrl?: string;
+  token?: string;
 }): Promise<{
   success: boolean;
   callbackUrl: string;
+  isLocalhost?: boolean;
+  error?: string;
   registered: string[];
   alreadyExisted: string[];
   failed: Record<string, string>;
@@ -60,7 +63,33 @@ export async function registerShopifyWebhooks(options: {
 
   const baseUrl = options.appUrl || getShopifyAppUrl();
   const callbackUrl = `${baseUrl.replace(/\/$/, '')}/api/shopify/webhooks`;
-  const token = await getValidAccessToken(shop);
+
+  // Validate that callbackUrl is a public HTTPS URL as required by Shopify Webhooks API
+  const isHttps = callbackUrl.startsWith('https://');
+  const isLocalhost = callbackUrl.includes('localhost') || callbackUrl.includes('127.0.0.1');
+
+  if (!isHttps || isLocalhost) {
+    console.warn(
+      `[Webhook Manager] Cannot register webhooks with Shopify using non-HTTPS or localhost address: ${callbackUrl}`
+    );
+    return {
+      success: false,
+      callbackUrl,
+      isLocalhost: true,
+      error:
+        'Shopify requires an HTTPS public URL (e.g., via ngrok, Cloudflare Tunnel, or a deployed domain) to deliver real-time webhooks. Localhost/HTTP cannot receive webhooks directly from Shopify cloud.',
+      registered: [],
+      alreadyExisted: [],
+      failed: {
+        all: 'Localhost/HTTP is rejected by Shopify Webhooks. Please configure a public HTTPS tunnel or domain.',
+      },
+    };
+  }
+
+  let token = options.token;
+  if (!token) {
+    token = await getValidAccessToken(shop);
+  }
   const apiVersion = getShopifyApiVersion();
 
   const registered: string[] = [];

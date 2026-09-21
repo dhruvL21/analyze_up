@@ -382,8 +382,8 @@ export function InventoryRecommendationsPanel() {
                       <span className="font-bold text-foreground flex items-center gap-1 text-xs">
                         <Tag className="w-3.5 h-3.5 text-blue-400" /> Liquidate Dead Stock
                       </span>
-                      <Badge variant="outline" className="text-blue-400 border-blue-500/30 text-[10px]">
-                        {salesHistory.historyDays > 0 ? `${salesHistory.historyDays}/30 Days History` : 'History Needed'}
+                      <Badge variant="outline" className="text-blue-400 border-blue-500/30 text-[10px] font-mono font-bold">
+                        {salesHistory.historyDays}/30 Days
                       </Badge>
                     </div>
                     <p className="font-semibold text-foreground text-xs">Awaiting 30-Day Sales History</p>
@@ -391,9 +391,14 @@ export function InventoryRecommendationsPanel() {
                       Clearance discount predictions require at least 1 month of sales history to protect active stock from premature markdowns.
                     </p>
                   </div>
-                  <div className="h-8 w-full rounded-xl text-[11px] font-medium bg-blue-500/15 text-blue-300 border border-blue-500/30 flex items-center justify-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-blue-400" />
-                    <span>Unlocks with 30+ days data</span>
+                  <div className="h-8 w-full rounded-xl text-[11px] font-medium bg-blue-500/15 text-blue-300 border border-blue-500/30 flex items-center justify-between px-3">
+                    <span className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-blue-400" />
+                      <span>{Math.max(0, 30 - salesHistory.historyDays)} days left to unlock</span>
+                    </span>
+                    <span className="font-mono text-[10px] font-bold text-blue-200">
+                      {Math.min(100, Math.round((salesHistory.historyDays / 30) * 100))}%
+                    </span>
                   </div>
                 </div>
               ) : (
@@ -453,16 +458,23 @@ export function InventoryRecommendationsPanel() {
                       <span className="font-bold text-foreground flex items-center gap-1 text-xs">
                         <TrendingUp className="w-3.5 h-3.5 text-purple-400" /> Optimize Margin (+8%)
                       </span>
-                      <Badge variant="outline" className="text-purple-400 border-purple-500/30 text-[10px]">Observing Velocity</Badge>
+                      <Badge variant="outline" className="text-purple-400 border-purple-500/30 text-[10px] font-mono font-bold">
+                        {salesHistory.historyDays}/30 Days
+                      </Badge>
                     </div>
                     <p className="font-semibold text-foreground text-xs">Awaiting 30-Day Velocity Baseline</p>
                     <p className="text-muted-foreground text-[11px]">
                       Price increase recommendations require 30+ days of sustained sales data to verify elasticity without dampening conversions.
                     </p>
                   </div>
-                  <div className="h-8 w-full rounded-xl text-[11px] font-medium bg-purple-500/15 text-purple-300 border border-purple-500/30 flex items-center justify-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-purple-400" />
-                    <span>Unlocks with 30+ days data</span>
+                  <div className="h-8 w-full rounded-xl text-[11px] font-medium bg-purple-500/15 text-purple-300 border border-purple-500/30 flex items-center justify-between px-3">
+                    <span className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-purple-400" />
+                      <span>{Math.max(0, 30 - salesHistory.historyDays)} days left to unlock</span>
+                    </span>
+                    <span className="font-mono text-[10px] font-bold text-purple-200">
+                      {Math.min(100, Math.round((salesHistory.historyDays / 30) * 100))}%
+                    </span>
                   </div>
                 </div>
               ) : (

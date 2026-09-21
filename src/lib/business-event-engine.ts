@@ -354,13 +354,24 @@ export function generateAIMorningBrief(
   };
 }
 
-// 4. Persistent Event Status Storage Helpers
-const EVENT_STATUS_STORAGE_KEY = 'analyzeup_event_statuses_v1';
+let currentEventUserId: string | null = null;
 
-export function getStoredEventStatuses(): Record<string, EventStatus> {
+export function setActiveEventUserId(userId: string | null) {
+  currentEventUserId = userId;
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem('analyzeup_event_statuses_v1');
+      localStorage.removeItem('analyzeup_event_statuses');
+    } catch {}
+  }
+}
+
+export function getStoredEventStatuses(userId?: string): Record<string, EventStatus> {
+  const uid = userId || currentEventUserId;
+  if (!uid) return {};
   if (typeof window === 'undefined') return {};
   try {
-    const raw = localStorage.getItem(EVENT_STATUS_STORAGE_KEY);
+    const raw = localStorage.getItem(`analyzeup_event_statuses_${uid}`);
     if (!raw) return {};
     return JSON.parse(raw);
   } catch {
@@ -368,28 +379,32 @@ export function getStoredEventStatuses(): Record<string, EventStatus> {
   }
 }
 
-export function saveEventStatus(eventId: string, status: EventStatus) {
+export function saveEventStatus(eventId: string, status: EventStatus, userId?: string) {
+  const uid = userId || currentEventUserId;
+  if (!uid) return;
   try {
-    const current = getStoredEventStatuses();
+    const current = getStoredEventStatuses(uid);
     current[eventId] = status;
     if (typeof window !== 'undefined') {
-      localStorage.setItem(EVENT_STATUS_STORAGE_KEY, JSON.stringify(current));
-      window.dispatchEvent(new CustomEvent('analyzeup_events_updated'));
+      localStorage.setItem(`analyzeup_event_statuses_${uid}`, JSON.stringify(current));
+      window.dispatchEvent(new CustomEvent('analyzeup_events_updated', { detail: { userId: uid } }));
     }
   } catch (err) {
     console.error('Failed to save event status:', err);
   }
 }
 
-export function clearAllEventStatuses(eventIds: string[]) {
+export function clearAllEventStatuses(eventIds: string[], userId?: string) {
+  const uid = userId || currentEventUserId;
+  if (!uid) return;
   try {
-    const current = getStoredEventStatuses();
+    const current = getStoredEventStatuses(uid);
     eventIds.forEach(id => {
       current[id] = 'RESOLVED';
     });
     if (typeof window !== 'undefined') {
-      localStorage.setItem(EVENT_STATUS_STORAGE_KEY, JSON.stringify(current));
-      window.dispatchEvent(new CustomEvent('analyzeup_events_updated'));
+      localStorage.setItem(`analyzeup_event_statuses_${uid}`, JSON.stringify(current));
+      window.dispatchEvent(new CustomEvent('analyzeup_events_updated', { detail: { userId: uid } }));
     }
   } catch (err) {
     console.error('Failed to clear event statuses:', err);

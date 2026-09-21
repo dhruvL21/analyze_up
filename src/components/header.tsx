@@ -283,7 +283,8 @@ export function Header() {
                     item.href.startsWith("/dashboard/ai-advisor") ||
                     item.href.startsWith("/dashboard/insights") ||
                     item.href.startsWith("/dashboard/business-health");
-                  const isLocked = isPremiumRoute && (activePlan !== "Pro Plan" || isLimitExceeded);
+                  const isPro = activePlan === "Enterprise Pro" || activePlan === "Pro Plan" || activePlan === "PRO";
+                  const isLocked = isPremiumRoute && (!isPro || isLimitExceeded);
 
                   return (
                     <motion.div key={item.href} variants={itemVariants}>

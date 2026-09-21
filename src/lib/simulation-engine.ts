@@ -13,12 +13,23 @@ import { computeProductIntelligence } from './product-intelligence-engine';
 import { calculateSupplierPerformanceScore } from './supplier-intelligence-engine';
 import { formatCur } from './utils';
 
-const SAVED_SIMULATIONS_KEY = 'analyzeup_saved_simulations_v1';
+let currentSimulationUserId: string | null = null;
 
-export function getSavedScenarios(): SavedScenario[] {
+export function setActiveSimulationUserId(userId: string | null) {
+  currentSimulationUserId = userId;
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem('analyzeup_saved_simulations_v1');
+    } catch {}
+  }
+}
+
+export function getSavedScenarios(userId?: string): SavedScenario[] {
+  const uid = userId || currentSimulationUserId;
+  if (!uid) return [];
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(SAVED_SIMULATIONS_KEY);
+    const raw = localStorage.getItem(`analyzeup_saved_simulations_${uid}`);
     if (!raw) return [];
     return JSON.parse(raw);
   } catch {
@@ -26,7 +37,8 @@ export function getSavedScenarios(): SavedScenario[] {
   }
 }
 
-export function saveScenario(name: string, result: SimulationResult, inputs: Record<string, any>): SavedScenario {
+export function saveScenario(name: string, result: SimulationResult, inputs: Record<string, any>, userId?: string): SavedScenario {
+  const uid = userId || currentSimulationUserId;
   const newScenario: SavedScenario = {
     id: `scenario-${Date.now()}`,
     name: name || `${result.title} (${new Date().toLocaleDateString('en-IN')})`,
@@ -37,30 +49,35 @@ export function saveScenario(name: string, result: SimulationResult, inputs: Rec
     result,
   };
 
-  try {
-    const current = getSavedScenarios();
-    const updated = [newScenario, ...current];
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(SAVED_SIMULATIONS_KEY, JSON.stringify(updated));
-      window.dispatchEvent(new CustomEvent('analyzeup_simulations_updated'));
+  if (uid) {
+    try {
+      const current = getSavedScenarios(uid);
+      const updated = [newScenario, ...current];
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`analyzeup_saved_simulations_${uid}`, JSON.stringify(updated));
+        window.dispatchEvent(new CustomEvent('analyzeup_simulations_updated', { detail: { userId: uid } }));
+      }
+    } catch (err) {
+      console.error('Failed to save simulation scenario:', err);
     }
-  } catch (err) {
-    console.error('Failed to save simulation scenario:', err);
   }
 
   return newScenario;
 }
 
-export function deleteSavedScenario(id: string) {
-  try {
-    const current = getSavedScenarios();
-    const updated = current.filter(s => s.id !== id);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(SAVED_SIMULATIONS_KEY, JSON.stringify(updated));
-      window.dispatchEvent(new CustomEvent('analyzeup_simulations_updated'));
+export function deleteSavedScenario(id: string, userId?: string) {
+  const uid = userId || currentSimulationUserId;
+  if (uid) {
+    try {
+      const current = getSavedScenarios(uid);
+      const updated = current.filter(s => s.id !== id);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`analyzeup_saved_simulations_${uid}`, JSON.stringify(updated));
+        window.dispatchEvent(new CustomEvent('analyzeup_simulations_updated', { detail: { userId: uid } }));
+      }
+    } catch (err) {
+      console.error('Failed to delete simulation scenario:', err);
     }
-  } catch (err) {
-    console.error('Failed to delete simulation scenario:', err);
   }
 }
 

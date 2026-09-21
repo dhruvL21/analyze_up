@@ -354,15 +354,8 @@ function InventoryPageContent() {
         {/* Header Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-extrabold tracking-tight md:text-3xl flex items-center gap-2 flex-wrap">
+            <h1 className="text-2xl font-extrabold tracking-tight md:text-3xl">
               Inventory Intelligence
-              <Badge className="bg-primary/15 text-primary border-primary/30 text-xs px-2.5 py-0.5">
-                {products.length.toLocaleString()} Products
-              </Badge>
-              <Badge className="bg-emerald-500/15 text-emerald-400 border-emerald-500/30 text-xs px-2.5 py-0.5 gap-1.5 font-bold">
-                <ShoppingBag className="w-3.5 h-3.5" />
-                {totalProductsSold.toLocaleString()} Units Sold
-              </Badge>
             </h1>
             <p className="text-xs text-muted-foreground mt-0.5">
               Product decision engine, stock levels & unit sales performance analytics

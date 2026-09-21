@@ -197,7 +197,10 @@ export default function ForecastingPage() {
                 <span className="font-bold text-foreground font-mono">{historicalDays} / {targetDays} Days</span>
               </div>
               <Progress value={daysPercent} className="h-2 bg-secondary" />
-              <p className="text-[10px] text-muted-foreground">{daysPercent}% toward 30-day baseline</p>
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-muted-foreground">{daysPercent}% toward 30-day baseline</span>
+                <span className="font-semibold text-amber-400 font-mono">{Math.max(0, targetDays - historicalDays)} days left to unlock</span>
+              </div>
             </div>
 
             <div className="p-4 rounded-2xl bg-secondary/20 border border-border/30 space-y-2">
@@ -208,7 +211,10 @@ export default function ForecastingPage() {
                 <span className="font-bold text-foreground font-mono">{totalOrders} / {targetOrders} Orders</span>
               </div>
               <Progress value={ordersPercent} className="h-2 bg-secondary" />
-              <p className="text-[10px] text-muted-foreground">{ordersPercent}% toward transaction threshold</p>
+              <div className="flex items-center justify-between text-[10px]">
+                <span className="text-muted-foreground">{ordersPercent}% toward threshold</span>
+                <span className="font-semibold text-amber-400 font-mono">{Math.max(0, targetOrders - totalOrders)} orders left to unlock</span>
+              </div>
             </div>
 
             <div className="p-4 rounded-2xl bg-secondary/20 border border-border/30 space-y-2">

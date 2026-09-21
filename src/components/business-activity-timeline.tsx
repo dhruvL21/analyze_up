@@ -6,7 +6,8 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useData } from '@/context/data-context';
-import { getAuditLogs } from '@/lib/audit-store';
+import { getAuditLogs, type BusinessAuditLog } from '@/lib/audit-store';
+import { useUser } from '@/firebase';
 import { parseDateTimestamp } from '@/lib/data-readiness-engine';
 import {
   ShoppingCart,
@@ -59,20 +60,28 @@ export function BusinessActivityTimeline() {
     returns = [],
     businessProfile,
   } = useData();
+  const { user } = useUser();
 
   const [activeFilter, setActiveFilter] = useState<'all' | 'sales' | 'orders' | 'alerts'>('all');
-  const [auditLogs, setAuditLogs] = useState(() => getAuditLogs());
+  const [auditLogs, setAuditLogs] = useState<BusinessAuditLog[]>(() => (user?.uid ? getAuditLogs(user.uid) : []));
   const [displayLimit, setDisplayLimit] = useState<number>(100);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const currencySymbol = businessProfile?.currency?.includes('USD') ? '$' : '₹';
 
-  // Listen for real-time local audit logs
+  // Listen for real-time local audit logs scoped to this authenticated user
   useEffect(() => {
-    const handleAudit = () => setAuditLogs(getAuditLogs());
+    setAuditLogs(user?.uid ? getAuditLogs(user.uid) : []);
+    const handleAudit = (e: Event) => {
+      const customEvt = e as CustomEvent;
+      const targetUid = customEvt.detail?.userId;
+      if (!targetUid || (user?.uid && targetUid === user.uid)) {
+        setAuditLogs(user?.uid ? getAuditLogs(user.uid) : []);
+      }
+    };
     window.addEventListener('analyzeup_audit_logged', handleAudit);
     return () => window.removeEventListener('analyzeup_audit_logged', handleAudit);
-  }, []);
+  }, [user?.uid]);
 
   // Fast Product Lookup Map
   const productMap = useMemo(() => {

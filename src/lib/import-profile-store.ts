@@ -13,14 +13,27 @@ export interface ImportProfile {
   useCount: number;
 }
 
-const STORAGE_KEY = 'analyzeup_import_profiles_v1';
+let currentImportUserId: string | null = null;
 let memoryProfiles: ImportProfile[] = [];
 
-export function getImportProfiles(): ImportProfile[] {
+export function setActiveImportUserId(userId: string | null) {
+  currentImportUserId = userId;
+  memoryProfiles = [];
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem('analyzeup_import_profiles_v1');
+      localStorage.removeItem('analyzeup_import_profiles');
+    } catch {}
+  }
+}
+
+export function getImportProfiles(userId?: string): ImportProfile[] {
+  const uid = userId || currentImportUserId;
+  if (!uid) return [];
   if (memoryProfiles.length > 0) return memoryProfiles;
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(`analyzeup_import_profiles_${uid}`);
     memoryProfiles = raw ? JSON.parse(raw) : [];
     return memoryProfiles;
   } catch (e) {
@@ -84,9 +97,10 @@ export function saveImportProfile(
     });
   }
 
-  if (typeof window !== 'undefined') {
+  const uid = userId || currentImportUserId;
+  if (typeof window !== 'undefined' && uid) {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      localStorage.setItem(`analyzeup_import_profiles_${uid}`, JSON.stringify(updated));
     } catch {
       // Ignored if local storage unavailable
     }
@@ -94,8 +108,8 @@ export function saveImportProfile(
   return newProfile;
 }
 
-export function findMatchingImportProfile(headers: string[], customList?: ImportProfile[]): ImportProfile | null {
-  const profiles = customList && customList.length > 0 ? customList : getImportProfiles();
+export function findMatchingImportProfile(headers: string[], customList?: ImportProfile[], userId?: string): ImportProfile | null {
+  const profiles = customList && customList.length > 0 ? customList : getImportProfiles(userId);
   if (profiles.length === 0) return null;
 
   const currentSignature = headers.slice().sort().join('|').toLowerCase();
@@ -119,11 +133,16 @@ export function findMatchingImportProfile(headers: string[], customList?: Import
   return null;
 }
 
-export function clearAllImportProfiles(): void {
+export function clearAllImportProfiles(userId?: string): void {
+  const uid = userId || currentImportUserId;
   memoryProfiles = [];
   if (typeof window !== 'undefined') {
     try {
-      localStorage.removeItem(STORAGE_KEY);
+      if (uid) {
+        localStorage.removeItem(`analyzeup_import_profiles_${uid}`);
+      }
+      localStorage.removeItem('analyzeup_import_profiles_v1');
+      localStorage.removeItem('analyzeup_import_profiles');
     } catch (e) {
       console.error('Error clearing import profiles:', e);
     }

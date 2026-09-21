@@ -139,6 +139,9 @@ export interface BusinessProfile {
   shopifySyncDay?: string;
   shopifyScheduledDateTime?: string;
   shopifyWebhooksActive?: boolean;
+  shopifyWebhookHost?: string;
+  lastWebhookEvent?: string;
+  lastWebhookReceivedAt?: string;
   language?: string;
   logoUrl?: string;
   isOnboardingCompleted?: boolean;

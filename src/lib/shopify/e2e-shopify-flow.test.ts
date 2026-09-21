@@ -489,4 +489,64 @@ describe('Complete Real End-to-End Test (2026-07)', () => {
     expect(savedOrder.orderNumber).toBe('#1002');
     expect(savedOrder.totalPrice).toBe(149.99);
   });
+
+  // -------------------------------------------------------------
+  // E2E Test 7: Real-time stock decrement & sale on incoming order
+  // -------------------------------------------------------------
+  it('Flow 7: Decrements product stock and records sale when orders/create webhook arrives', async () => {
+    const prodDocId = 'shopify_999_888';
+    mockDb.set(`users/${tenantId}/products/${prodDocId}`, {
+      id: prodDocId,
+      name: 'Ultra Boost Shoes',
+      sku: 'BOOST-888',
+      stock: 50,
+      price: 180,
+      shopifyProductId: '999',
+      shopifyVariantId: '888',
+    });
+
+    const orderPayload = {
+      id: 9999001,
+      name: '#1003',
+      financial_status: 'paid',
+      fulfillment_status: 'fulfilled',
+      currency: 'USD',
+      total_price: '540.00',
+      customer: { first_name: 'Alex', last_name: 'Ray', email: 'alex@example.com' },
+      line_items: [
+        {
+          id: 777,
+          product_id: 999,
+          variant_id: 888,
+          title: 'Ultra Boost Shoes',
+          sku: 'BOOST-888',
+          quantity: 3,
+          price: '180.00',
+        },
+      ],
+      created_at: new Date().toISOString(),
+    };
+
+    const req = createSignedWebhookRequest('orders/create', 'evt_order_1003', orderPayload);
+    const res = await handleWebhook(req);
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.received).toBe(true);
+
+    // Verify stock was decremented from 50 -> 47 in real time
+    const updatedProd = mockDb.get(`users/${tenantId}/products/${prodDocId}`);
+    expect(updatedProd).toBeDefined();
+    expect(updatedProd.stock).toBe(47);
+
+    // Verify transaction created
+    const savedTx = mockDb.get(`users/${tenantId}/transactions/tx_shopify_9999001_777`);
+    expect(savedTx).toBeDefined();
+    expect(savedTx.totalRevenue).toBe(540);
+
+    // Verify profile updated with lastWebhookEvent
+    const profile = mockDb.get(`users/${tenantId}/settings/business_profile`);
+    expect(profile).toBeDefined();
+    expect(profile.lastWebhookEvent).toBe('orders/create');
+  });
 });

@@ -247,10 +247,11 @@ export function evaluateDataReadiness(
   const { isSyncError } = options;
 
   // SECTION 23: Temporary sync failure resilience
-  // If sync error occurred or transactions are temporarily empty while previously having an established score, preserve maturity.
+  // If a confirmed sync error occurred or transactions are temporarily empty while products exist and an established score was confirmed, preserve maturity.
+  // NEVER preserve previous readiness if there are 0 products AND 0 transactions (an empty account with no data).
   if (
     isSyncError ||
-    (transactions.length === 0 && prev && prev.score >= 40)
+    (products.length > 0 && transactions.length === 0 && prev && prev.score >= 40)
   ) {
     if (prev) {
       return {

@@ -12,8 +12,12 @@ import { generateDemoBusinessData } from '@/lib/demo-data';
 import Papa from 'papaparse';
 import { getClientDriveToken, isAutoSyncDue, autoDetectMapping, formatLastSyncTime } from '@/lib/drive-helper';
 import { isShopifyAutoSyncDue } from '@/lib/shopify-sync-helper';
-import { findMatchingImportProfile } from '@/lib/import-profile-store';
-import { logBusinessAction } from '@/lib/audit-store';
+import { findMatchingImportProfile, setActiveImportUserId } from '@/lib/import-profile-store';
+import { logBusinessAction, setActiveAuditUserId } from '@/lib/audit-store';
+import { setActiveSimulationUserId } from '@/lib/simulation-engine';
+import { setActiveGrowthUserId } from '@/lib/customer-growth-engine';
+import { setActiveEventUserId } from '@/lib/business-event-engine';
+import { setActiveExecutiveUserId } from '@/lib/executive-intelligence-engine';
 import {
   type AnalyticsSummary,
   DEFAULT_ANALYTICS_SUMMARY,
@@ -31,6 +35,7 @@ import {
   type MonthlyUsageRecord,
   getCurrentBillingMonth,
   createInitialMonthlyUsage,
+  validateCouponCode,
 } from '@/lib/saas-engine';
 
 import {
@@ -42,6 +47,7 @@ import {
   type DataReadiness,
   type IntelligenceCapabilities,
 } from '@/lib/data-readiness-engine';
+import { clearClientSessionCaches } from '@/firebase/auth/auth-service';
 
 interface DataContextProps {
   dataReadiness: DataReadiness;
@@ -117,6 +123,9 @@ interface DataContextProps {
   monthlyUsage: MonthlyUsageRecord;
   updateActivePlan: (newPlan: string) => Promise<void>;
   handleUpgrade: (planId: string, amount: number, planName: string) => Promise<void>;
+  appliedCoupon: string | null;
+  applyCoupon: (code: string) => Promise<{ success: boolean; message: string; plan?: string }>;
+  removeCoupon: () => Promise<void>;
   analyticsSummary: AnalyticsSummary;
   refreshAnalytics: () => Promise<void>;
   // Shopify Real-Time & Auto-Sync
@@ -129,6 +138,8 @@ interface DataContextProps {
     shopifySyncTime?: string;
     shopifySyncDay?: string;
     shopifyScheduledDateTime?: string;
+    shopifyWebhookHost?: string;
+    shopifyWebhooksActive?: boolean;
   }) => Promise<void>;
   disconnectShopify: (options?: { purgeData?: boolean; shopOverride?: string }) => Promise<{
     success: boolean;
@@ -206,30 +217,49 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [firestore, user, products, transactions, suppliers, orders, returns]);
 
-  const [activePlan, setActivePlanState] = useState<string>(() => {
-    if (typeof window === 'undefined') return "Free Trial";
-    return localStorage.getItem("analyzeup_subscription_plan") || (process.env.NODE_ENV === 'development' ? "Pro Plan" : "Free Trial");
-  });
+  const [activePlan, setActivePlanState] = useState<string>("Free");
+  const [appliedCoupon, setAppliedCoupon] = useState<string | null>(null);
+  const [aiQueryCount, setAiQueryCount] = useState<number>(0);
+  const [reportCount, setReportCount] = useState<number>(0);
 
-  const [aiQueryCount, setAiQueryCount] = useState<number>(() => {
-    if (typeof window === 'undefined') return 0;
-    try {
-      const saved = localStorage.getItem('analyzeup_ai_queries_count');
-      return saved ? Math.max(0, parseInt(saved, 10)) : 0;
-    } catch {
-      return 0;
+  // Sync user-scoped account settings & purge legacy cross-account localStorage leaks
+  useEffect(() => {
+    if (!user) {
+      setActivePlanState("Free");
+      setAppliedCoupon(null);
+      setAiQueryCount(0);
+      setReportCount(0);
+      setActiveAuditUserId(null);
+      setActiveSimulationUserId(null);
+      setActiveGrowthUserId(null);
+      setActiveEventUserId(null);
+      setActiveExecutiveUserId(null);
+      setActiveImportUserId(null);
+      return;
     }
-  });
 
-  const [reportCount, setReportCount] = useState<number>(() => {
-    if (typeof window === 'undefined') return 0;
+    setActiveAuditUserId(user.uid);
+    setActiveSimulationUserId(user.uid);
+    setActiveGrowthUserId(user.uid);
+    setActiveEventUserId(user.uid);
+    setActiveExecutiveUserId(user.uid);
+    setActiveImportUserId(user.uid);
+
     try {
-      const saved = localStorage.getItem('analyzeup_reports_count');
-      return saved ? Math.max(0, parseInt(saved, 10)) : 0;
-    } catch {
-      return 0;
-    }
-  });
+      // Purge legacy unscoped keys to guarantee strict multi-tenant isolation
+      clearClientSessionCaches();
+    } catch {}
+
+    const userCoupon = localStorage.getItem(`analyzeup_applied_coupon_${user.uid}`);
+    const userPlan = localStorage.getItem(`analyzeup_subscription_plan_${user.uid}`);
+    const userAi = localStorage.getItem(`analyzeup_ai_queries_count_${user.uid}`);
+    const userRep = localStorage.getItem(`analyzeup_reports_count_${user.uid}`);
+
+    setAppliedCoupon(userCoupon || null);
+    setActivePlanState(userCoupon ? (userPlan || "Scale") : (userPlan || "Free"));
+    setAiQueryCount(userAi ? Math.max(0, parseInt(userAi, 10)) : 0);
+    setReportCount(userRep ? Math.max(0, parseInt(userRep, 10)) : 0);
+  }, [user?.uid]);
 
   const [monthlyUsage, setMonthlyUsage] = useState<MonthlyUsageRecord>(() => createInitialMonthlyUsage());
 
@@ -260,9 +290,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           setReportCount(0);
           setMonthlyUsage(resetData);
           try {
-            localStorage.setItem('analyzeup_ai_queries_count', '0');
-            localStorage.setItem('analyzeup_reports_count', '0');
-            localStorage.setItem(`analyzeup_usage_${user.uid}`, JSON.stringify(resetData));
+            if (user) {
+              localStorage.setItem(`analyzeup_ai_queries_count_${user.uid}`, '0');
+              localStorage.setItem(`analyzeup_reports_count_${user.uid}`, '0');
+              localStorage.setItem(`analyzeup_usage_${user.uid}`, JSON.stringify(resetData));
+            }
           } catch (e) {}
 
           await setDoc(usageDocRef, {
@@ -284,28 +316,53 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             planKey: data.planKey,
           });
 
+          const activeCoupon = data.appliedCoupon || (user ? localStorage.getItem(`analyzeup_applied_coupon_${user.uid}`) : null);
           if (data.plan) {
-            setActivePlanState(data.plan);
-            try {
-              localStorage.setItem('analyzeup_subscription_plan', data.plan);
-            } catch (e) {}
+            // Revert any legacy dev artifact names to clean new plan names
+            const planToSet =
+              data.plan === 'Pro Plan' && !activeCoupon
+                ? 'Free'
+                : data.plan === 'Free Trial'
+                ? 'Free'
+                : data.plan === 'Starter Plan'
+                ? 'Founder'
+                : data.plan === 'Enterprise Pro'
+                ? 'Scale'
+                : data.plan;
+            setActivePlanState(planToSet);
+            if (user) {
+              try {
+                localStorage.setItem(`analyzeup_subscription_plan_${user.uid}`, planToSet);
+              } catch (e) {}
+            }
           }
 
-          try {
-            localStorage.setItem('analyzeup_ai_queries_count', aiCount.toString());
-            localStorage.setItem('analyzeup_reports_count', repCount.toString());
-            localStorage.setItem(`analyzeup_usage_${user.uid}`, JSON.stringify(data));
-          } catch (e) {}
+          if (data.appliedCoupon) {
+            setAppliedCoupon(data.appliedCoupon);
+            if (user) {
+              try {
+                localStorage.setItem(`analyzeup_applied_coupon_${user.uid}`, data.appliedCoupon);
+              } catch (e) {}
+            }
+          }
+
+          if (user) {
+            try {
+              localStorage.setItem(`analyzeup_ai_queries_count_${user.uid}`, aiCount.toString());
+              localStorage.setItem(`analyzeup_reports_count_${user.uid}`, repCount.toString());
+              localStorage.setItem(`analyzeup_usage_${user.uid}`, JSON.stringify(data));
+            } catch (e) {}
+          }
         }
       } else {
-        // Document does not exist yet: Seed the initial document for this user account
-        const initialPlan = localStorage.getItem('analyzeup_subscription_plan') || 
-                            (process.env.NODE_ENV === 'development' ? 'Pro Plan' : 'Free Trial');
-        const initialAi = Math.max(0, parseInt(localStorage.getItem('analyzeup_ai_queries_count') || '0', 10));
-        const initialRep = Math.max(0, parseInt(localStorage.getItem('analyzeup_reports_count') || '0', 10));
+        // Document does not exist yet: New user account starts completely fresh with isolated zeroed usage
+        const initialPlan = 'Free';
+        const initialAi = 0;
+        const initialRep = 0;
 
         const seedUsage = {
           plan: initialPlan,
+          planKey: 'FREE',
           billingMonth: currentMonth,
           aiQueriesCount: initialAi,
           reportsCount: initialRep,
@@ -319,7 +376,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           reportsCount: initialRep,
           lastResetDate: seedUsage.lastResetDate,
           plan: initialPlan,
+          planKey: 'FREE',
         });
+
+        setActivePlanState('Free');
+        setAppliedCoupon(null);
+        setAiQueryCount(0);
+        setReportCount(0);
 
         await setDoc(usageDocRef, seedUsage, { merge: true }).catch(console.warn);
       }
@@ -334,9 +397,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     const currentMonth = getCurrentBillingMonth();
     setAiQueryCount(prev => {
       const next = prev + amount;
-      try {
-        localStorage.setItem('analyzeup_ai_queries_count', next.toString());
-      } catch (e) {}
+      if (user) {
+        try {
+          localStorage.setItem(`analyzeup_ai_queries_count_${user.uid}`, next.toString());
+        } catch (e) {}
+      }
       return next;
     });
 
@@ -358,9 +423,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     const currentMonth = getCurrentBillingMonth();
     setReportCount(prev => {
       const next = prev + amount;
-      try {
-        localStorage.setItem('analyzeup_reports_count', next.toString());
-      } catch (e) {}
+      if (user) {
+        try {
+          localStorage.setItem(`analyzeup_reports_count_${user.uid}`, next.toString());
+        } catch (e) {}
+      }
       return next;
     });
 
@@ -380,9 +447,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   const updateActivePlan = useCallback(async (newPlan: string) => {
     setActivePlanState(newPlan);
-    try {
-      localStorage.setItem('analyzeup_subscription_plan', newPlan);
-    } catch (e) {}
+    if (user) {
+      try {
+        localStorage.setItem(`analyzeup_subscription_plan_${user.uid}`, newPlan);
+      } catch (e) {}
+    }
 
     if (user && firestore) {
       try {
@@ -403,6 +472,86 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       }
     }
   }, [user, firestore]);
+
+  const applyCoupon = useCallback(async (code: string) => {
+    const validation = validateCouponCode(code);
+    if (!validation.valid) {
+      return { success: false, message: validation.message };
+    }
+
+    setAppliedCoupon(validation.code);
+    if (user) {
+      try {
+        localStorage.setItem(`analyzeup_applied_coupon_${user.uid}`, validation.code);
+        localStorage.setItem(`analyzeup_coupon_discount_${user.uid}`, validation.discountPercent.toString());
+      } catch (e) {}
+    }
+
+    // Automatically upgrade workspace to Enterprise Pro for free
+    await updateActivePlan(validation.planName);
+
+    if (user && firestore) {
+      try {
+        const usageDocRef = doc(firestore, 'users', user.uid, 'subscription', 'usage');
+        await setDoc(usageDocRef, {
+          plan: validation.planName,
+          planKey: validation.planKey,
+          appliedCoupon: validation.code,
+          isCouponActive: true,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+
+        await setDoc(doc(firestore, 'users', user.uid), {
+          activePlan: validation.planName,
+          subscriptionPlan: validation.planName,
+          appliedCoupon: validation.code,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      } catch (err) {
+        console.error('Failed to sync coupon to Firestore:', err);
+      }
+    }
+
+    return {
+      success: true,
+      message: validation.message,
+      plan: validation.planName,
+    };
+  }, [updateActivePlan, user, firestore]);
+
+  const removeCoupon = useCallback(async () => {
+    setAppliedCoupon(null);
+    if (user) {
+      try {
+        localStorage.removeItem(`analyzeup_applied_coupon_${user.uid}`);
+        localStorage.removeItem(`analyzeup_coupon_discount_${user.uid}`);
+      } catch (e) {}
+    }
+
+    await updateActivePlan('Free');
+
+    if (user && firestore) {
+      try {
+        const usageDocRef = doc(firestore, 'users', user.uid, 'subscription', 'usage');
+        await setDoc(usageDocRef, {
+          plan: 'Free',
+          planKey: 'FREE',
+          appliedCoupon: null,
+          isCouponActive: false,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+
+        await setDoc(doc(firestore, 'users', user.uid), {
+          activePlan: 'Free',
+          subscriptionPlan: 'Free',
+          appliedCoupon: null,
+          updatedAt: serverTimestamp(),
+        }, { merge: true });
+      } catch (err) {
+        console.error('Failed to clear coupon from Firestore:', err);
+      }
+    }
+  }, [updateActivePlan, user, firestore]);
 
   const [isProcessingPayment, setIsProcessingPayment] = useState<string | null>(null);
   const [showSubscriptionModal, setShowSubscriptionModal] = useState<boolean>(false);
@@ -449,8 +598,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         { merge: true }
       ).catch(console.warn);
 
-      getDoc(doc(firestore, 'users', user.uid, 'settings', 'business_profile'))
-        .then((snap) => {
+      // Live real-time listener for business profile
+      const unsubProfile = onSnapshot(
+        doc(firestore, 'users', user.uid, 'settings', 'business_profile'),
+        (snap) => {
           if (snap.exists()) {
             const remote = snap.data() as BusinessProfile;
             setBusinessProfile((prev) => {
@@ -459,12 +610,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
               return merged;
             });
           }
-        })
-        .catch(console.warn);
+        },
+        (err) => console.warn('[BusinessProfile listener notice]:', err)
+      );
 
-      // Check integrations collection for Shopify connection
-      getDoc(doc(firestore, 'users', user.uid, 'integrations', 'shopify'))
-        .then((snap) => {
+      // Live real-time listener for Shopify integration status & credentials
+      const unsubIntegration = onSnapshot(
+        doc(firestore, 'users', user.uid, 'integrations', 'shopify'),
+        (snap) => {
           if (snap.exists()) {
             const intData = snap.data();
             if (intData?.connectionStatus === 'Connected' && Boolean(intData?.accessToken)) {
@@ -505,8 +658,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
               });
             }
           }
-        })
-        .catch(console.warn);
+        },
+        (err) => console.warn('[Shopify integration listener notice]:', err)
+      );
+
+      return () => {
+        unsubProfile();
+        unsubIntegration();
+      };
     }
   }, [user, firestore]);
 
@@ -763,16 +922,26 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, [user, firestore, toast, businessProfile, updateBusinessProfile]);
 
   useEffect(() => {
+    const storedCoupon = localStorage.getItem("analyzeup_applied_coupon");
     const stored = localStorage.getItem("analyzeup_subscription_plan");
-    if (stored) {
-      setActivePlanState(stored);
+    if (storedCoupon) {
+      setActivePlanState(stored || "Enterprise Pro");
+      return;
     }
+    if (stored === "Pro Plan") {
+      try {
+        localStorage.setItem("analyzeup_subscription_plan", "Free Trial");
+      } catch (e) {}
+      setActivePlanState("Free Trial");
+      return;
+    }
+    setActivePlanState(stored || "Free Trial");
   }, []);
 
   const activePlanLimit = useMemo(() => {
-    if (activePlan === "Starter Plan") return 25000;
-    if (activePlan === "Growth Plan") return 50000;
-    if (activePlan === "Pro Plan") return 250000;
+    if (activePlan === "Starter Plan" || activePlan === "STARTER") return 25000;
+    if (activePlan === "Growth Plan" || activePlan === "GROWTH") return 50000;
+    if (activePlan === "Enterprise Pro" || activePlan === "Pro Plan" || activePlan === "PRO") return 250000;
     return 10000; // Free Baseline allows 10,000 records
   }, [activePlan]);
 
@@ -3316,6 +3485,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     shopifySyncTime?: string;
     shopifySyncDay?: string;
     shopifyScheduledDateTime?: string;
+    shopifyWebhookHost?: string;
+    shopifyWebhooksActive?: boolean;
   }) => {
     const cleanedSettings = cleanObject({
       ...settings,
@@ -3361,13 +3532,16 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     // Real-time synchronization is event-driven via Shopify Webhooks (products/create, orders/create, inventory, etc.)
     // We do NOT poll Shopify on an aggressive timer (every 15s or 1min) to avoid rate limits and unnecessary memory churn.
     
-    // 1. Initial sync: If connected store has never synced once, run initial seed sync
+    // 1. Initial seed sync: If connected store has never synced once, run one-time initial seed
     if (!businessProfile.shopifyLastSyncedAt && !isShopifySyncingRef.current) {
       autoSyncShopifyNow(false);
     }
 
-    // 2. Scheduled Auto-Sync: Only run if merchant explicitly enabled scheduled auto-sync (e.g. daily/weekly backup)
-    const isScheduledActive = businessProfile?.shopifyAutoSyncEnabled === true;
+    // 2. Scheduled Auto-Sync: Only run if merchant explicitly enabled scheduled auto-sync AND it is not realtime mode
+    const isScheduledActive =
+      businessProfile?.shopifyAutoSyncEnabled === true &&
+      businessProfile?.shopifySyncFrequency !== 'realtime';
+
     if (!isScheduledActive) {
       return; // Zero recurring polling! Webhooks push changes directly from Shopify when events occur.
     }
@@ -3391,7 +3565,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     return () => {
       clearInterval(intervalId);
     };
-  }, [businessProfile, autoSyncShopifyNow]);
+  }, [
+    businessProfile?.shopifyConnected,
+    businessProfile?.shopifyStoreUrl,
+    businessProfile?.shopifyAutoSyncEnabled,
+    businessProfile?.shopifySyncFrequency,
+    businessProfile?.shopifyLastSyncedAt,
+    autoSyncShopifyNow,
+  ]);
 
   const disconnectShopify = useCallback(async (options?: { purgeData?: boolean; shopOverride?: string }) => {
     if (!firestore || !user) {
@@ -3516,33 +3697,39 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, [businessProfile, products, transactions, returns]);
 
   // Data Readiness & Centralized Feature Capabilities Engine (Section 1-8 & 22-23)
-  const [previousReadiness] = useState<DataReadiness | null>(() => {
-    if (typeof window !== 'undefined') {
+  const previousReadiness = useMemo<DataReadiness | null>(() => {
+    if (typeof window !== 'undefined' && user?.uid) {
       try {
-        const stored = localStorage.getItem('analyzeup_data_readiness_snapshot');
+        const stored = localStorage.getItem(`analyzeup_data_readiness_snapshot_${user.uid}`);
         return stored ? JSON.parse(stored) : null;
       } catch {
         return null;
       }
     }
     return null;
-  });
+  }, [user?.uid]);
 
   const dataReadiness = useMemo(() => {
+    // If the account has no catalog products and no transactions, strictly evaluate genuine empty zero-state
+    if ((!products || products.length === 0) && (!transactions || transactions.length === 0)) {
+      return evaluateDataReadiness([], [], { profile: businessProfile });
+    }
+
     const computed = evaluateDataReadiness(products, transactions, {
       profile: businessProfile,
       previousReadiness,
     });
-    // Persist established high-water mark so temporary sync drops never downgrade maturity (Section 23)
-    if (typeof window !== 'undefined' && computed.score >= 25 && !computed.isResiliencePreserved) {
+
+    // Persist established high-water mark per-user so temporary sync drops never downgrade maturity (Section 23)
+    if (typeof window !== 'undefined' && user?.uid && computed.score >= 25 && !computed.isResiliencePreserved && products.length > 0) {
       try {
-        localStorage.setItem('analyzeup_data_readiness_snapshot', JSON.stringify(computed));
+        localStorage.setItem(`analyzeup_data_readiness_snapshot_${user.uid}`, JSON.stringify(computed));
       } catch {
         // ignore
       }
     }
     return computed;
-  }, [products, transactions, businessProfile, previousReadiness]);
+  }, [products, transactions, businessProfile, previousReadiness, user?.uid]);
 
   const capabilities = useMemo(() => dataReadiness.capabilities, [dataReadiness]);
 
@@ -3670,6 +3857,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     monthlyUsage,
     updateActivePlan,
     handleUpgrade,
+    appliedCoupon,
+    applyCoupon,
+    removeCoupon,
     analyticsSummary,
     refreshAnalytics,
     isShopifySyncing,
@@ -3747,6 +3937,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     monthlyUsage,
     updateActivePlan,
     handleUpgrade,
+    appliedCoupon,
+    applyCoupon,
+    removeCoupon,
     analyticsSummary,
     refreshAnalytics,
     isShopifySyncing,

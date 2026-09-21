@@ -7,40 +7,43 @@ describe('Real-Time Shopify Product Sync & Variant Isolation Suite', () => {
     vi.restoreAllMocks();
   });
 
-  describe('1. isShopifyAutoSyncDue (OAuth & Real-Time Engine)', () => {
-    it('returns true for OAuth stores without client-side token when real-time sync is enabled', () => {
+  describe('1. isShopifyAutoSyncDue (Zero-Polling Webhook Architecture)', () => {
+    it('returns false in pure real-time mode to guarantee zero polling of Shopify API', () => {
       const profile = {
         shopifyConnected: true,
         shopifyStoreUrl: 'snkhed.myshopify.com',
-        // Note: shopifyAccessToken is NOT present on client for modern OAuth stores
         shopifyRealtimeSyncEnabled: true,
-        shopifyLastSyncedAt: new Date(Date.now() - 20 * 1000).toISOString(), // 20s ago
+        shopifyAutoSyncEnabled: false,
+        shopifyLastSyncedAt: new Date(Date.now() - 20 * 1000).toISOString(),
       };
 
-      expect(isShopifyAutoSyncDue(profile)).toBe(true);
+      // In real-time mode, updates are delivered by Shopify webhooks; intervals must never poll
+      expect(isShopifyAutoSyncDue(profile)).toBe(false);
     });
 
-    it('returns true when store has never synced before and real-time is active', () => {
+    it('returns false when frequency is set to realtime to avoid API rate limits', () => {
       const profile = {
         shopifyConnected: true,
         shopifyStoreUrl: 'snkhed.myshopify.com',
         shopifyRealtimeSyncEnabled: true,
+        shopifyAutoSyncEnabled: true,
+        shopifySyncFrequency: 'realtime',
         shopifyLastSyncedAt: null,
       };
 
-      expect(isShopifyAutoSyncDue(profile)).toBe(true);
+      expect(isShopifyAutoSyncDue(profile)).toBe(false);
     });
 
-    it('enforces 15s throttle in real-time mode to prevent API flood', () => {
+    it('returns true when a scheduled batch interval (e.g. 1_min) has elapsed', () => {
       const profile = {
         shopifyConnected: true,
         shopifyStoreUrl: 'snkhed.myshopify.com',
-        shopifyRealtimeSyncEnabled: true,
-        shopifyLastSyncedAt: new Date(Date.now() - 5 * 1000).toISOString(), // 5s ago
+        shopifyAutoSyncEnabled: true,
+        shopifySyncFrequency: '1_min',
+        shopifyLastSyncedAt: new Date(Date.now() - 70 * 1000).toISOString(), // 70s ago
       };
 
-      // 5s elapsed < 15s throttle
-      expect(isShopifyAutoSyncDue(profile)).toBe(false);
+      expect(isShopifyAutoSyncDue(profile)).toBe(true);
     });
 
     it('returns false when disconnected', () => {

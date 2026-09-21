@@ -163,13 +163,15 @@ export async function POST(req: NextRequest) {
         const isPaid = rawFin === 'PAID' || rawFin === 'PARTIALLY_REFUNDED';
         const isFulfilled = rawFul === 'FULFILLED' || rawFul === 'DELIVERED';
 
+        const prodDocId = li.variant_id ? `shopify_${li.product_id}_${li.variant_id}` : `shopify_${li.product_id}`;
+
         batch.set(txRef, {
           id: txDocId,
           tenantId,
           userId: tenantId,
           orderNumber,
           shopifyOrderId: orderId,
-          productId: li.variant_id ? `shopify_${li.product_id}_${li.variant_id}` : `shopify_${li.product_id}`,
+          productId: prodDocId,
           productName: li.title || 'Product',
           sku: li.sku || 'N/A',
           type: 'Sale',
@@ -191,6 +193,23 @@ export async function POST(req: NextRequest) {
           createdAt: payload.created_at || new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         }, { merge: true });
+
+        // Decrement product stock in real time to reflect the sale at that exact moment
+        try {
+          const prodRef = db.collection('users').doc(tenantId).collection('products').doc(prodDocId);
+          const prodSnap = await prodRef.get().catch(() => null);
+          if (prodSnap && prodSnap.exists) {
+            const currentStock = Number(prodSnap.data()?.stock || 0);
+            const updatedStock = Math.max(0, currentStock - qty);
+            batch.update(prodRef, {
+              stock: updatedStock,
+              lastSoldDate: (payload.processed_at || payload.created_at || new Date().toISOString()).split('T')[0],
+              updatedAt: new Date().toISOString(),
+            });
+          }
+        } catch (prodErr) {
+          console.warn('[Shopify Webhook] Note decrementing stock for line item:', prodErr);
+        }
       }
 
       // Process any refunds included in the order payload
@@ -477,6 +496,8 @@ export async function POST(req: NextRequest) {
     const profileRef = db.collection('users').doc(tenantId).collection('settings').doc('business_profile');
     batch.set(profileRef, {
       shopifyLastSyncedAt: nowIso,
+      lastWebhookEvent: topic,
+      lastWebhookReceivedAt: nowIso,
       updatedAt: nowIso,
     }, { merge: true });
 

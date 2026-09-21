@@ -418,7 +418,17 @@ export function generateAIExecutiveBrief(
 }
 
 // 8. Immutable Report Snapshot Manager
-const SNAPSHOT_STORAGE_KEY = 'analyzeup_report_snapshots_v1';
+let currentExecutiveUserId: string | null = null;
+
+export function setActiveExecutiveUserId(userId: string | null) {
+  currentExecutiveUserId = userId;
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem('analyzeup_report_snapshots_v1');
+      localStorage.removeItem('analyzeup_executive_snapshot');
+    } catch {}
+  }
+}
 
 export function createReportSnapshot(
   reportType: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'QUARTERLY',
@@ -427,7 +437,8 @@ export function createReportSnapshot(
   suppliers: Supplier[] = [],
   orders: PurchaseOrder[] = [],
   returns: ProductReturn[] = [],
-  businessProfile?: BusinessProfile | null
+  businessProfile?: BusinessProfile | null,
+  userId?: string
 ): ReportSnapshot {
   const comparison = comparePeriods(products, transactions, returns, businessProfile, reportType === 'QUARTERLY' ? 'QUARTER' : 'MONTH');
   const profitBridge = calculateProfitBridge(comparison, businessProfile);
@@ -451,25 +462,29 @@ export function createReportSnapshot(
     opportunitiesCount: opportunities.length,
   };
 
-  // Save to local storage history
-  try {
-    const existing = getStoredReportSnapshots();
-    const updated = [snapshot, ...existing.slice(0, 19)];
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(SNAPSHOT_STORAGE_KEY, JSON.stringify(updated));
-      window.dispatchEvent(new CustomEvent('analyzeup_snapshots_updated'));
+  const uid = userId || currentExecutiveUserId;
+  if (uid) {
+    try {
+      const existing = getStoredReportSnapshots(uid);
+      const updated = [snapshot, ...existing.slice(0, 19)];
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(`analyzeup_executive_snapshot_${uid}`, JSON.stringify(updated));
+        window.dispatchEvent(new CustomEvent('analyzeup_snapshots_updated', { detail: { userId: uid } }));
+      }
+    } catch (err) {
+      console.error('Failed to store report snapshot:', err);
     }
-  } catch (err) {
-    console.error('Failed to store report snapshot:', err);
   }
 
   return snapshot;
 }
 
-export function getStoredReportSnapshots(): ReportSnapshot[] {
+export function getStoredReportSnapshots(userId?: string): ReportSnapshot[] {
+  const uid = userId || currentExecutiveUserId;
+  if (!uid) return [];
   if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(SNAPSHOT_STORAGE_KEY);
+    const raw = localStorage.getItem(`analyzeup_executive_snapshot_${uid}`);
     if (!raw) return [];
     return JSON.parse(raw);
   } catch {
@@ -477,13 +492,15 @@ export function getStoredReportSnapshots(): ReportSnapshot[] {
   }
 }
 
-export function deleteStoredReportSnapshot(snapshotId: string): ReportSnapshot[] {
+export function deleteStoredReportSnapshot(snapshotId: string, userId?: string): ReportSnapshot[] {
+  const uid = userId || currentExecutiveUserId;
+  if (!uid) return [];
   if (typeof window === 'undefined') return [];
   try {
-    const existing = getStoredReportSnapshots();
+    const existing = getStoredReportSnapshots(uid);
     const updated = existing.filter(s => s.id !== snapshotId);
-    localStorage.setItem(SNAPSHOT_STORAGE_KEY, JSON.stringify(updated));
-    window.dispatchEvent(new CustomEvent('analyzeup_snapshots_updated'));
+    localStorage.setItem(`analyzeup_executive_snapshot_${uid}`, JSON.stringify(updated));
+    window.dispatchEvent(new CustomEvent('analyzeup_snapshots_updated', { detail: { userId: uid } }));
     return updated;
   } catch (err) {
     console.error('Failed to delete report snapshot:', err);
@@ -491,11 +508,16 @@ export function deleteStoredReportSnapshot(snapshotId: string): ReportSnapshot[]
   }
 }
 
-export function clearAllStoredReportSnapshots(): void {
+export function clearAllStoredReportSnapshots(userId?: string): void {
+  const uid = userId || currentExecutiveUserId;
   if (typeof window === 'undefined') return;
   try {
-    localStorage.removeItem(SNAPSHOT_STORAGE_KEY);
-    window.dispatchEvent(new CustomEvent('analyzeup_snapshots_updated'));
+    if (uid) {
+      localStorage.removeItem(`analyzeup_executive_snapshot_${uid}`);
+    }
+    localStorage.removeItem('analyzeup_report_snapshots_v1');
+    localStorage.removeItem('analyzeup_executive_snapshot');
+    window.dispatchEvent(new CustomEvent('analyzeup_snapshots_updated', { detail: { userId: uid } }));
   } catch (err) {
     console.error('Failed to clear report snapshots:', err);
   }

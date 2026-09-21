@@ -11,6 +11,7 @@ import {
   toDomainSuppliers,
   toDomainPurchaseOrders,
 } from './domain-adapters';
+import { getAuditLogs } from './audit-store';
 
 export interface BusinessHealthSummary {
   score: number;
@@ -250,20 +251,12 @@ export function computeBusinessHealth(
     );
   }
 
-  // Dynamic Founder Execution Bonus (reads from audit logs and performed tasks)
+  // Dynamic Founder Execution Bonus (reads from user-scoped audit logs)
   let executedActionCount = 0;
   if (typeof window !== 'undefined') {
     try {
-      const logsStr = localStorage.getItem('analyzeup_business_audit_logs');
-      if (logsStr) {
-        const logs = JSON.parse(logsStr);
-        executedActionCount = Array.isArray(logs) ? logs.length : 0;
-      }
-      const completedTasksStr = localStorage.getItem('analyzeup_completed_tasks');
-      if (completedTasksStr) {
-        const completedTasks = JSON.parse(completedTasksStr);
-        executedActionCount += Array.isArray(completedTasks) ? completedTasks.length : 0;
-      }
+      const logs = getAuditLogs();
+      executedActionCount = Array.isArray(logs) ? logs.length : 0;
     } catch {
       executedActionCount = 0;
     }

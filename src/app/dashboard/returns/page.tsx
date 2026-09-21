@@ -103,12 +103,17 @@ export default function ReturnsPage() {
     businessProfile?.shopifyStoreUrl
   );
 
-  // Automatically check for fresh Shopify returns when navigating to Returns page
+  // In real-time mode, order and return changes arrive via instant Shopify webhooks without polling.
+  // Only trigger background fetch on initial setup if never synced before and not in real-time mode.
   useEffect(() => {
-    if (isShopifyConnected) {
+    if (!isShopifyConnected) return;
+    if (businessProfile?.shopifyRealtimeSyncEnabled) return;
+    
+    // Only fetch if store has never synced
+    if (!businessProfile?.shopifyLastSyncedAt) {
       autoSyncShopifyNow(false);
     }
-  }, [isShopifyConnected, autoSyncShopifyNow]);
+  }, [isShopifyConnected, businessProfile?.shopifyRealtimeSyncEnabled, businessProfile?.shopifyLastSyncedAt, autoSyncShopifyNow]);
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');

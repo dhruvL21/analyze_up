@@ -13,6 +13,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { getAuditLogs, clearAuditLogs, BusinessAuditLog } from '@/lib/audit-store';
+import { useUser } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { History, Tag, TrendingUp, PackagePlus, FileSpreadsheet, Trash2, ShieldCheck, Sparkles } from 'lucide-react';
 
@@ -22,28 +23,35 @@ interface AuditLogModalProps {
 }
 
 export function AuditLogModal({ open, onOpenChange }: AuditLogModalProps) {
+  const { user } = useUser();
   const [logs, setLogs] = useState<BusinessAuditLog[]>([]);
   const [filterType, setFilterType] = useState<string>('all');
   const { toast } = useToast();
 
   const loadLogs = () => {
-    setLogs(getAuditLogs());
+    setLogs(user?.uid ? getAuditLogs(user.uid) : []);
   };
 
   useEffect(() => {
     if (open) {
       loadLogs();
     }
-  }, [open]);
+  }, [open, user?.uid]);
 
   useEffect(() => {
-    const handler = () => loadLogs();
+    const handler = (e: Event) => {
+      const customEvt = e as CustomEvent;
+      const targetUid = customEvt.detail?.userId;
+      if (!targetUid || (user?.uid && targetUid === user.uid)) {
+        loadLogs();
+      }
+    };
     window.addEventListener('analyzeup_audit_logged', handler);
     return () => window.removeEventListener('analyzeup_audit_logged', handler);
-  }, []);
+  }, [user?.uid]);
 
   const handleClear = () => {
-    clearAuditLogs();
+    clearAuditLogs(user?.uid);
     setLogs([]);
     toast({
       title: 'Audit Trail Cleared',
