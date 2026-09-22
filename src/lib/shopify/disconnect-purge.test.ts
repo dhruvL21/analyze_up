@@ -180,6 +180,28 @@ describe('Shopify Disconnect & Data Purge Suite', () => {
       accessToken: 'shpat_active_12345',
     });
 
+    mockAdminStore.set(`users/${tenantId}/products/drive_prod_1`, {
+      id: 'drive_prod_1',
+      name: 'Google Drive Spreadsheet Product',
+      source: 'GOOGLE_DRIVE',
+      importSource: 'drive',
+      price: 1499,
+    });
+    mockAdminStore.set(`users/${tenantId}/transactions/tx_drive_1`, {
+      id: 'tx_drive_1',
+      productName: 'Google Drive Spreadsheet Product',
+      source: 'GOOGLE_DRIVE',
+      importSource: 'drive',
+    });
+    mockAdminStore.set(`users/${tenantId}/integrations/google-drive`, {
+      email: 'merchant@gmail.com',
+      selectedFolderId: 'folder_123',
+    });
+    mockAdminStore.set(`users/${tenantId}/google_drive_files/file_1`, {
+      name: 'Inventory_2026.xlsx',
+      id: 'file_1',
+    });
+
     // 3. Disconnect with purgeData: true
     await markShopifyDisconnected(shop, tenantId, true);
 
@@ -195,9 +217,13 @@ describe('Shopify Disconnect & Data Purge Suite', () => {
     expect(mockAdminStore.has(`users/${tenantId}/sales_orders/order_101`)).toBe(false);
     expect(mockAdminStore.has(`users/${tenantId}/integrations/shopify`)).toBe(false);
 
-    // 6. Verify non-Shopify manual records are PRESERVED
+    // 6. Verify non-Shopify manual and Google Drive records are PRESERVED
     expect(mockAdminStore.has(`users/${tenantId}/products/manual_prod_1`)).toBe(true);
     expect(mockAdminStore.has(`users/${tenantId}/transactions/tx_manual_1`)).toBe(true);
+    expect(mockAdminStore.has(`users/${tenantId}/products/drive_prod_1`)).toBe(true);
+    expect(mockAdminStore.has(`users/${tenantId}/transactions/tx_drive_1`)).toBe(true);
+    expect(mockAdminStore.has(`users/${tenantId}/integrations/google-drive`)).toBe(true);
+    expect(mockAdminStore.has(`users/${tenantId}/google_drive_files/file_1`)).toBe(true);
   });
 
   it('marks connection UNINSTALLED and purges Shopify records when uninstalled', async () => {

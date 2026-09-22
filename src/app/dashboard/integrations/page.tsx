@@ -722,11 +722,29 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
   };
 
   // 4. Disconnect Google Drive connection
-  const handleDisconnectGoogleDrive = async () => {
-    if (!window.confirm('Are you sure you want to disconnect Google Drive? This will clear connection credentials.')) return;
-    await disconnectGoogleDrive();
-    setDriveConnection(null);
-    setDriveFiles([]);
+  const [showDriveDisconnectConfirm, setShowDriveDisconnectConfirm] = useState(false);
+  const [isDisconnectingDrive, setIsDisconnectingDrive] = useState(false);
+
+  const handleDisconnectGoogleDrive = () => {
+    setShowDriveDisconnectConfirm(true);
+  };
+
+  const handleConfirmDisconnectGoogleDrive = async () => {
+    setShowDriveDisconnectConfirm(false);
+    setIsDisconnectingDrive(true);
+    try {
+      await disconnectGoogleDrive({ purgeData: true });
+      setDriveConnection(null);
+      setDriveFiles([]);
+    } catch (err: any) {
+      toast({
+        variant: 'destructive',
+        title: 'Disconnect Failed',
+        description: err?.message || 'Failed to disconnect Google Drive.',
+      });
+    } finally {
+      setIsDisconnectingDrive(false);
+    }
   };
 
   // 6. Fetch Available Folders for selection
@@ -1776,7 +1794,9 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
                               <p>
                                 You are about to disconnect{' '}
                                 <span className="font-medium text-foreground">
-                                  {businessProfile?.shopifyStoreUrl}
+                                  {businessProfile?.shopifyStoreName
+                                    ? `${businessProfile.shopifyStoreName} (${businessProfile.shopifyStoreUrl})`
+                                    : businessProfile?.shopifyStoreUrl}
                                 </span>{' '}
                                 from AnalyzeUp.
                               </p>
@@ -1792,7 +1812,7 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
                                 </ul>
                               </div>
                               <p className="text-xs text-muted-foreground">
-                                Data you imported manually (CSV / Excel) will <span className="text-foreground font-medium">not</span> be affected.
+                                Data from Google Drive or manual CSV/Excel imports will <span className="text-foreground font-medium">not</span> be affected.
                               </p>
                             </AlertDialogDescription>
                           </AlertDialogHeader>
@@ -2153,6 +2173,67 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
             </CardContent>
           </Card>
         </div>
+
+      {/* Google Drive Disconnect Confirmation Modal */}
+      <AlertDialog open={showDriveDisconnectConfirm} onOpenChange={setShowDriveDisconnectConfirm}>
+        <AlertDialogContent className="max-w-md border-rose-500/20 bg-background">
+          <AlertDialogHeader>
+            <div className="flex items-center gap-3 mb-1">
+              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-rose-500/10 flex items-center justify-center">
+                <Unlink className="w-5 h-5 text-rose-400" />
+              </div>
+              <AlertDialogTitle className="text-base font-semibold">
+                Disconnect Google Drive?
+              </AlertDialogTitle>
+            </div>
+            <AlertDialogDescription className="text-sm text-muted-foreground leading-relaxed space-y-3">
+              <p>
+                You are about to disconnect{' '}
+                <span className="font-medium text-foreground">
+                  Google Drive {driveConnection?.email ? `(${driveConnection.email})` : ''}
+                </span>{' '}
+                from AnalyzeUp.
+              </p>
+              <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-rose-300 text-xs space-y-1.5">
+                <p className="font-semibold text-rose-400 flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5" /> This action will permanently delete:
+                </p>
+                <ul className="pl-4 space-y-1 list-disc">
+                  <li>All products synced from Google Drive spreadsheets</li>
+                  <li>All transactions imported via Google Drive</li>
+                  <li>Folder file mappings and sync history</li>
+                  <li>Access credentials and tokens</li>
+                </ul>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Data from Shopify or manual CSV/Excel imports will <span className="text-foreground font-medium">not</span> be affected.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 mt-2">
+            <AlertDialogCancel className="rounded-xl text-sm" disabled={isDisconnectingDrive}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDisconnectGoogleDrive}
+              disabled={isDisconnectingDrive}
+              className="rounded-xl text-sm bg-rose-600 hover:bg-rose-500 text-white gap-2"
+            >
+              {isDisconnectingDrive ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  Disconnecting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Yes, Disconnect &amp; Delete Data
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
 
       {/* Dialog 1: Folder Selector Modal */}

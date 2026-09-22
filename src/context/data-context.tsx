@@ -111,7 +111,12 @@ interface DataContextProps {
   getGoogleDriveFiles: () => Promise<any[]>;
   getSyncHistory: () => Promise<any[]>;
   getMappingProfiles: () => Promise<any[]>;
-  disconnectGoogleDrive: () => Promise<void>;
+  disconnectGoogleDrive: (options?: { purgeData?: boolean }) => Promise<{
+    success: boolean;
+    deletedProducts: number;
+    deletedTransactions: number;
+    deletedReturns: number;
+  }>;
   updateGoogleDriveSettings: (settings: Record<string, any>) => Promise<void>;
   recordSyncSuccess: (fileId: string, fileData: Record<string, any>, historyData: Record<string, any>) => Promise<void>;
   saveMappingProfile: (fileId: string, profileData: Record<string, any>) => Promise<void>;
@@ -2924,26 +2929,152 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [user, firestore]);
 
-  const disconnectGoogleDrive = useCallback(async () => {
-    if (!user || !firestore) return;
+  const disconnectGoogleDrive = useCallback(async (options?: { purgeData?: boolean }) => {
+    if (!user || !firestore) return { success: false, deletedProducts: 0, deletedTransactions: 0, deletedReturns: 0 };
+    const uid = user.uid;
+    const purgeData = options?.purgeData !== false; // defaults to true
+
+    let deletedProductsCount = 0;
+    let deletedTransactionsCount = 0;
+    let deletedReturnsCount = 0;
+
     try {
-      const docRef = doc(firestore, 'users', user.uid, 'integrations', 'google-drive');
+      if (purgeData) {
+        // 1. Identify and delete Drive products only
+        const productsSnap = await getDocs(collection(firestore, 'users', uid, 'products')).catch(() => ({ docs: [] } as any));
+        const driveProductDocs = productsSnap.docs.filter((d: any) => {
+          const data = d.data() || {};
+          const src = String(data.source || '').toUpperCase();
+          const impSrc = String(data.importSource || '').toLowerCase();
+          return (
+            src === 'GOOGLE_DRIVE' ||
+            src === 'DRIVE' ||
+            impSrc === 'drive' ||
+            d.id.startsWith('drive_') ||
+            (typeof data.id === 'string' && data.id.startsWith('drive_')) ||
+            Boolean(data.driveFileId) ||
+            Boolean(data.fileId && impSrc === 'drive') ||
+            (typeof data.supplier === 'string' && data.supplier.toLowerCase().includes('google drive'))
+          );
+        });
+
+        deletedProductsCount = driveProductDocs.length;
+        const deletedProductDocIds = new Set<string>(driveProductDocs.map((d: any) => d.id));
+        const deletedProductDataIds = new Set<string>(driveProductDocs.map((d: any) => d.data()?.id).filter(Boolean));
+
+        // 2. Identify and delete Drive transactions only
+        const txSnap = await getDocs(collection(firestore, 'users', uid, 'transactions')).catch(() => ({ docs: [] } as any));
+        const driveTxDocs = txSnap.docs.filter((d: any) => {
+          const data = d.data() || {};
+          const src = String(data.source || '').toUpperCase();
+          const impSrc = String(data.importSource || '').toLowerCase();
+          return (
+            src === 'GOOGLE_DRIVE' ||
+            src === 'DRIVE' ||
+            impSrc === 'drive' ||
+            d.id.startsWith('tx_drive_') ||
+            (typeof data.id === 'string' && data.id.startsWith('tx_drive_')) ||
+            Boolean(data.driveFileId) ||
+            (data.productId && (deletedProductDocIds.has(data.productId) || deletedProductDataIds.has(data.productId))) ||
+            (data.product_id && (deletedProductDocIds.has(data.product_id) || deletedProductDataIds.has(data.product_id)))
+          );
+        });
+        deletedTransactionsCount = driveTxDocs.length;
+
+        // 3. Identify and delete Drive returns only
+        const retSnap = await getDocs(collection(firestore, 'users', uid, 'returns')).catch(() => ({ docs: [] } as any));
+        const driveRetDocs = retSnap.docs.filter((d: any) => {
+          const data = d.data() || {};
+          const src = String(data.source || '').toUpperCase();
+          const impSrc = String(data.importSource || '').toLowerCase();
+          return (
+            src === 'GOOGLE_DRIVE' ||
+            src === 'DRIVE' ||
+            impSrc === 'drive' ||
+            d.id.startsWith('ret_drive_') ||
+            Boolean(data.driveFileId) ||
+            deletedProductDocIds.has(data.productId)
+          );
+        });
+        deletedReturnsCount = driveRetDocs.length;
+
+        // 4. Clean Drive-specific subcollections: drive_products, google_drive_files, drive_sync_history, drive_files, drive_mappings
+        const driveCols = ['drive_products', 'google_drive_files', 'sync_history', 'drive_sync_history', 'drive_files', 'drive_mappings'];
+        const driveSubsnaps = await Promise.all(
+          driveCols.map((col) => getDocs(collection(firestore, 'users', uid, col)).catch(() => ({ docs: [] } as any)))
+        );
+
+        const allDocsToDelete = [
+          ...driveProductDocs,
+          ...driveTxDocs,
+          ...driveRetDocs,
+          ...driveSubsnaps.flatMap((s: any) => s.docs),
+        ];
+
+        const CHUNK_SIZE = 400;
+        for (let i = 0; i < allDocsToDelete.length; i += CHUNK_SIZE) {
+          const batch = writeBatch(firestore);
+          allDocsToDelete.slice(i, i + CHUNK_SIZE).forEach((docSnap: any) => batch.delete(docSnap.ref));
+          await batch.commit().catch(console.warn);
+        }
+
+        // 5. Recalculate remaining analytics summary (preserving Shopify & CSV data)
+        const remainingTxDocs = txSnap.docs.filter((d: any) => !driveTxDocs.some((dd: any) => dd.id === d.id));
+        const remainingProdDocs = productsSnap.docs.filter((d: any) => !driveProductDocs.some((dp: any) => dp.id === d.id));
+        const sumRef = doc(firestore, 'users', uid, 'analytics', 'summary');
+
+        if (remainingTxDocs.length === 0 || remainingProdDocs.length === 0) {
+          await setDoc(sumRef, DEFAULT_ANALYTICS_SUMMARY).catch(console.warn);
+          await deleteDoc(doc(firestore, 'users', uid, 'analytics', 'ai_brief')).catch(() => {});
+        } else {
+          const remProds = remainingProdDocs.map((d: any) => ({ id: d.id, ...d.data() }));
+          const remTxs = remainingTxDocs.map((d: any) => ({ id: d.id, ...d.data() }));
+          await recalculateAndSaveAnalyticsSummary(firestore, uid, {
+            products: remProds,
+            transactions: remTxs,
+            suppliers,
+            orders,
+            returns,
+          }).catch(console.warn);
+        }
+      }
+
+      // 6. Delete Google Drive connection document
+      const docRef = doc(firestore, 'users', uid, 'integrations', 'google-drive');
       await deleteDoc(docRef).catch(() => {});
-      const docRefUnderscore = doc(firestore, 'users', user.uid, 'integrations', 'google_drive');
+      const docRefUnderscore = doc(firestore, 'users', uid, 'integrations', 'google_drive');
       await deleteDoc(docRefUnderscore).catch(() => {});
       setDriveConnection(null);
 
+      // 7. Clean up ONLY Google Drive localStorage keys
       if (typeof window !== 'undefined') {
+        const driveKeys = Object.keys(localStorage).filter(
+          (k) => k.startsWith('analyzeup_drive_') || k.includes('drive_sync') || k.includes('drive_mapping')
+        );
+        driveKeys.forEach((k) => localStorage.removeItem(k));
+
         window.dispatchEvent(new CustomEvent('analyzeup_drive_synced', { detail: { count: 0, reset: true } }));
         window.dispatchEvent(new CustomEvent('analyzeup_integrations_reset'));
       }
 
+      const itemsRemoved =
+        deletedProductsCount > 0 || deletedTransactionsCount > 0 || deletedReturnsCount > 0
+          ? ` Removed ${deletedProductsCount} products, ${deletedTransactionsCount} transactions, and ${deletedReturnsCount} returns.`
+          : '';
+
       toast({
-        title: 'Google Drive Disconnected',
-        description: 'Successfully revoked credentials from AnalyzeUp workspace.',
+        title: 'Google Drive Disconnected & Purged 🗑️',
+        description: `Successfully revoked credentials and removed Drive imported data.${itemsRemoved}`,
       });
-    } catch (e) {
-      console.error('Disconnection error:', e);
+
+      return {
+        success: true,
+        deletedProducts: deletedProductsCount,
+        deletedTransactions: deletedTransactionsCount,
+        deletedReturns: deletedReturnsCount,
+      };
+    } catch (e: any) {
+      console.error('Google Drive disconnection error:', e);
       const contextualError = new FirestorePermissionError({
         operation: 'delete',
         path: `users/${user.uid}/integrations/google-drive`,
@@ -2952,10 +3083,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       toast({
         variant: 'destructive',
         title: 'Disconnection Failed',
-        description: 'Failed to delete connection document.',
+        description: e?.message || 'Failed to delete connection document.',
       });
+      return { success: false, deletedProducts: 0, deletedTransactions: 0, deletedReturns: 0 };
     }
-  }, [user, firestore, toast]);
+  }, [user, firestore, suppliers, orders, returns, toast]);
 
   const recordSyncSuccess = useCallback(async (fileId: string, fileData: Record<string, any>, historyData: Record<string, any>) => {
     if (!user || !firestore) return;
@@ -3732,16 +3864,120 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     let deletedTransactionsCount = 0;
     let deletedReturnsCount = 0;
 
-    // 1. If purgeData is requested, execute a full, complete workspace purge so no residual data remains
+    // 1. If purgeData is requested, selectively purge ONLY Shopify records and preserve Google Drive & CSV
     if (purgeData) {
-      deletedProductsCount = products.length;
-      deletedTransactionsCount = transactions.length;
-      deletedReturnsCount = returns.length;
-
       try {
-        await clearAllData({ silent: true });
+        // 1a. Identify and delete Shopify products only
+        const productsSnap = await getDocs(collection(firestore, 'users', uid, 'products')).catch(() => ({ docs: [] } as any));
+        const shopifyProductDocs = productsSnap.docs.filter((d: any) => {
+          const data = d.data() || {};
+          return (
+            data.source?.toUpperCase() === 'SHOPIFY' ||
+            data.importSource?.toLowerCase() === 'shopify' ||
+            d.id.startsWith('shopify_') ||
+            d.id.includes('shopify') ||
+            (typeof data.id === 'string' && (data.id.startsWith('shopify_') || data.id.includes('shopify'))) ||
+            Boolean(data.shopifyProductId) ||
+            Boolean(data.shopifyVariantId) ||
+            (typeof data.sku === 'string' && data.sku.toUpperCase().startsWith('SHOPIFY-')) ||
+            (typeof data.supplier === 'string' && data.supplier.toLowerCase().includes('shopify'))
+          );
+        });
+
+        deletedProductsCount = shopifyProductDocs.length;
+        const deletedProductDocIds = new Set<string>(shopifyProductDocs.map((d: any) => d.id));
+        const deletedProductDataIds = new Set<string>(shopifyProductDocs.map((d: any) => d.data()?.id).filter(Boolean));
+        const deletedProductSkus = new Set<string>(shopifyProductDocs.map((d: any) => d.data()?.sku?.toUpperCase()).filter(Boolean));
+        const deletedProductNames = new Set<string>(shopifyProductDocs.map((d: any) => d.data()?.name?.toLowerCase()).filter(Boolean));
+        const deletedShopifyIds = new Set<string>(shopifyProductDocs.map((d: any) => String(d.data()?.shopifyProductId || '')).filter(Boolean));
+
+        // 1b. Identify and delete Shopify transactions only
+        const txSnap = await getDocs(collection(firestore, 'users', uid, 'transactions')).catch(() => ({ docs: [] } as any));
+        const shopifyTxDocs = txSnap.docs.filter((d: any) => {
+          const data = d.data() || {};
+          const skuUpper = typeof data.sku === 'string' ? data.sku.toUpperCase() : '';
+          const nameLower = typeof data.productName === 'string' ? data.productName.toLowerCase() : '';
+          const isSourceShopify = data.source?.toUpperCase() === 'SHOPIFY' || data.importSource?.toLowerCase() === 'shopify';
+          const isDocShopify = d.id.startsWith('tx_shopify_') || d.id.includes('shopify') || d.id.startsWith('tx_refund_');
+          const isDataShopify = typeof data.id === 'string' && (data.id.startsWith('tx_shopify_') || data.id.includes('shopify'));
+          const isPaymentShopify = typeof data.paymentMethod === 'string' && data.paymentMethod.toLowerCase().includes('shopify');
+          const hasShopifyOrderId = Boolean(data.shopifyOrderId || data.shopifyTransactionId);
+          const matchesProdId =
+            (data.productId && (deletedProductDocIds.has(data.productId) || deletedProductDataIds.has(data.productId) || deletedShopifyIds.has(String(data.productId)))) ||
+            (data.product_id && (deletedProductDocIds.has(data.product_id) || deletedProductDataIds.has(data.product_id) || deletedShopifyIds.has(String(data.product_id))));
+          const matchesSku = skuUpper && deletedProductSkus.has(skuUpper);
+          const matchesName = nameLower && deletedProductNames.has(nameLower);
+
+          return (
+            isSourceShopify ||
+            isDocShopify ||
+            isDataShopify ||
+            isPaymentShopify ||
+            hasShopifyOrderId ||
+            matchesProdId ||
+            matchesSku ||
+            matchesName
+          );
+        });
+        deletedTransactionsCount = shopifyTxDocs.length;
+
+        // 1c. Identify and delete Shopify returns only
+        const retSnap = await getDocs(collection(firestore, 'users', uid, 'returns')).catch(() => ({ docs: [] } as any));
+        const shopifyRetDocs = retSnap.docs.filter((d: any) => {
+          const data = d.data() || {};
+          return (
+            data.source?.toUpperCase() === 'SHOPIFY' ||
+            data.importSource?.toLowerCase() === 'shopify' ||
+            d.id.startsWith('ret_shopify_') ||
+            d.id.includes('shopify') ||
+            Boolean(data.shopifyReturnId) ||
+            deletedProductDocIds.has(data.productId) ||
+            (typeof data.notes === 'string' && data.notes.toLowerCase().includes('shopify'))
+          );
+        });
+        deletedReturnsCount = shopifyRetDocs.length;
+
+        // 1d. Clean dedicated Shopify subcollections (sales_orders, refunds, inventory, shopify_products)
+        const shopifyExtraCols = ['sales_orders', 'refunds', 'inventory', 'shopify_products'];
+        const extraSnaps = await Promise.all(
+          shopifyExtraCols.map(col => getDocs(collection(firestore, 'users', uid, col)).catch(() => ({ docs: [] } as any)))
+        );
+
+        const allShopifyDocsToDelete = [
+          ...shopifyProductDocs,
+          ...shopifyTxDocs,
+          ...shopifyRetDocs,
+          ...extraSnaps.flatMap((s: any) => s.docs),
+        ];
+
+        const CHUNK_SIZE = 400;
+        for (let i = 0; i < allShopifyDocsToDelete.length; i += CHUNK_SIZE) {
+          const batch = writeBatch(firestore);
+          allShopifyDocsToDelete.slice(i, i + CHUNK_SIZE).forEach((docSnap: any) => batch.delete(docSnap.ref));
+          await batch.commit().catch(console.warn);
+        }
+
+        // 1e. Recalculate remaining analytics summary (retaining Google Drive + CSV data)
+        const remainingTxDocs = txSnap.docs.filter((d: any) => !shopifyTxDocs.some((sd: any) => sd.id === d.id));
+        const remainingProdDocs = productsSnap.docs.filter((d: any) => !shopifyProductDocs.some((sp: any) => sp.id === d.id));
+        const sumRef = doc(firestore, 'users', uid, 'analytics', 'summary');
+
+        if (remainingTxDocs.length === 0 || remainingProdDocs.length === 0) {
+          await setDoc(sumRef, DEFAULT_ANALYTICS_SUMMARY).catch(console.warn);
+          await deleteDoc(doc(firestore, 'users', uid, 'analytics', 'ai_brief')).catch(() => {});
+        } else {
+          const remProds = remainingProdDocs.map((d: any) => ({ id: d.id, ...d.data() }));
+          const remTxs = remainingTxDocs.map((d: any) => ({ id: d.id, ...d.data() }));
+          await recalculateAndSaveAnalyticsSummary(firestore, uid, {
+            products: remProds,
+            transactions: remTxs,
+            suppliers,
+            orders,
+            returns,
+          }).catch(console.warn);
+        }
       } catch (err) {
-        console.error('[Shopify Disconnect] Full workspace purge error:', err);
+        console.error('[Shopify Disconnect] Selective data purge error:', err);
       }
     }
 
@@ -3835,7 +4071,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       deletedTransactions: deletedTransactionsCount,
       deletedReturns: deletedReturnsCount,
     };
-  }, [firestore, user, businessProfile, products, transactions, returns, clearAllData, updateBusinessProfile]);
+  }, [firestore, user, businessProfile, suppliers, orders, returns, updateBusinessProfile]);
 
   const businessBuddyCalibration = useMemo(() => {
     return getBusinessBuddyCalibration(businessProfile, products, transactions, returns);

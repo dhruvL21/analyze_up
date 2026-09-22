@@ -724,7 +724,9 @@ export function ShopifyConnectModal() {
                     <p>
                       You are about to disconnect{' '}
                       <span className="font-medium text-foreground">
-                        {businessProfile?.shopifyStoreUrl || storeUrl}
+                        {businessProfile?.shopifyStoreName
+                          ? `${businessProfile.shopifyStoreName} (${businessProfile?.shopifyStoreUrl || storeUrl})`
+                          : (businessProfile?.shopifyStoreUrl || storeUrl)}
                       </span>{' '}
                       from AnalyzeUp.
                     </p>
@@ -740,7 +742,7 @@ export function ShopifyConnectModal() {
                       </ul>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Data you imported manually (CSV / Excel) will{' '}
+                      Data from Google Drive or manual CSV/Excel imports will{' '}
                       <span className="text-foreground font-medium">not</span> be affected.
                     </p>
                   </AlertDialogDescription>
