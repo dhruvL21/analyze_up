@@ -70,11 +70,11 @@ export function QuickActionsBar() {
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           {/* Left scroll arrow */}
           <button
             onClick={() => scroll('left')}
-            className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg border border-border/50 bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground transition-all"
+            className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl border border-border/50 bg-secondary/70 hover:bg-secondary text-muted-foreground hover:text-foreground transition-all cursor-pointer shadow-xs active:scale-95"
             aria-label="Scroll left"
           >
             <ChevronLeft className="w-4 h-4" />
@@ -83,7 +83,7 @@ export function QuickActionsBar() {
           {/* Scrollable button row */}
           <div
             ref={scrollRef}
-            className="flex items-center gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden text-xs flex-1"
+            className="flex items-center gap-2.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden flex-1"
           >
             <Button
               size="sm"
@@ -91,19 +91,19 @@ export function QuickActionsBar() {
               onClick={() => loadDemoBusiness(businessProfile?.businessType || 'Retail')}
               disabled={isLoadingDemo}
               className={cn(
-                "rounded-xl text-xs gap-1.5 shrink-0 border-amber-500/40 text-amber-500 hover:bg-amber-500/10 font-bold h-9 px-3 transition-all shadow-sm",
+                "rounded-xl text-xs sm:text-sm gap-2 shrink-0 border-amber-500/40 text-amber-500 hover:bg-amber-500/10 font-bold h-10 px-3.5 sm:px-4 transition-all shadow-sm cursor-pointer",
                 isLoadingDemo && "opacity-90 shadow-amber-500/30 animate-pulse cursor-wait"
               )}
             >
               {isLoadingDemo ? (
                 <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500" />
-                  <span>Loading...</span>
+                  <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
+                  <span>Loading Demo...</span>
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                  <span>{hasDemoData ? 'Reload Demo' : 'Demo'}</span>
+                  <Sparkles className="w-4 h-4 text-amber-500" />
+                  <span>{hasDemoData ? 'Reload Demo' : 'Load Demo'}</span>
                 </>
               )}
             </Button>
@@ -112,40 +112,40 @@ export function QuickActionsBar() {
               size="sm"
               variant="outline"
               onClick={() => setIsAuditModalOpen(true)}
-              className="rounded-xl text-xs gap-1.5 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-bold h-9 px-3"
+              className="rounded-xl text-xs sm:text-sm gap-2 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-10 px-3.5 sm:px-4 cursor-pointer shadow-sm"
             >
-              <History className="w-3.5 h-3.5 text-primary" />
-              Audit Log
+              <History className="w-4 h-4 text-primary" />
+              <span>Audit Log</span>
             </Button>
 
             <Button
               size="sm"
               variant="outline"
               onClick={() => setIsAddProductOpen(true)}
-              className="rounded-xl text-xs gap-1.5 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-9 px-3"
+              className="rounded-xl text-xs sm:text-sm gap-2 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-10 px-3.5 sm:px-4 cursor-pointer shadow-sm"
             >
-              <PlusCircle className="w-3.5 h-3.5 text-primary" />
-              Add Product
+              <PlusCircle className="w-4 h-4 text-primary" />
+              <span>Add Product</span>
             </Button>
 
             <Button
               size="sm"
               variant="outline"
               onClick={() => setIsImportOpen(true)}
-              className="rounded-xl text-xs gap-1.5 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-9 px-3"
+              className="rounded-xl text-xs sm:text-sm gap-2 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-10 px-3.5 sm:px-4 cursor-pointer shadow-sm"
             >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-primary" />
-              Import
+              <FileSpreadsheet className="w-4 h-4 text-primary" />
+              <span>Import CSV / Excel</span>
             </Button>
 
             <Button
               size="sm"
               variant="outline"
               onClick={() => setShowShopifyModal(true)}
-              className="rounded-xl text-xs gap-1.5 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-9 px-3"
+              className="rounded-xl text-xs sm:text-sm gap-2 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-10 px-3.5 sm:px-4 cursor-pointer shadow-sm"
             >
-              <ShoppingBag className="w-3.5 h-3.5 text-primary" />
-              Shopify
+              <ShoppingBag className="w-4 h-4 text-primary" />
+              <span>Connect Shopify</span>
             </Button>
 
             {isRestockUnlocked && (
@@ -158,9 +158,9 @@ export function QuickActionsBar() {
                     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                   }
                 }}
-                className="rounded-xl text-xs gap-1.5 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-9 px-3"
+                className="rounded-xl text-xs sm:text-sm gap-2 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-10 px-3.5 sm:px-4 cursor-pointer shadow-sm"
               >
-                <AlertOctagon className="w-3.5 h-3.5 text-primary" />
+                <AlertOctagon className="w-4 h-4 text-primary" />
                 <span>Out of Stock{outOfStockCount > 0 ? ` (${outOfStockCount})` : ''}</span>
               </Button>
             )}
@@ -169,17 +169,17 @@ export function QuickActionsBar() {
               size="sm"
               variant="outline"
               onClick={() => setIsAddSupplierOpen(true)}
-              className="rounded-xl text-xs gap-1.5 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-9 px-3"
+              className="rounded-xl text-xs sm:text-sm gap-2 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-10 px-3.5 sm:px-4 cursor-pointer shadow-sm"
             >
-              <Truck className="w-3.5 h-3.5 text-primary" />
-              Supplier
+              <Truck className="w-4 h-4 text-primary" />
+              <span>Add Supplier</span>
             </Button>
           </div>
 
           {/* Right scroll arrow */}
           <button
             onClick={() => scroll('right')}
-            className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg border border-border/50 bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground transition-all"
+            className="shrink-0 w-8 h-8 flex items-center justify-center rounded-xl border border-border/50 bg-secondary/70 hover:bg-secondary text-muted-foreground hover:text-foreground transition-all cursor-pointer shadow-xs active:scale-95"
             aria-label="Scroll right"
           >
             <ChevronRight className="w-4 h-4" />
