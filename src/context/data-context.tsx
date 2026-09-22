@@ -2944,6 +2944,22 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         const productsSnap = await getDocs(collection(firestore, 'users', uid, 'products')).catch(() => ({ docs: [] } as any));
         const driveProductDocs = productsSnap.docs.filter((d: any) => {
           const data = d.data() || {};
+
+          // STRICT IMMUNITY GUARD: Never delete Shopify, CSV, or Manual products
+          const isProtectedShopifyOrCsv =
+            data.source?.toUpperCase() === 'SHOPIFY' ||
+            data.source?.toUpperCase() === 'CSV' ||
+            data.source?.toUpperCase() === 'MANUAL' ||
+            data.importSource?.toLowerCase() === 'shopify' ||
+            data.importSource?.toLowerCase() === 'csv' ||
+            data.importSource?.toLowerCase() === 'manual' ||
+            Boolean(data.shopifyProductId) ||
+            Boolean(data.shopifyVariantId) ||
+            d.id.startsWith('shopify_') ||
+            d.id.startsWith('csv_');
+
+          if (isProtectedShopifyOrCsv) return false;
+
           const src = String(data.source || '').toUpperCase();
           const impSrc = String(data.importSource || '').toLowerCase();
           return (
@@ -2966,6 +2982,24 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         const txSnap = await getDocs(collection(firestore, 'users', uid, 'transactions')).catch(() => ({ docs: [] } as any));
         const driveTxDocs = txSnap.docs.filter((d: any) => {
           const data = d.data() || {};
+
+          // STRICT IMMUNITY GUARD: Never delete Shopify, CSV, or Manual transactions
+          const isProtectedShopifyOrCsv =
+            data.source?.toUpperCase() === 'SHOPIFY' ||
+            data.source?.toUpperCase() === 'CSV' ||
+            data.source?.toUpperCase() === 'MANUAL' ||
+            data.importSource?.toLowerCase() === 'shopify' ||
+            data.importSource?.toLowerCase() === 'csv' ||
+            data.importSource?.toLowerCase() === 'manual' ||
+            Boolean(data.shopifyOrderId) ||
+            Boolean(data.shopifyTransactionId) ||
+            d.id.startsWith('tx_shopify_') ||
+            d.id.startsWith('shopify_') ||
+            d.id.startsWith('tx_csv_') ||
+            d.id.startsWith('csv_');
+
+          if (isProtectedShopifyOrCsv) return false;
+
           const src = String(data.source || '').toUpperCase();
           const impSrc = String(data.importSource || '').toLowerCase();
           return (
@@ -2985,6 +3019,20 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         const retSnap = await getDocs(collection(firestore, 'users', uid, 'returns')).catch(() => ({ docs: [] } as any));
         const driveRetDocs = retSnap.docs.filter((d: any) => {
           const data = d.data() || {};
+
+          // STRICT IMMUNITY GUARD: Never delete Shopify, CSV, or Manual returns
+          const isProtectedShopifyOrCsv =
+            data.source?.toUpperCase() === 'SHOPIFY' ||
+            data.source?.toUpperCase() === 'CSV' ||
+            data.source?.toUpperCase() === 'MANUAL' ||
+            data.importSource?.toLowerCase() === 'shopify' ||
+            data.importSource?.toLowerCase() === 'csv' ||
+            Boolean(data.shopifyReturnId) ||
+            d.id.startsWith('ret_shopify_') ||
+            d.id.startsWith('ret_csv_');
+
+          if (isProtectedShopifyOrCsv) return false;
+
           const src = String(data.source || '').toUpperCase();
           const impSrc = String(data.importSource || '').toLowerCase();
           return (
@@ -3871,12 +3919,27 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         const productsSnap = await getDocs(collection(firestore, 'users', uid, 'products')).catch(() => ({ docs: [] } as any));
         const shopifyProductDocs = productsSnap.docs.filter((d: any) => {
           const data = d.data() || {};
+
+          // STRICT IMMUNITY GUARD: Never delete Google Drive, CSV, or Manual products
+          const isProtectedDriveOrCsv =
+            data.source?.toUpperCase() === 'GOOGLE_DRIVE' ||
+            data.source?.toUpperCase() === 'CSV' ||
+            data.source?.toUpperCase() === 'MANUAL' ||
+            data.importSource?.toLowerCase() === 'drive' ||
+            data.importSource?.toLowerCase() === 'csv' ||
+            data.importSource?.toLowerCase() === 'manual' ||
+            Boolean(data.driveFileId) ||
+            Boolean(data.driveProductId) ||
+            d.id.startsWith('drive_') ||
+            d.id.startsWith('csv_');
+
+          if (isProtectedDriveOrCsv) return false;
+
           return (
             data.source?.toUpperCase() === 'SHOPIFY' ||
             data.importSource?.toLowerCase() === 'shopify' ||
             d.id.startsWith('shopify_') ||
-            d.id.includes('shopify') ||
-            (typeof data.id === 'string' && (data.id.startsWith('shopify_') || data.id.includes('shopify'))) ||
+            (typeof data.id === 'string' && data.id.startsWith('shopify_')) ||
             Boolean(data.shopifyProductId) ||
             Boolean(data.shopifyVariantId) ||
             (typeof data.sku === 'string' && data.sku.toUpperCase().startsWith('SHOPIFY-')) ||
@@ -3887,26 +3950,38 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         deletedProductsCount = shopifyProductDocs.length;
         const deletedProductDocIds = new Set<string>(shopifyProductDocs.map((d: any) => d.id));
         const deletedProductDataIds = new Set<string>(shopifyProductDocs.map((d: any) => d.data()?.id).filter(Boolean));
-        const deletedProductSkus = new Set<string>(shopifyProductDocs.map((d: any) => d.data()?.sku?.toUpperCase()).filter(Boolean));
-        const deletedProductNames = new Set<string>(shopifyProductDocs.map((d: any) => d.data()?.name?.toLowerCase()).filter(Boolean));
         const deletedShopifyIds = new Set<string>(shopifyProductDocs.map((d: any) => String(d.data()?.shopifyProductId || '')).filter(Boolean));
 
         // 1b. Identify and delete Shopify transactions only
         const txSnap = await getDocs(collection(firestore, 'users', uid, 'transactions')).catch(() => ({ docs: [] } as any));
         const shopifyTxDocs = txSnap.docs.filter((d: any) => {
           const data = d.data() || {};
-          const skuUpper = typeof data.sku === 'string' ? data.sku.toUpperCase() : '';
-          const nameLower = typeof data.productName === 'string' ? data.productName.toLowerCase() : '';
+
+          // STRICT IMMUNITY GUARD: Never delete Google Drive, CSV, or Manual transactions
+          const isProtectedDriveOrCsv =
+            data.source?.toUpperCase() === 'GOOGLE_DRIVE' ||
+            data.source?.toUpperCase() === 'CSV' ||
+            data.source?.toUpperCase() === 'MANUAL' ||
+            data.importSource?.toLowerCase() === 'drive' ||
+            data.importSource?.toLowerCase() === 'csv' ||
+            data.importSource?.toLowerCase() === 'manual' ||
+            Boolean(data.driveFileId) ||
+            (typeof data.notes === 'string' && data.notes.toLowerCase().includes('google drive')) ||
+            d.id.startsWith('tx_drive_') ||
+            d.id.startsWith('drive_') ||
+            d.id.startsWith('tx_csv_') ||
+            d.id.startsWith('csv_');
+
+          if (isProtectedDriveOrCsv) return false;
+
           const isSourceShopify = data.source?.toUpperCase() === 'SHOPIFY' || data.importSource?.toLowerCase() === 'shopify';
-          const isDocShopify = d.id.startsWith('tx_shopify_') || d.id.includes('shopify') || d.id.startsWith('tx_refund_');
-          const isDataShopify = typeof data.id === 'string' && (data.id.startsWith('tx_shopify_') || data.id.includes('shopify'));
+          const isDocShopify = d.id.startsWith('tx_shopify_') || (d.id.startsWith('tx_refund_') && Boolean(data.shopifyRefundId || data.shopifyOrderId));
+          const isDataShopify = typeof data.id === 'string' && data.id.startsWith('tx_shopify_');
           const isPaymentShopify = typeof data.paymentMethod === 'string' && data.paymentMethod.toLowerCase().includes('shopify');
           const hasShopifyOrderId = Boolean(data.shopifyOrderId || data.shopifyTransactionId);
           const matchesProdId =
             (data.productId && (deletedProductDocIds.has(data.productId) || deletedProductDataIds.has(data.productId) || deletedShopifyIds.has(String(data.productId)))) ||
             (data.product_id && (deletedProductDocIds.has(data.product_id) || deletedProductDataIds.has(data.product_id) || deletedShopifyIds.has(String(data.product_id))));
-          const matchesSku = skuUpper && deletedProductSkus.has(skuUpper);
-          const matchesName = nameLower && deletedProductNames.has(nameLower);
 
           return (
             isSourceShopify ||
@@ -3914,9 +3989,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             isDataShopify ||
             isPaymentShopify ||
             hasShopifyOrderId ||
-            matchesProdId ||
-            matchesSku ||
-            matchesName
+            matchesProdId
           );
         });
         deletedTransactionsCount = shopifyTxDocs.length;
@@ -3925,11 +3998,24 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         const retSnap = await getDocs(collection(firestore, 'users', uid, 'returns')).catch(() => ({ docs: [] } as any));
         const shopifyRetDocs = retSnap.docs.filter((d: any) => {
           const data = d.data() || {};
+
+          // STRICT IMMUNITY GUARD: Never delete Google Drive, CSV, or Manual returns
+          const isProtectedDriveOrCsv =
+            data.source?.toUpperCase() === 'GOOGLE_DRIVE' ||
+            data.source?.toUpperCase() === 'CSV' ||
+            data.source?.toUpperCase() === 'MANUAL' ||
+            data.importSource?.toLowerCase() === 'drive' ||
+            data.importSource?.toLowerCase() === 'csv' ||
+            Boolean(data.driveFileId) ||
+            d.id.startsWith('ret_drive_') ||
+            d.id.startsWith('ret_csv_');
+
+          if (isProtectedDriveOrCsv) return false;
+
           return (
             data.source?.toUpperCase() === 'SHOPIFY' ||
             data.importSource?.toLowerCase() === 'shopify' ||
             d.id.startsWith('ret_shopify_') ||
-            d.id.includes('shopify') ||
             Boolean(data.shopifyReturnId) ||
             deletedProductDocIds.has(data.productId) ||
             (typeof data.notes === 'string' && data.notes.toLowerCase().includes('shopify'))
@@ -3937,16 +4023,25 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         });
         deletedReturnsCount = shopifyRetDocs.length;
 
-        // 1d. Clean dedicated Shopify subcollections (sales_orders, refunds, inventory, shopify_products)
-        const shopifyExtraCols = ['sales_orders', 'refunds', 'inventory', 'shopify_products'];
+        // 1d. Clean dedicated Shopify subcollections ONLY (sales_orders, shopify_products)
+        // DO NOT wipe generic inventory or refunds collections
+        const shopifyExtraCols = ['sales_orders', 'shopify_products'];
         const extraSnaps = await Promise.all(
           shopifyExtraCols.map(col => getDocs(collection(firestore, 'users', uid, col)).catch(() => ({ docs: [] } as any)))
         );
+
+        // Also clean only shopify-tagged docs from inventory subcollection if any
+        const invSnap = await getDocs(collection(firestore, 'users', uid, 'inventory')).catch(() => ({ docs: [] } as any));
+        const shopifyInvDocs = invSnap.docs.filter((d: any) => {
+          const data = d.data() || {};
+          return data.source?.toUpperCase() === 'SHOPIFY' || data.importSource?.toLowerCase() === 'shopify' || d.id.startsWith('shopify_') || Boolean(data.shopifyProductId);
+        });
 
         const allShopifyDocsToDelete = [
           ...shopifyProductDocs,
           ...shopifyTxDocs,
           ...shopifyRetDocs,
+          ...shopifyInvDocs,
           ...extraSnaps.flatMap((s: any) => s.docs),
         ];
 

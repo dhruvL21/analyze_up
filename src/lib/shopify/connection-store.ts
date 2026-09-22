@@ -550,9 +550,10 @@ async function purgeTenantShopifyData(db: any, tenantId: string, shop?: string |
   try {
     const shopHandle = shop ? shop.replace('.myshopify.com', '').toLowerCase().trim() : '';
 
-    const collectionsToClean = ['sales_orders', 'refunds', 'inventory'];
+    // 1. Clean ONLY Shopify-specific collections (do NOT wipe generic inventory or refunds)
+    const collectionsToClean = ['sales_orders', 'shopify_products'];
     for (const col of collectionsToClean) {
-      const snap = await db.collection('users').doc(tenantId).collection(col).get();
+      const snap = await db.collection('users').doc(tenantId).collection(col).get().catch(() => ({ empty: true, docs: [] }));
       if (!snap.empty) {
         const batch = db.batch();
         snap.docs.forEach((d: any) => batch.delete(d.ref));
@@ -560,11 +561,31 @@ async function purgeTenantShopifyData(db: any, tenantId: string, shop?: string |
       }
     }
 
-    // 1. Products - track all deleted identifiers for correlating transactions
+    // 1b. Selectively clean only Shopify docs from inventory collection if any exist
+    try {
+      const invSnap = await db.collection('users').doc(tenantId).collection('inventory').get().catch(() => ({ empty: true, docs: [] }));
+      if (!invSnap.empty) {
+        const invBatch = db.batch();
+        let hasInv = false;
+        invSnap.docs.forEach((d: any) => {
+          const data = d.data() || {};
+          const isShopify =
+            data.source?.toUpperCase() === 'SHOPIFY' ||
+            data.importSource?.toLowerCase() === 'shopify' ||
+            d.id.startsWith('shopify_') ||
+            Boolean(data.shopifyProductId);
+          if (isShopify) {
+            invBatch.delete(d.ref);
+            hasInv = true;
+          }
+        });
+        if (hasInv) await invBatch.commit().catch(console.warn);
+      }
+    } catch {}
+
+    // 2. Products - track deleted Shopify identifiers
     const deletedProductDocIds = new Set<string>();
     const deletedProductDataIds = new Set<string>();
-    const deletedProductSkus = new Set<string>();
-    const deletedProductNames = new Set<string>();
     const deletedShopifyIds = new Set<string>();
 
     const prodSnap = await db.collection('users').doc(tenantId).collection('products').get();
@@ -573,11 +594,27 @@ async function purgeTenantShopifyData(db: any, tenantId: string, shop?: string |
       let hasShopifyProds = false;
       prodSnap.docs.forEach((d: any) => {
         const data = d.data() || {};
+
+        // STRICT IMMUNITY GUARD: Never delete Google Drive, CSV, or Manual products
+        const isProtectedDriveOrCsv =
+          data.source?.toUpperCase() === 'GOOGLE_DRIVE' ||
+          data.source?.toUpperCase() === 'CSV' ||
+          data.source?.toUpperCase() === 'MANUAL' ||
+          data.importSource?.toLowerCase() === 'drive' ||
+          data.importSource?.toLowerCase() === 'csv' ||
+          data.importSource?.toLowerCase() === 'manual' ||
+          Boolean(data.driveFileId) ||
+          Boolean(data.driveProductId) ||
+          d.id.startsWith('drive_') ||
+          d.id.startsWith('csv_');
+
+        if (isProtectedDriveOrCsv) return;
+
         const isShopify =
           data.source?.toUpperCase() === 'SHOPIFY' ||
+          data.importSource?.toLowerCase() === 'shopify' ||
           d.id.startsWith('shopify_') ||
-          d.id.includes('shopify') ||
-          (typeof data.id === 'string' && (data.id.startsWith('shopify_') || data.id.includes('shopify'))) ||
+          (typeof data.id === 'string' && data.id.startsWith('shopify_')) ||
           Boolean(data.shopifyProductId) ||
           Boolean(data.shopifyVariantId) ||
           (typeof data.sku === 'string' && data.sku.toUpperCase().startsWith('SHOPIFY-')) ||
@@ -587,8 +624,6 @@ async function purgeTenantShopifyData(db: any, tenantId: string, shop?: string |
         if (isShopify) {
           deletedProductDocIds.add(d.id);
           if (data.id) deletedProductDataIds.add(data.id);
-          if (data.sku) deletedProductSkus.add(String(data.sku).toUpperCase());
-          if (data.name) deletedProductNames.add(String(data.name).toLowerCase());
           if (data.shopifyProductId) deletedShopifyIds.add(String(data.shopifyProductId));
           if (data.shopifyVariantId) deletedShopifyIds.add(String(data.shopifyVariantId));
 
@@ -599,7 +634,7 @@ async function purgeTenantShopifyData(db: any, tenantId: string, shop?: string |
       if (hasShopifyProds) await batch.commit().catch(console.warn);
     }
 
-    // 2. Transactions - correlate by source, doc ID, data ID, payment method, order ID, product ID, SKU, product name, shop handle
+    // 3. Transactions - correlate by explicit Shopify attributes only (NEVER touch Google Drive or CSV transactions)
     const txSnap = await db.collection('users').doc(tenantId).collection('transactions').get();
     const totalTxCount = txSnap.docs ? txSnap.docs.length : (txSnap.size || 0);
     let remainingTxCount = totalTxCount;
@@ -608,18 +643,32 @@ async function purgeTenantShopifyData(db: any, tenantId: string, shop?: string |
       const batch = db.batch();
       txSnap.docs.forEach((d: any) => {
         const data = d.data() || {};
-        const skuUpper = typeof data.sku === 'string' ? data.sku.toUpperCase() : '';
-        const nameLower = typeof data.productName === 'string' ? data.productName.toLowerCase() : '';
-        const isSourceShopify = data.source?.toUpperCase() === 'SHOPIFY';
-        const isDocShopify = d.id.startsWith('tx_shopify_') || d.id.includes('shopify') || d.id.startsWith('tx_refund_');
-        const isDataShopify = typeof data.id === 'string' && (data.id.startsWith('tx_shopify_') || data.id.includes('shopify'));
+
+        // STRICT IMMUNITY GUARD: Never delete Google Drive, CSV, or Manual transactions
+        const isProtectedDriveOrCsv =
+          data.source?.toUpperCase() === 'GOOGLE_DRIVE' ||
+          data.source?.toUpperCase() === 'CSV' ||
+          data.source?.toUpperCase() === 'MANUAL' ||
+          data.importSource?.toLowerCase() === 'drive' ||
+          data.importSource?.toLowerCase() === 'csv' ||
+          data.importSource?.toLowerCase() === 'manual' ||
+          Boolean(data.driveFileId) ||
+          (typeof data.notes === 'string' && data.notes.toLowerCase().includes('google drive')) ||
+          d.id.startsWith('tx_drive_') ||
+          d.id.startsWith('drive_') ||
+          d.id.startsWith('tx_csv_') ||
+          d.id.startsWith('csv_');
+
+        if (isProtectedDriveOrCsv) return;
+
+        const isSourceShopify = data.source?.toUpperCase() === 'SHOPIFY' || data.importSource?.toLowerCase() === 'shopify';
+        const isDocShopify = d.id.startsWith('tx_shopify_') || (d.id.startsWith('tx_refund_') && Boolean(data.shopifyRefundId || data.shopifyOrderId));
+        const isDataShopify = typeof data.id === 'string' && data.id.startsWith('tx_shopify_');
         const isPaymentShopify = typeof data.paymentMethod === 'string' && data.paymentMethod.toLowerCase().includes('shopify');
         const hasShopifyOrderId = Boolean(data.shopifyOrderId || data.shopifyTransactionId);
         const matchesProdId =
           (data.productId && (deletedProductDocIds.has(data.productId) || deletedProductDataIds.has(data.productId) || deletedShopifyIds.has(String(data.productId)))) ||
           (data.product_id && (deletedProductDocIds.has(data.product_id) || deletedProductDataIds.has(data.product_id) || deletedShopifyIds.has(String(data.product_id))));
-        const matchesSku = skuUpper && deletedProductSkus.has(skuUpper);
-        const matchesName = nameLower && deletedProductNames.has(nameLower);
         const hasShopifyOrderAttrs = Boolean(
           data.customAttributes?.['Financial Status'] ||
           data.rawAttributes?.['Financial Status'] ||
@@ -637,8 +686,6 @@ async function purgeTenantShopifyData(db: any, tenantId: string, shop?: string |
           isPaymentShopify ||
           hasShopifyOrderId ||
           matchesProdId ||
-          matchesSku ||
-          matchesName ||
           hasShopifyOrderAttrs ||
           matchesShopHandle
         ) {

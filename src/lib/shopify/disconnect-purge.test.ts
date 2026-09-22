@@ -183,6 +183,7 @@ describe('Shopify Disconnect & Data Purge Suite', () => {
     mockAdminStore.set(`users/${tenantId}/products/drive_prod_1`, {
       id: 'drive_prod_1',
       name: 'Google Drive Spreadsheet Product',
+      sku: 'DRIVE-SKU-1',
       source: 'GOOGLE_DRIVE',
       importSource: 'drive',
       price: 1499,
@@ -190,10 +191,21 @@ describe('Shopify Disconnect & Data Purge Suite', () => {
     mockAdminStore.set(`users/${tenantId}/transactions/tx_drive_1`, {
       id: 'tx_drive_1',
       productName: 'Google Drive Spreadsheet Product',
+      sku: 'DRIVE-SKU-1',
       source: 'GOOGLE_DRIVE',
       importSource: 'drive',
     });
+    // Test a Drive transaction that shares a common name/SKU with Shopify's product
+    mockAdminStore.set(`users/${tenantId}/transactions/tx_drive_same_name`, {
+      id: 'tx_drive_same_name',
+      productName: 'Shopify Wireless Headphones',
+      sku: 'SHOPIFY-HEADPHONES-1',
+      source: 'GOOGLE_DRIVE',
+      importSource: 'drive',
+      notes: 'Imported from Google Drive sales sheet',
+    });
     mockAdminStore.set(`users/${tenantId}/integrations/google-drive`, {
+      connectionStatus: 'Connected',
       email: 'merchant@gmail.com',
       selectedFolderId: 'folder_123',
     });
@@ -222,6 +234,7 @@ describe('Shopify Disconnect & Data Purge Suite', () => {
     expect(mockAdminStore.has(`users/${tenantId}/transactions/tx_manual_1`)).toBe(true);
     expect(mockAdminStore.has(`users/${tenantId}/products/drive_prod_1`)).toBe(true);
     expect(mockAdminStore.has(`users/${tenantId}/transactions/tx_drive_1`)).toBe(true);
+    expect(mockAdminStore.has(`users/${tenantId}/transactions/tx_drive_same_name`)).toBe(true);
     expect(mockAdminStore.has(`users/${tenantId}/integrations/google-drive`)).toBe(true);
     expect(mockAdminStore.has(`users/${tenantId}/google_drive_files/file_1`)).toBe(true);
   });

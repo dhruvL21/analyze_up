@@ -988,6 +988,8 @@ export function ImportDialog({ open, onOpenChange, presetFile, onImportComplete 
                 const financialStatus = isPaid ? 'PAID' : 'PENDING';
                 const paymentReceived = isPaid;
 
+                const isDrive = Boolean(presetFile || (rawRow as any)?.driveFileId);
+
                 batch.set(
                   txRef,
                   serializePlainData({
@@ -1027,6 +1029,9 @@ export function ImportDialog({ open, onOpenChange, presetFile, onImportComplete 
                     paymentReceived,
                     userId: user.uid,
                     tenantId: user.uid,
+                    source: isDrive ? 'GOOGLE_DRIVE' : 'CSV',
+                    importSource: isDrive ? 'drive' : 'csv',
+                    ...(isDrive ? { driveFileId: (presetFile?.driveFileId || (rawRow as any)?.driveFileId || '') } : {}),
                     customAttributes: rawRow,
                     rawAttributes: rawRow,
                     createdAt: nowIso,
@@ -1048,7 +1053,6 @@ export function ImportDialog({ open, onOpenChange, presetFile, onImportComplete 
                     ? rawStockVal
                     : (existingProduct ? existingProduct.stock : 0);
 
-                  const isDrive = Boolean(presetFile || (rawRow as any)?.driveFileId);
                   const sourceSubcol = isDrive ? 'drive_products' : 'csv_products';
                   const sourceName = isDrive ? 'GOOGLE_DRIVE' : 'CSV';
                   const importSourceName = isDrive ? 'drive' : 'csv';

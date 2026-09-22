@@ -1092,6 +1092,9 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
             paymentMethod: r.parsed.paymentMode || 'UPI',
             notes: r.parsed.remarks || 'Synced from Google Drive',
             orderNumber: orderNo,
+            source: 'GOOGLE_DRIVE',
+            importSource: 'drive',
+            driveFileId: fileId,
           });
         });
 
