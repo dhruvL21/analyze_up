@@ -26,6 +26,7 @@ export function QuickActionsBar() {
   const {
     setShowShopifyModal,
     products = [],
+    transactions = [],
     dataReadiness,
     capabilities,
     businessBuddyCalibration,
@@ -33,7 +34,32 @@ export function QuickActionsBar() {
     hasDemoData,
     isLoadingDemo,
     businessProfile,
+    driveConnection,
   } = useData();
+
+  // Determine whether any real business data integration or catalog is connected/imported
+  const isShopifyConnected = Boolean(
+    businessProfile?.shopifyConnected &&
+    businessProfile?.shopifyStatus !== 'Disconnected' &&
+    businessProfile?.shopifyStatus !== 'Uninstalled' &&
+    businessProfile?.shopifyStoreUrl
+  );
+
+  const isDriveConnected = Boolean(
+    driveConnection &&
+    (driveConnection.connectionStatus === 'Connected' || driveConnection.isConnected === true)
+  );
+
+  const hasRealDataImported = Boolean(
+    businessProfile?.firstImportedAt ||
+    products.some((p: any) => p && !p.isDemo && p.source !== 'DEMO') ||
+    transactions.some((t: any) => t && !t.isDemo && t.source !== 'DEMO') ||
+    businessProfile?.inventorySetupMethod === 'csv' ||
+    businessProfile?.inventorySetupMethod === 'shopify'
+  );
+
+  // Hide the "Load Demo" action button once Shopify, Google Drive, or a CSV file is connected / imported
+  const shouldHideLoadDemo = isShopifyConnected || isDriveConnected || hasRealDataImported;
 
   const isRestockUnlocked = Boolean(
     businessBuddyCalibration?.isOverridden ||
@@ -85,28 +111,30 @@ export function QuickActionsBar() {
             ref={scrollRef}
             className="flex items-center gap-2.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden flex-1"
           >
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => loadDemoBusiness(businessProfile?.businessType || 'Retail')}
-              disabled={isLoadingDemo}
-              className={cn(
-                "rounded-xl text-xs sm:text-sm gap-2 shrink-0 border-amber-500/40 text-amber-500 hover:bg-amber-500/10 font-bold h-10 px-3.5 sm:px-4 transition-all shadow-sm cursor-pointer",
-                isLoadingDemo && "opacity-90 shadow-amber-500/30 animate-pulse cursor-wait"
-              )}
-            >
-              {isLoadingDemo ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
-                  <span>Loading Demo...</span>
-                </>
-              ) : (
-                <>
-                  <Sparkles className="w-4 h-4 text-amber-500" />
-                  <span>{hasDemoData ? 'Reload Demo' : 'Load Demo'}</span>
-                </>
-              )}
-            </Button>
+            {!shouldHideLoadDemo && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => loadDemoBusiness(businessProfile?.businessType || 'Retail')}
+                disabled={isLoadingDemo}
+                className={cn(
+                  "rounded-xl text-xs sm:text-sm gap-2 shrink-0 border-amber-500/40 text-amber-500 hover:bg-amber-500/10 font-bold h-10 px-3.5 sm:px-4 transition-all shadow-sm cursor-pointer",
+                  isLoadingDemo && "opacity-90 shadow-amber-500/30 animate-pulse cursor-wait"
+                )}
+              >
+                {isLoadingDemo ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
+                    <span>Loading Demo...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    <span>{hasDemoData ? 'Reload Demo' : 'Load Demo'}</span>
+                  </>
+                )}
+              </Button>
+            )}
 
             <Button
               size="sm"
