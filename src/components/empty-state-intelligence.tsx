@@ -6,10 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useData } from '@/context/data-context';
 import { useRouter } from 'next/navigation';
-import { Sparkles, FileSpreadsheet, ShoppingBag, PlusCircle, Zap, ArrowRight } from 'lucide-react';
+import { Sparkles, FileSpreadsheet, ShoppingBag, PlusCircle, Zap, ArrowRight, Loader2 } from 'lucide-react';
 
 export function EmptyStateIntelligence() {
-  const { loadDemoBusiness, setShowShopifyModal, businessProfile } = useData();
+  const { loadDemoBusiness, setShowShopifyModal, businessProfile, isLoadingDemo } = useData();
   const router = useRouter();
 
   return (
@@ -55,10 +55,20 @@ export function EmptyStateIntelligence() {
             </div>
             <Button
               onClick={() => loadDemoBusiness(businessProfile?.businessType || 'Fashion')}
+              disabled={isLoadingDemo}
               className="w-full rounded-xl text-xs gap-1.5 bg-primary text-primary-foreground hover:brightness-110 shadow-md font-semibold h-10 mt-auto"
             >
-              Load Demo Business
-              <ArrowRight className="w-3.5 h-3.5" />
+              {isLoadingDemo ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  Uploading Demo Business...
+                </>
+              ) : (
+                <>
+                  Load Demo Business
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </>
+              )}
             </Button>
           </div>
 

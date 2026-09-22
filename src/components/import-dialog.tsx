@@ -113,6 +113,8 @@ export function ImportDialog({ open, onOpenChange, presetFile, onImportComplete 
     addReturn,
     addOrder,
     refreshAnalytics,
+    purgeDemoDataOnly,
+    hasDemoData,
   } = useData();
   const { toast } = useToast();
 
@@ -850,6 +852,12 @@ export function ImportDialog({ open, onOpenChange, presetFile, onImportComplete 
       setJobFailedCount(0);
       setJobProgress(0);
       setCurrentStepLabel(`Starting Batch Pipeline (1 of ${totalBatches})...`);
+
+      // Automatically purge sample demo data before importing real CSV/Excel records
+      if (hasDemoData) {
+        setCurrentStepLabel('Removing sample demo data to load your real business catalog...');
+        await purgeDemoDataOnly();
+      }
 
       let currentJobId = `job_${Date.now()}`;
       if (firestore && user) {

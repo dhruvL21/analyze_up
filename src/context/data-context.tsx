@@ -65,7 +65,15 @@ interface DataContextProps {
   updateBusinessProfile: (profile: Partial<BusinessProfile>, silent?: boolean) => Promise<void>;
   loadDemoBusiness: (businessType?: BusinessType) => Promise<void>;
   clearDemoBusiness: () => Promise<void>;
+  purgeDemoDataOnly: () => Promise<void>;
   hasDemoData: boolean;
+  isLoadingDemo: boolean;
+  demoProgress: {
+    stage: number;
+    stepName: string;
+    percent: number;
+    details?: string;
+  };
   showOnboardingWizard: boolean;
   setShowOnboardingWizard: (show: boolean) => void;
   showWelcomeModal: boolean;
@@ -565,6 +573,18 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(false);
   const [showShopifyModal, setShowShopifyModal] = useState<boolean>(false);
   const [hasDemoData, setHasDemoData] = useState<boolean>(false);
+  const [isLoadingDemo, setIsLoadingDemo] = useState<boolean>(false);
+  const [demoProgress, setDemoProgress] = useState<{
+    stage: number;
+    stepName: string;
+    percent: number;
+    details?: string;
+  }>({
+    stage: 0,
+    stepName: '',
+    percent: 0,
+    details: '',
+  });
 
   // Load business profile from localStorage & Cloud Firestore
   useEffect(() => {
@@ -837,13 +857,25 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   const loadDemoBusiness = useCallback(async (customType?: BusinessType) => {
     if (!user || !firestore) return;
-    toast({ title: 'Generating Demo Business...', description: 'Loading 200+ products, 15+ suppliers & 500+ transactions.' });
+    setIsLoadingDemo(true);
+    setDemoProgress({
+      stage: 1,
+      stepName: 'Initializing Business Engine...',
+      percent: 12,
+      details: 'Generating tailored catalog, suppliers & historical sales velocity...',
+    });
 
     const demo = generateDemoBusinessData();
     const uid = user.uid;
 
     try {
-      // Chunk writing into batch commitments
+      // Step 1: Products
+      setDemoProgress({
+        stage: 1,
+        stepName: 'Populating 200+ Products & SKUs...',
+        percent: 25,
+        details: `Injecting ${demo.products.length} products with stock levels, categories & pricing models.`,
+      });
       const pBatches = [];
       for (let i = 0; i < demo.products.length; i += 450) {
         const batch = writeBatch(firestore);
@@ -856,6 +888,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       }
       await Promise.all(pBatches);
 
+      // Step 2: Suppliers & Categories
+      setDemoProgress({
+        stage: 2,
+        stepName: 'Connecting 15+ Verified Suppliers...',
+        percent: 50,
+        details: `Configuring ${demo.suppliers.length} suppliers and ${demo.categories.length} category classification trees.`,
+      });
       const supBatch = writeBatch(firestore);
       demo.suppliers.forEach(s => {
         const ref = doc(firestore, 'users', uid, 'suppliers', s.id);
@@ -870,6 +909,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       });
       await catBatch.commit();
 
+      // Step 3: Transactions & Orders
+      setDemoProgress({
+        stage: 3,
+        stepName: 'Synthesizing 500+ Transactions & Orders...',
+        percent: 75,
+        details: `Processing ${demo.transactions.length} sales events, purchase orders & return trajectories.`,
+      });
       const txBatches = [];
       for (let i = 0; i < demo.transactions.length; i += 450) {
         const batch = writeBatch(firestore);
@@ -896,7 +942,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       });
       await poBatch.commit();
 
-      // Recalculate and persist Analytics Summary & AI Brief immediately for complete dashboard fidelity
+      // Step 4: AI Copilot Calibration & Analytics
+      setDemoProgress({
+        stage: 4,
+        stepName: 'Calibrating AI Copilot & Profit Models...',
+        percent: 92,
+        details: 'Calculating stock health, dead-stock risks, and executive intelligence metrics.',
+      });
       await recalculateAndSaveAnalyticsSummary(firestore, uid, {
         products: demo.products,
         transactions: demo.transactions,
@@ -912,11 +964,24 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         businessType: targetType,
         isOnboardingCompleted: true,
         inventorySetupMethod: 'demo',
+      }, true);
+
+      // Final Completion Flash
+      setDemoProgress({
+        stage: 4,
+        stepName: 'Demo Business Loaded Successfully! 🚀',
+        percent: 100,
+        details: 'Ready to explore your complete business intelligence command center.',
       });
 
+      // Brief cinematic delay to show 100% completion with glowing green checks
+      await new Promise((res) => setTimeout(res, 600));
+
+      setIsLoadingDemo(false);
       setShowWelcomeModal(true);
     } catch (err) {
       console.error("Error populating demo data:", err);
+      setIsLoadingDemo(false);
       toast({ variant: 'destructive', title: 'Demo Business Error', description: 'Failed to populate full demo dataset.' });
     }
   }, [user, firestore, toast, businessProfile, updateBusinessProfile]);
@@ -1166,6 +1231,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     silent = false
   ) => {
     if (!firestore || !user || !productsRef || !transactionsRef) return { newCount: 0, updateCount: 0, skippedCount: 0 };
+
+    // Automatically purge demo loaded data when real non-demo products are imported via CSV or Shopify
+    if (hasDemoData && productsData.length > 0 && productsData.some(p => !(p as any).isDemo && (p as any).source !== 'DEMO')) {
+      await purgeDemoDataOnly();
+    }
 
     const existingProductByIdMap = new Map<string, Product>();
     const existingProductByVariantMap = new Map<string, Product>();
@@ -2699,6 +2769,81 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     toast({ title: 'Demo Business Cleared', description: 'Demo data has been removed from your workspace.' });
   }, [clearAllData, toast]);
 
+  const purgeDemoDataOnly = useCallback(async () => {
+    if (!firestore || !user?.uid) return;
+    const uid = user.uid;
+
+    try {
+      console.log('[DataContext] Automatically purging demo loaded data to make way for real business data...');
+      const cols = ['products', 'transactions', 'suppliers', 'categories', 'orders', 'returns'];
+      const deletionBatches: ReturnType<typeof writeBatch>[] = [];
+      let currentBatch = writeBatch(firestore);
+      let countInBatch = 0;
+      let totalPurged = 0;
+
+      for (const colName of cols) {
+        const snap = await getDocs(collection(firestore, 'users', uid, colName));
+        for (const docSnap of snap.docs) {
+          const data = docSnap.data() || {};
+          const isDemo =
+            data.isDemo === true ||
+            data.source === 'DEMO' ||
+            docSnap.id.startsWith('prod-') ||
+            docSnap.id.startsWith('sup-') ||
+            docSnap.id.startsWith('cat-fashion-') ||
+            docSnap.id.startsWith('cat-electronics-') ||
+            docSnap.id.startsWith('cat-beauty-') ||
+            docSnap.id.startsWith('cat-home-') ||
+            docSnap.id.startsWith('cat-sports-') ||
+            docSnap.id.startsWith('cat-food-') ||
+            docSnap.id.startsWith('tx-') ||
+            docSnap.id.startsWith('po-') ||
+            docSnap.id.startsWith('ret-');
+
+          if (isDemo) {
+            currentBatch.delete(docSnap.ref);
+            countInBatch++;
+            totalPurged++;
+            if (countInBatch >= 400) {
+              deletionBatches.push(currentBatch);
+              currentBatch = writeBatch(firestore);
+              countInBatch = 0;
+            }
+          }
+        }
+      }
+
+      if (countInBatch > 0) {
+        deletionBatches.push(currentBatch);
+      }
+
+      for (const b of deletionBatches) {
+        await b.commit();
+      }
+
+      setHasDemoData(false);
+
+      if (businessProfile?.inventorySetupMethod === 'demo') {
+        const profileUpdate = {
+          inventorySetupMethod: 'manual',
+          updatedAt: new Date().toISOString(),
+        };
+        await setDoc(doc(firestore, 'users', uid, 'settings', 'business_profile'), profileUpdate, { merge: true }).catch(() => {});
+        setBusinessProfile(prev => prev ? { ...prev, inventorySetupMethod: 'manual' } : null);
+      }
+
+      if (totalPurged > 0) {
+        console.log(`[DataContext] Automatically purged ${totalPurged} demo records.`);
+        toast({
+          title: 'Demo Data Replaced',
+          description: 'Sample demo business records were automatically deleted to initialize your real business data.',
+        });
+      }
+    } catch (err) {
+      console.warn('[DataContext] Error auto-purging demo data:', err);
+    }
+  }, [firestore, user, businessProfile, toast]);
+
   const [driveConnection, setDriveConnection] = useState<any>(null);
 
   // Subscribe to Google Drive connection doc in Firestore
@@ -3800,7 +3945,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     updateBusinessProfile,
     loadDemoBusiness,
     clearDemoBusiness,
+    purgeDemoDataOnly,
     hasDemoData,
+    isLoadingDemo,
+    demoProgress,
     showOnboardingWizard,
     setShowOnboardingWizard,
     showWelcomeModal,
@@ -3880,7 +4028,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     updateBusinessProfile,
     loadDemoBusiness,
     clearDemoBusiness,
+    purgeDemoDataOnly,
     hasDemoData,
+    isLoadingDemo,
+    demoProgress,
     showOnboardingWizard,
     setShowOnboardingWizard,
     showWelcomeModal,

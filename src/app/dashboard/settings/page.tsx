@@ -73,6 +73,7 @@ export default function SettingsPage() {
     updateBusinessProfile,
     loadDemoBusiness,
     hasDemoData,
+    isLoadingDemo,
     setShowOnboardingWizard,
     products,
     transactions,
@@ -601,11 +602,24 @@ export default function SettingsPage() {
                 </div>
                 <Button
                   onClick={() => loadDemoBusiness(bizType)}
+                  disabled={isLoadingDemo}
                   size="sm"
-                  className="rounded-xl text-xs gap-1.5 bg-amber-600 hover:bg-amber-500 text-white shrink-0 h-9 px-3 cursor-pointer"
+                  className={cn(
+                    "rounded-xl text-xs gap-1.5 bg-amber-600 hover:bg-amber-500 text-white shrink-0 h-9 px-3.5 cursor-pointer font-semibold transition-all duration-200 shadow-md",
+                    isLoadingDemo && "opacity-90 shadow-lg shadow-amber-500/40 animate-pulse cursor-wait"
+                  )}
                 >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  {hasDemoData ? 'Reload Demo' : 'Load Demo'}
+                  {isLoadingDemo ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-100" />
+                      <span>Uploading Demo...</span>
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>{hasDemoData ? 'Reload Demo' : 'Load Demo'}</span>
+                    </>
+                  )}
                 </Button>
               </div>
 

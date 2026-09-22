@@ -2,34 +2,34 @@ import { Product, Supplier, Category, Transaction, PurchaseOrder, ProductReturn 
 
 export function generateDemoBusinessData() {
   const categories: Category[] = [
-    { id: 'cat-fashion-1', name: 'Apparel & Wearables', description: 'T-Shirts, Hoodies, Jackets & Denim' },
-    { id: 'cat-fashion-2', name: 'Footwear', description: 'Sneakers, Formal Shoes & Boots' },
-    { id: 'cat-electronics-1', name: 'Smartphones & Audio', description: 'Headphones, Earbuds & Accessories' },
-    { id: 'cat-electronics-2', name: 'Computers & Peripherals', description: 'Laptops, Keyboards & Cables' },
-    { id: 'cat-beauty-1', name: 'Skincare & Cosmetics', description: 'Serums, Moisturizers & Cleansers' },
-    { id: 'cat-home-1', name: 'Home & Kitchen', description: 'Cookware, Decor & Organizers' },
-    { id: 'cat-sports-1', name: 'Fitness & Outdoors', description: 'Yoga Mats, Dumbbells & Gear' },
-    { id: 'cat-food-1', name: 'Specialty Gourmet & Coffee', description: 'Artisanal Coffee Beans & Organic Teas' },
+    { id: 'cat-fashion-1', name: 'Apparel & Wearables', description: 'T-Shirts, Hoodies, Jackets & Denim', isDemo: true, source: 'DEMO' },
+    { id: 'cat-fashion-2', name: 'Footwear', description: 'Sneakers, Formal Shoes & Boots', isDemo: true, source: 'DEMO' },
+    { id: 'cat-electronics-1', name: 'Smartphones & Audio', description: 'Headphones, Earbuds & Accessories', isDemo: true, source: 'DEMO' },
+    { id: 'cat-electronics-2', name: 'Computers & Peripherals', description: 'Laptops, Keyboards & Cables', isDemo: true, source: 'DEMO' },
+    { id: 'cat-beauty-1', name: 'Skincare & Cosmetics', description: 'Serums, Moisturizers & Cleansers', isDemo: true, source: 'DEMO' },
+    { id: 'cat-home-1', name: 'Home & Kitchen', description: 'Cookware, Decor & Organizers', isDemo: true, source: 'DEMO' },
+    { id: 'cat-sports-1', name: 'Fitness & Outdoors', description: 'Yoga Mats, Dumbbells & Gear', isDemo: true, source: 'DEMO' },
+    { id: 'cat-food-1', name: 'Specialty Gourmet & Coffee', description: 'Artisanal Coffee Beans & Organic Teas', isDemo: true, source: 'DEMO' },
   ];
 
   const nowIso = new Date().toISOString();
 
   const suppliers: Supplier[] = [
-    { id: 'sup-1', name: 'Apex Apparel Global', contactName: 'Rajesh Sharma', email: 'orders@apexapparel.com', phone: '+91 98765 43210', address: 'Tirupur, Tamil Nadu, India', createdAt: nowIso, updatedAt: nowIso },
-    { id: 'sup-2', name: 'Vanguard Footwear Ltd', contactName: 'Elena Rostova', email: 'sales@vanguardfootwear.com', phone: '+1 555 019 2831', address: 'Portland, OR, USA', createdAt: nowIso, updatedAt: nowIso },
-    { id: 'sup-3', name: 'Zenith Electronics Corp', contactName: 'Kenji Sato', email: 'b2b@zenithelec.jp', phone: '+81 3 5555 0142', address: 'Akihabara, Tokyo, Japan', createdAt: nowIso, updatedAt: nowIso },
-    { id: 'sup-4', name: 'PureBotanica Labs', contactName: 'Dr. Sarah Lin', email: 'wholesale@purebotanica.com', phone: '+1 800 555 9182', address: 'San Francisco, CA, USA', createdAt: nowIso, updatedAt: nowIso },
-    { id: 'sup-5', name: 'MasterCraft Homeware', contactName: 'Vikram Mehta', email: 'supply@mastercrafthome.in', phone: '+91 98200 11223', address: 'Moradabad, UP, India', createdAt: nowIso, updatedAt: nowIso },
-    { id: 'sup-6', name: 'Titanium Athletics', contactName: 'Marcus Vance', email: 'orders@titaniumfit.com', phone: '+44 20 7946 0912', address: 'Manchester, UK', createdAt: nowIso, updatedAt: nowIso },
-    { id: 'sup-7', name: 'Himalayan Coffee Estate', contactName: 'Anil Coorg', email: 'beans@himalayancoffee.in', phone: '+91 94480 33445', address: 'Chikmagalur, Karnataka, India', createdAt: nowIso, updatedAt: nowIso },
-    { id: 'sup-8', name: 'SiliconValley Tech Components', contactName: 'David Miller', email: 'sales@svtechcomp.com', phone: '+1 408 555 4910', address: 'San Jose, CA, USA', createdAt: nowIso, updatedAt: nowIso },
-    { id: 'sup-9', name: 'Velvet Thread Textiles', contactName: 'Priya Sundaram', email: 'orders@velvetthread.in', phone: '+91 97110 88990', address: 'Surat, Gujarat, India', createdAt: nowIso, updatedAt: nowIso },
-    { id: 'sup-10', name: 'Nordic Minimalist Living', contactName: 'Astrid Lindgren', email: 'b2b@nordicliving.se', phone: '+46 8 123 4567', address: 'Stockholm, Sweden', createdAt: nowIso, updatedAt: nowIso },
-    { id: 'sup-11', name: 'Gourmet Spice Route', contactName: 'Zubair Ahmed', email: 'wholesale@spiceroute.in', phone: '+91 99000 77665', address: 'Kochi, Kerala, India', createdAt: nowIso, updatedAt: nowIso },
-    { id: 'sup-12', name: 'Urban Leather Craft', contactName: 'Gabriel Fernandez', email: 'orders@urbanleather.es', phone: '+34 91 555 8920', address: 'Ubrique, Spain', createdAt: nowIso, updatedAt: nowIso },
-    { id: 'sup-13', name: 'Solaris Eco Packaging', contactName: 'Neha Gupta', email: 'eco@solarispack.com', phone: '+91 98100 44332', address: 'Bhiwadi, Rajasthan, India', createdAt: nowIso, updatedAt: nowIso },
-    { id: 'sup-14', name: 'ProFit Gym Equipment', contactName: 'Hans Gruber', email: 'sales@profitgym.de', phone: '+49 30 9876 5432', address: 'Frankfurt, Germany', createdAt: nowIso, updatedAt: nowIso },
-    { id: 'sup-15', name: 'Aura Fragrances Co', contactName: 'Sophie Dubois', email: 'contact@aurafragrances.fr', phone: '+33 1 42 68 55 00', address: 'Grasse, France', createdAt: nowIso, updatedAt: nowIso },
+    { id: 'sup-1', name: 'Apex Apparel Global', contactName: 'Rajesh Sharma', email: 'orders@apexapparel.com', phone: '+91 98765 43210', address: 'Tirupur, Tamil Nadu, India', createdAt: nowIso, updatedAt: nowIso, isDemo: true, source: 'DEMO' },
+    { id: 'sup-2', name: 'Vanguard Footwear Ltd', contactName: 'Elena Rostova', email: 'sales@vanguardfootwear.com', phone: '+1 555 019 2831', address: 'Portland, OR, USA', createdAt: nowIso, updatedAt: nowIso, isDemo: true, source: 'DEMO' },
+    { id: 'sup-3', name: 'Zenith Electronics Corp', contactName: 'Kenji Sato', email: 'b2b@zenithelec.jp', phone: '+81 3 5555 0142', address: 'Akihabara, Tokyo, Japan', createdAt: nowIso, updatedAt: nowIso, isDemo: true, source: 'DEMO' },
+    { id: 'sup-4', name: 'PureBotanica Labs', contactName: 'Dr. Sarah Lin', email: 'wholesale@purebotanica.com', phone: '+1 800 555 9182', address: 'San Francisco, CA, USA', createdAt: nowIso, updatedAt: nowIso, isDemo: true, source: 'DEMO' },
+    { id: 'sup-5', name: 'MasterCraft Homeware', contactName: 'Vikram Mehta', email: 'supply@mastercrafthome.in', phone: '+91 98200 11223', address: 'Moradabad, UP, India', createdAt: nowIso, updatedAt: nowIso, isDemo: true, source: 'DEMO' },
+    { id: 'sup-6', name: 'Titanium Athletics', contactName: 'Marcus Vance', email: 'orders@titaniumfit.com', phone: '+44 20 7946 0912', address: 'Manchester, UK', createdAt: nowIso, updatedAt: nowIso, isDemo: true, source: 'DEMO' },
+    { id: 'sup-7', name: 'Himalayan Coffee Estate', contactName: 'Anil Coorg', email: 'beans@himalayancoffee.in', phone: '+91 94480 33445', address: 'Chikmagalur, Karnataka, India', createdAt: nowIso, updatedAt: nowIso, isDemo: true, source: 'DEMO' },
+    { id: 'sup-8', name: 'SiliconValley Tech Components', contactName: 'David Miller', email: 'sales@svtechcomp.com', phone: '+1 408 555 4910', address: 'San Jose, CA, USA', createdAt: nowIso, updatedAt: nowIso, isDemo: true, source: 'DEMO' },
+    { id: 'sup-9', name: 'Velvet Thread Textiles', contactName: 'Priya Sundaram', email: 'orders@velvetthread.in', phone: '+91 97110 88990', address: 'Surat, Gujarat, India', createdAt: nowIso, updatedAt: nowIso, isDemo: true, source: 'DEMO' },
+    { id: 'sup-10', name: 'Nordic Minimalist Living', contactName: 'Astrid Lindgren', email: 'b2b@nordicliving.se', phone: '+46 8 123 4567', address: 'Stockholm, Sweden', createdAt: nowIso, updatedAt: nowIso, isDemo: true, source: 'DEMO' },
+    { id: 'sup-11', name: 'Gourmet Spice Route', contactName: 'Zubair Ahmed', email: 'wholesale@spiceroute.in', phone: '+91 99000 77665', address: 'Kochi, Kerala, India', createdAt: nowIso, updatedAt: nowIso, isDemo: true, source: 'DEMO' },
+    { id: 'sup-12', name: 'Urban Leather Craft', contactName: 'Gabriel Fernandez', email: 'orders@urbanleather.es', phone: '+34 91 555 8920', address: 'Ubrique, Spain', createdAt: nowIso, updatedAt: nowIso, isDemo: true, source: 'DEMO' },
+    { id: 'sup-13', name: 'Solaris Eco Packaging', contactName: 'Neha Gupta', email: 'eco@solarispack.com', phone: '+91 98100 44332', address: 'Bhiwadi, Rajasthan, India', createdAt: nowIso, updatedAt: nowIso, isDemo: true, source: 'DEMO' },
+    { id: 'sup-14', name: 'ProFit Gym Equipment', contactName: 'Hans Gruber', email: 'sales@profitgym.de', phone: '+49 30 9876 5432', address: 'Frankfurt, Germany', createdAt: nowIso, updatedAt: nowIso, isDemo: true, source: 'DEMO' },
+    { id: 'sup-15', name: 'Aura Fragrances Co', contactName: 'Sophie Dubois', email: 'contact@aurafragrances.fr', phone: '+33 1 42 68 55 00', address: 'Grasse, France', createdAt: nowIso, updatedAt: nowIso, isDemo: true, source: 'DEMO' },
   ];
 
   // Helper for random choices
@@ -119,6 +119,8 @@ export function generateDemoBusinessData() {
       averageDailySales: parseFloat(((Math.random() * 3) + 0.2).toFixed(1)),
       salesVelocity: parseFloat(((Math.random() * 2.5) + 0.3).toFixed(2)),
       leadTimeDays: Math.floor(Math.random() * 10) + 5,
+      isDemo: true,
+      source: 'DEMO',
       createdAt: new Date(now.getTime() - (90 * 24 * 60 * 60 * 1000)).toISOString(),
       updatedAt: new Date().toISOString(),
     });
@@ -158,6 +160,8 @@ export function generateDemoBusinessData() {
       customerName: isSale ? `Customer #${1000 + (t % 150)}` : undefined,
       paymentMethod: isSale ? paymentMethods[t % paymentMethods.length] : 'Bank Transfer',
       status: 'Completed',
+      isDemo: true,
+      source: 'DEMO',
       transactionDate: txDate,
       createdAt: txDate,
       updatedAt: txDate,
@@ -206,6 +210,8 @@ export function generateDemoBusinessData() {
       expectedDeliveryDate,
       actualDeliveryDate,
       status,
+      isDemo: true,
+      source: 'DEMO',
       createdAt: poDate,
       updatedAt: actualDeliveryDate || poDate,
     });
@@ -230,6 +236,8 @@ export function generateDemoBusinessData() {
       refundAmount: product.price,
       returnDate: retDate,
       notes: 'Customer requested quick inspection and refund processing.',
+      isDemo: true,
+      source: 'DEMO',
       createdAt: retDate,
       updatedAt: retDate,
     });

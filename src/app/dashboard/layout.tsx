@@ -18,6 +18,7 @@ const SubscriptionModal = dynamic(() => import('@/components/subscription-modal'
 const SmartOnboardingWizard = dynamic(() => import('@/components/smart-onboarding-wizard').then((module) => module.SmartOnboardingWizard), { ssr: false });
 const SmartWelcomeModal = dynamic(() => import('@/components/smart-welcome-modal').then((module) => module.SmartWelcomeModal), { ssr: false });
 const ShopifyConnectModal = dynamic(() => import('@/components/shopify-connect-modal').then((module) => module.ShopifyConnectModal), { ssr: false });
+const DemoLoadingModal = dynamic(() => import('@/components/demo-loading-modal').then((module) => module.DemoLoadingModal), { ssr: false });
 
 function DashboardLoading() {
   return (
@@ -178,6 +179,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {showSubscriptionModal && <SubscriptionModal />}
       {showOnboardingWizard && <SmartOnboardingWizard />}
       {showWelcomeModal && <SmartWelcomeModal />}
+      <DemoLoadingModal />
       <ShopifyConnectModal />
       <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="afterInteractive" />
     </div>

@@ -15,7 +15,10 @@ import {
   Zap,
   History,
   AlertOctagon,
+  Sparkles,
+  Loader2,
 } from 'lucide-react';
+import { cn } from '@/lib/utils';
 
 export function QuickActionsBar() {
   const {
@@ -24,6 +27,10 @@ export function QuickActionsBar() {
     dataReadiness,
     capabilities,
     businessBuddyCalibration,
+    loadDemoBusiness,
+    hasDemoData,
+    isLoadingDemo,
+    businessProfile,
   } = useData();
 
   const isRestockUnlocked = Boolean(
@@ -55,6 +62,29 @@ export function QuickActionsBar() {
         </div>
 
         <div className="flex items-center gap-2.5 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden text-xs">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => loadDemoBusiness(businessProfile?.businessType || 'Retail')}
+            disabled={isLoadingDemo}
+            className={cn(
+              "rounded-xl text-xs gap-1.5 shrink-0 border-amber-500/40 text-amber-500 hover:bg-amber-500/10 font-bold h-9 px-3.5 transition-all shadow-sm",
+              isLoadingDemo && "opacity-90 shadow-amber-500/30 animate-pulse cursor-wait"
+            )}
+          >
+            {isLoadingDemo ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
+                <span>Uploading Demo...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="w-4 h-4 text-amber-500" />
+                <span>{hasDemoData ? 'Reload Demo' : 'Load Demo'}</span>
+              </>
+            )}
+          </Button>
+
           <Button
             size="sm"
             variant="outline"

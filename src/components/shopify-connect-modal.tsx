@@ -54,6 +54,8 @@ export function ShopifyConnectModal() {
     bulkAddTransactions,
     bulkAddReturns,
     disconnectShopify,
+    purgeDemoDataOnly,
+    hasDemoData,
   } = useData();
   const { user } = useUser();
   const firestore = useFirestore();
@@ -293,6 +295,11 @@ export function ShopifyConnectModal() {
       }
 
       const { products = [], transactions = [], returns = [], stats } = data;
+
+      // Auto-purge demo data before importing real Shopify store catalog
+      if (hasDemoData) {
+        await purgeDemoDataOnly();
+      }
 
       // Ingest canonical products, transactions, and returns into DataContext
       if (products.length > 0) {

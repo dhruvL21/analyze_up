@@ -63,6 +63,7 @@ export interface Product {
   discountPercent?: number;
   liquidationStatus?: string;
   customAttributes?: Record<string, string>;
+  isDemo?: boolean;
 }
 
 export interface Order {
@@ -111,6 +112,7 @@ export interface Transaction {
   paymentMethod?: string;
   customerName?: string;
   notes?: string;
+  isDemo?: boolean;
 }
 
 export interface BusinessProfile {
@@ -183,6 +185,8 @@ export interface Category {
   name: string;
   description?: string;
   productCount?: number;
+  isDemo?: boolean;
+  source?: string;
   createdAt?: string | FieldValue;
   updatedAt?: string | FieldValue;
 }
@@ -203,6 +207,8 @@ export interface Supplier {
   updatedAt: string | FieldValue;
   userId?: string;
   tenantId?: string;
+  isDemo?: boolean;
+  source?: string;
 }
 
 export interface PurchaseOrder {
@@ -221,6 +227,8 @@ export interface PurchaseOrder {
   notes?: string;
   userId?: string;
   tenantId?: string;
+  isDemo?: boolean;
+  source?: string;
   createdAt: string | FieldValue;
   updatedAt: string | FieldValue;
 }
@@ -240,6 +248,7 @@ export interface ProductReturn {
   returnDate: string;
   notes?: string;
   source?: string;
+  isDemo?: boolean;
   userId?: string;
   createdAt: string | FieldValue;
   updatedAt: string | FieldValue;
