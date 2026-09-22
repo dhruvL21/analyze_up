@@ -94,17 +94,17 @@ export function BusinessHealthCard() {
         </div>
 
         {/* Score & Shield Display */}
-        <div className="flex items-center justify-between py-1">
-          <div className="space-y-1">
-            <div className="text-4xl md:text-5xl font-black tracking-tight flex items-baseline gap-1 transition-all" style={{ color: health.color }}>
+        <div className="flex items-center justify-between py-1 gap-3">
+          <div className="space-y-1 min-w-0 flex-1">
+            <div className="text-3xl sm:text-4xl md:text-5xl font-black tracking-tight flex items-baseline gap-1 transition-all" style={{ color: health.color }}>
               {health.score}
               <span className="text-base font-semibold text-muted-foreground">/ 100</span>
             </div>
-            <p className="text-xs md:text-sm text-muted-foreground font-medium leading-snug max-w-md">{health.summarySentence}</p>
+            <p className="text-xs md:text-sm text-muted-foreground font-medium leading-snug line-clamp-2">{health.summarySentence}</p>
           </div>
 
-          <div className="relative w-16 h-16 md:w-20 md:h-20 flex items-center justify-center rounded-2xl bg-secondary/60 border border-border/50 shadow-inner shrink-0">
-            <ShieldCheck className="w-9 h-9 md:w-10 md:h-10 transition-colors duration-300" style={{ color: health.color }} />
+          <div className="relative w-14 h-14 sm:w-16 sm:h-16 md:w-20 md:h-20 flex items-center justify-center rounded-2xl bg-secondary/60 border border-border/50 shadow-inner shrink-0">
+            <ShieldCheck className="w-8 h-8 sm:w-9 sm:h-9 md:w-10 md:h-10 transition-colors duration-300" style={{ color: health.color }} />
           </div>
         </div>
 

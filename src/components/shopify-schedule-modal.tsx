@@ -286,50 +286,50 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md ios-glass rounded-3xl p-6 border-border/50 text-foreground max-h-[90vh] overflow-y-auto">
+      <DialogContent className="w-[95vw] sm:max-w-md max-w-full ios-glass rounded-3xl p-4 sm:p-6 border-border/50 text-foreground max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader className="space-y-1 pb-3 border-b border-border/40">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shrink-0">
               <Sliders className="w-5 h-5" />
             </div>
-            <div>
-              <DialogTitle className="text-base font-bold flex items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="text-base font-bold flex items-center gap-2 truncate">
                 Shopify Sync & Automation
               </DialogTitle>
-              <DialogDescription className="text-xs text-muted-foreground">
+              <DialogDescription className="text-xs text-muted-foreground line-clamp-2">
                 Set real-time instant sync and scheduled auto-sync for catalog & sales.
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
-        <div className="space-y-5 py-3 text-xs">
+        <div className="space-y-4 py-2 text-xs">
           {/* OPTION 1: REAL-TIME INSTANT SYNC */}
           <div className={cn(
-            "p-4 rounded-2xl border transition-all space-y-3",
+            "p-3.5 sm:p-4 rounded-2xl border transition-all space-y-3 overflow-hidden",
             realtimeEnabled
               ? "bg-emerald-500/10 border-emerald-500/30"
               : "bg-secondary/20 border-border/40"
           )}>
-            <div className="flex items-start justify-between gap-3">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-emerald-400" />
+            <div className="flex items-center justify-between gap-3">
+              <div className="space-y-1 min-w-0 flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Zap className="w-4 h-4 text-emerald-400 shrink-0" />
                   <span className="font-bold text-foreground text-sm">Real-Time Sync</span>
                   {realtimeEnabled && (
-                    <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/40 text-[10px] py-0 px-2">
+                    <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/40 text-[10px] py-0 px-2 shrink-0">
                       Webhook-Driven
                     </Badge>
                   )}
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Event-driven live sync: whenever an order is placed or stock changes in Shopify, webhooks instantly update AnalyzeUp at that exact moment with zero recurring API polling.
+                  Event-driven live sync: orders & inventory instantly update with zero API polling.
                 </p>
               </div>
               <Switch
                 checked={realtimeEnabled}
                 onCheckedChange={setRealtimeEnabled}
-                className="data-[state=checked]:bg-emerald-500"
+                className="shrink-0"
               />
             </div>
 
@@ -403,12 +403,12 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
           </div>
 
           {/* OPTION 2: SCHEDULED AUTO-SYNC */}
-          <div className="p-4 rounded-2xl bg-secondary/30 border border-border/40 space-y-4">
-            <div className="flex items-start justify-between gap-3">
-              <div className="space-y-1">
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-secondary/30 border border-border/40 space-y-4 overflow-hidden">
+            <div className="flex items-center justify-between gap-3">
+              <div className="space-y-1 min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-primary" />
-                  <span className="font-bold text-foreground text-sm">Scheduled Auto-Sync</span>
+                  <Clock className="w-4 h-4 text-primary shrink-0" />
+                  <span className="font-bold text-foreground text-sm truncate">Scheduled Auto-Sync</span>
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
                   Set specific date & time or recurring automated synchronization.
@@ -417,6 +417,7 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
               <Switch
                 checked={autoSyncEnabled}
                 onCheckedChange={setAutoSyncEnabled}
+                className="shrink-0"
               />
             </div>
 

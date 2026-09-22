@@ -64,7 +64,15 @@
   }
 
   html {
-    font-size: 115%; /* Global base font scale boost (+15% across all pages) */
+    font-size: 100%; /* Base — mobile first */
+  }
+
+  @media (min-width: 768px) {
+    html { font-size: 107%; }
+  }
+
+  @media (min-width: 1280px) {
+    html { font-size: 115%; /* Full scale on large screens */ }
   }
 
   * {

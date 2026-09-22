@@ -132,23 +132,24 @@ export function RevenueProfitIntelligence() {
     <Card className="ios-glass rounded-3xl border-border/50 p-5 shadow-xl space-y-4 h-full flex flex-col justify-between">
       <div>
         {/* Header with 3 Tabs */}
-        <CardHeader className="p-0 pb-3 border-b border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
-              <Coins className="w-5 h-5 text-primary" />
-            </div>
-            <div>
-              <CardTitle className="text-base font-bold text-foreground">Revenue & Profit Intelligence</CardTitle>
-              <CardDescription className="text-xs text-muted-foreground">Financial insights, margin expansion & product ROI</CardDescription>
+        <CardHeader className="p-0 pb-3 border-b border-border/40 flex flex-col gap-3">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
+                <Coins className="w-5 h-5 text-primary" />
+              </div>
+              <div className="min-w-0">
+                <CardTitle className="text-base font-bold text-foreground truncate">Revenue &amp; Profit Intelligence</CardTitle>
+                <CardDescription className="text-xs text-muted-foreground truncate">Financial insights, margin expansion &amp; product ROI</CardDescription>
+              </div>
             </div>
           </div>
-
-          <div className="flex items-center gap-1 bg-secondary/60 p-1 rounded-xl border border-border/40 shrink-0">
+          <div className="flex items-center gap-1 bg-secondary/60 p-1 rounded-xl border border-border/40 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <Button
               size="sm"
               variant={activeTab === 'revenue' ? 'default' : 'ghost'}
               onClick={() => setActiveTab('revenue')}
-              className="rounded-lg text-xs h-7 px-3 font-medium"
+              className="rounded-lg text-xs h-7 px-3 font-medium shrink-0"
             >
               Revenue
             </Button>
@@ -156,7 +157,7 @@ export function RevenueProfitIntelligence() {
               size="sm"
               variant={activeTab === 'profit' ? 'default' : 'ghost'}
               onClick={() => setActiveTab('profit')}
-              className="rounded-lg text-xs h-7 px-3 font-medium"
+              className="rounded-lg text-xs h-7 px-3 font-medium shrink-0"
             >
               Profit
             </Button>
@@ -164,9 +165,9 @@ export function RevenueProfitIntelligence() {
               size="sm"
               variant={activeTab === 'performance' ? 'default' : 'ghost'}
               onClick={() => setActiveTab('performance')}
-              className="rounded-lg text-xs h-7 px-3 font-medium"
+              className="rounded-lg text-xs h-7 px-3 font-medium shrink-0"
             >
-              Product Performance
+              Performance
             </Button>
           </div>
         </CardHeader>
@@ -447,12 +448,12 @@ export function RevenueProfitIntelligence() {
 
               <div className="divide-y divide-border/40 rounded-2xl border border-border/40 overflow-hidden bg-secondary/20">
                 {productMetrics.slice(0, 4).map((item, idx) => (
-                  <div key={idx} className="p-3.5 flex items-center justify-between hover:bg-secondary/40 transition-colors">
-                    <div className="space-y-0.5">
-                      <p className="font-bold text-foreground text-sm">{item.product.name}</p>
-                      <p className="text-xs text-muted-foreground">{item.product.stock} units in stock • Unit Cost: {currencySymbol}{Math.round(item.unitCost)}</p>
+                  <div key={idx} className="p-3.5 flex items-start sm:items-center justify-between gap-2 hover:bg-secondary/40 transition-colors">
+                    <div className="space-y-0.5 min-w-0">
+                      <p className="font-bold text-foreground text-sm truncate">{item.product.name}</p>
+                      <p className="text-xs text-muted-foreground">{item.product.stock} units • Cost: {currencySymbol}{Math.round(item.unitCost)}</p>
                     </div>
-                    <span className="font-bold text-primary text-sm">{currencySymbol}{Math.round(item.product.price).toLocaleString('en-IN')}</span>
+                    <span className="font-bold text-primary text-sm shrink-0">{currencySymbol}{Math.round(item.product.price).toLocaleString('en-IN')}</span>
                   </div>
                 ))}
               </div>

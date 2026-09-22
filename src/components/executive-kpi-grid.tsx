@@ -96,28 +96,30 @@ export function ExecutiveKPIGrid() {
       {kpis.map((kpi) => (
         <Card key={kpi.key} className="ios-glass rounded-2xl border-border/50 hover:border-primary/40 transition-all p-4">
           <CardHeader className="p-0 pb-2 flex flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-xs font-semibold text-muted-foreground">{kpi.title}</CardTitle>
-            <div className="p-2 rounded-xl bg-secondary/80 border border-border/40">
+            <CardTitle className="text-xs font-semibold text-muted-foreground truncate pr-2">{kpi.title}</CardTitle>
+            <div className="p-2 rounded-xl bg-secondary/80 border border-border/40 shrink-0">
               {getIcon(kpi.key)}
             </div>
           </CardHeader>
           <CardContent className="p-0 space-y-1.5 pt-1">
-            <div className="flex items-baseline justify-between gap-2">
-              <div className="text-2xl font-bold tracking-tight text-foreground">{kpi.value}</div>
+            <div className="flex flex-col gap-1">
+              <div className="text-xl sm:text-2xl font-bold tracking-tight text-foreground break-all leading-tight">
+                {kpi.value}
+              </div>
               <Badge
                 className={
                   kpi.key === 'pending_orders'
-                    ? 'bg-amber-500/15 text-amber-500 border-amber-500/25 text-[10px] font-semibold whitespace-nowrap px-2 py-0.5'
+                    ? 'bg-amber-500/15 text-amber-500 border-amber-500/25 text-[10px] font-semibold whitespace-nowrap px-2 py-0.5 self-start'
                     : kpi.isPositiveChange
-                    ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/20 text-[10px] whitespace-nowrap gap-0.5'
-                    : 'bg-rose-500/15 text-rose-500 border-rose-500/20 text-[10px] whitespace-nowrap gap-0.5'
+                    ? 'bg-emerald-500/15 text-emerald-500 border-emerald-500/20 text-[10px] whitespace-nowrap gap-0.5 self-start'
+                    : 'bg-rose-500/15 text-rose-500 border-rose-500/20 text-[10px] whitespace-nowrap gap-0.5 self-start'
                 }
               >
                 {kpi.key !== 'pending_orders' && (kpi.isPositiveChange ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />)}
                 {kpi.change}
               </Badge>
             </div>
-            <p className="text-xs text-muted-foreground line-clamp-1">{kpi.interpretation}</p>
+            <p className="text-xs text-muted-foreground line-clamp-2">{kpi.interpretation}</p>
           </CardContent>
         </Card>
       ))}

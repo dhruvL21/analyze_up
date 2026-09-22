@@ -517,7 +517,7 @@ export function AIActionCenter() {
 
         {/* Filter / View Tabs: Only visible once past learning stage */}
         {!isLearning && (
-          <div className="flex items-center gap-1.5 p-1 bg-secondary/30 rounded-2xl border border-border/40 w-fit text-xs font-semibold overflow-x-auto">
+          <div className="flex items-center gap-1.5 p-1 bg-secondary/30 rounded-2xl border border-border/40 max-w-full text-xs font-semibold overflow-x-auto [scrollbar-width:none]">
             <button
               onClick={() => setActiveTab('all')}
               className={`px-3 py-1.5 rounded-xl transition-all ${

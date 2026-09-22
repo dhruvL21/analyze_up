@@ -452,7 +452,7 @@ export function OutOfStockSection() {
 
                           <div className="space-y-1.5 min-w-0">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="text-sm font-bold text-foreground truncate max-w-md block">
+                              <span className="text-sm font-bold text-foreground truncate max-w-[180px] sm:max-w-xs md:max-w-md block">
                                 {prod.name}
                               </span>
                               {item.isZero ? (

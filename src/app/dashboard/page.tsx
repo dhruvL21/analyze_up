@@ -23,7 +23,7 @@ export default function DashboardPage() {
   const [readinessModalOpen, setReadinessModalOpen] = React.useState(false);
 
   return (
-    <div className="flex flex-col gap-6 pb-8">
+    <div className="flex flex-col gap-6 pb-8 max-w-full overflow-hidden">
       {/* Top Welcome Title with Data Readiness Score Badge */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
