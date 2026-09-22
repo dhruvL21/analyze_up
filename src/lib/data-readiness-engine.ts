@@ -428,11 +428,10 @@ export function evaluateDataReadiness(
   ) {
     level = 'PREDICTIVE';
   } else if (
-    totalScore >= 40 &&
-    (
-      (historicalDays >= 14 && totalOrders >= 80 && meaningfulSalesDays >= 8) ||
-      totalOrders >= 200
-    )
+    // Primary: score + days + orders (meaningfulSalesDays removed — days & orders criteria are sufficient)
+    (totalScore >= 40 && ((historicalDays >= 14 && totalOrders >= 80) || totalOrders >= 200)) ||
+    // Fallback: high enough orders alone, regardless of score
+    (historicalDays >= 14 && totalOrders >= 80)
   ) {
     level = 'EARLY_INSIGHTS';
   } else {

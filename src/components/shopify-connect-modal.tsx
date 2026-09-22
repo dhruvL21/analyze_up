@@ -9,6 +9,16 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,6 +38,8 @@ import {
   AlertCircle,
   Sparkles,
   Key,
+  AlertTriangle,
+  Trash2,
   Globe,
   Unlink,
   ExternalLink,
@@ -338,15 +350,14 @@ export function ShopifyConnectModal() {
   };
 
   // 4. Disconnect Shopify Store & Purge Synced Data
-  const handleDisconnect = async () => {
-    if (
-      !confirm(
-        'Are you sure you want to disconnect this Shopify store? All products, orders, and synchronized data imported from Shopify will be immediately deleted from your workspace.'
-      )
-    ) {
-      return;
-    }
+  const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
 
+  const handleDisconnect = () => {
+    setShowDisconnectConfirm(true);
+  };
+
+  const handleConfirmDisconnect = async () => {
+    setShowDisconnectConfirm(false);
     setIsDisconnecting(true);
     try {
       const shopToDisconnect = businessProfile?.shopifyStoreUrl || storeUrl;
@@ -697,6 +708,57 @@ export function ShopifyConnectModal() {
                 )}
               </Button>
             </div>
+
+            <AlertDialog open={showDisconnectConfirm} onOpenChange={setShowDisconnectConfirm}>
+              <AlertDialogContent className="max-w-md border-rose-500/20 bg-background">
+                <AlertDialogHeader>
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-rose-500/10 flex items-center justify-center">
+                      <Unlink className="w-5 h-5 text-rose-400" />
+                    </div>
+                    <AlertDialogTitle className="text-base font-semibold">
+                      Disconnect Shopify Store?
+                    </AlertDialogTitle>
+                  </div>
+                  <AlertDialogDescription className="text-sm text-muted-foreground leading-relaxed space-y-3">
+                    <p>
+                      You are about to disconnect{' '}
+                      <span className="font-medium text-foreground">
+                        {businessProfile?.shopifyStoreUrl || storeUrl}
+                      </span>{' '}
+                      from AnalyzeUp.
+                    </p>
+                    <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-rose-300 text-xs space-y-1.5">
+                      <p className="font-semibold text-rose-400 flex items-center gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5" /> This action will permanently delete:
+                      </p>
+                      <ul className="pl-4 space-y-1 list-disc">
+                        <li>All products synced from this Shopify store</li>
+                        <li>All orders &amp; transactions imported via Shopify</li>
+                        <li>All return records synced from Shopify</li>
+                        <li>Webhook registrations &amp; access credentials</li>
+                      </ul>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Data you imported manually (CSV / Excel) will{' '}
+                      <span className="text-foreground font-medium">not</span> be affected.
+                    </p>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter className="gap-2 mt-2">
+                  <AlertDialogCancel className="rounded-xl text-sm">
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleConfirmDisconnect}
+                    className="rounded-xl text-sm bg-rose-600 hover:bg-rose-500 text-white gap-2"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Yes, Disconnect &amp; Delete Data
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         ) : (
           /* --- VIEW B: CONNECT NEW SHOPIFY STORE (DUAL TABS) --- */

@@ -90,6 +90,16 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 
 
@@ -134,8 +144,14 @@ export default function IntegrationsPage() {
   );
   const [showShopifyScheduleModal, setShowShopifyScheduleModal] = useState(false);
   const [isShopifyDisconnecting, setIsShopifyDisconnecting] = useState(false);
+  const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
 
-  const handleDisconnectShopify = async () => {
+  const handleDisconnectShopify = () => {
+    setShowDisconnectConfirm(true);
+  };
+
+  const handleConfirmDisconnectShopify = async () => {
+    setShowDisconnectConfirm(false);
     try {
       setIsShopifyDisconnecting(true);
       const result = await disconnectShopify({ purgeData: true });
@@ -1729,20 +1745,72 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
                     {!isShopifyConnected && <ArrowRight className="w-3.5 h-3.5 ml-auto" />}
                   </Button>
                   {isShopifyConnected && (
-                    <Button
-                      onClick={handleDisconnectShopify}
-                      disabled={isShopifySyncing || isShopifyDisconnecting}
-                      variant="outline"
-                      title="Disconnect Shopify and Delete All Synced Data"
-                      className="rounded-2xl text-xs font-semibold gap-1.5 h-10 border-rose-500/30 text-rose-400 hover:bg-rose-500/10 px-3 cursor-pointer"
-                    >
-                      {isShopifyDisconnecting ? (
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Unlink className="w-3.5 h-3.5" />
-                      )}
-                      <span className="hidden lg:inline">Disconnect</span>
-                    </Button>
+                    <>
+                      <Button
+                        onClick={handleDisconnectShopify}
+                        disabled={isShopifySyncing || isShopifyDisconnecting}
+                        variant="outline"
+                        title="Disconnect Shopify and Delete All Synced Data"
+                        className="rounded-2xl text-xs font-semibold gap-1.5 h-10 border-rose-500/30 text-rose-400 hover:bg-rose-500/10 px-3 cursor-pointer"
+                      >
+                        {isShopifyDisconnecting ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Unlink className="w-3.5 h-3.5" />
+                        )}
+                        <span className="hidden lg:inline">Disconnect</span>
+                      </Button>
+
+                      <AlertDialog open={showDisconnectConfirm} onOpenChange={setShowDisconnectConfirm}>
+                        <AlertDialogContent className="max-w-md border-rose-500/20 bg-background">
+                          <AlertDialogHeader>
+                            <div className="flex items-center gap-3 mb-1">
+                              <div className="flex-shrink-0 w-10 h-10 rounded-full bg-rose-500/10 flex items-center justify-center">
+                                <Unlink className="w-5 h-5 text-rose-400" />
+                              </div>
+                              <AlertDialogTitle className="text-base font-semibold">
+                                Disconnect Shopify Store?
+                              </AlertDialogTitle>
+                            </div>
+                            <AlertDialogDescription className="text-sm text-muted-foreground leading-relaxed space-y-3">
+                              <p>
+                                You are about to disconnect{' '}
+                                <span className="font-medium text-foreground">
+                                  {businessProfile?.shopifyStoreUrl}
+                                </span>{' '}
+                                from AnalyzeUp.
+                              </p>
+                              <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-rose-300 text-xs space-y-1.5">
+                                <p className="font-semibold text-rose-400 flex items-center gap-1.5">
+                                  <AlertTriangle className="w-3.5 h-3.5" /> This action will permanently delete:
+                                </p>
+                                <ul className="pl-4 space-y-1 list-disc">
+                                  <li>All products synced from this Shopify store</li>
+                                  <li>All orders &amp; transactions imported via Shopify</li>
+                                  <li>All return records synced from Shopify</li>
+                                  <li>Webhook registrations &amp; access credentials</li>
+                                </ul>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                Data you imported manually (CSV / Excel) will <span className="text-foreground font-medium">not</span> be affected.
+                              </p>
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter className="gap-2 mt-2">
+                            <AlertDialogCancel className="rounded-xl text-sm">
+                              Cancel
+                            </AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={handleConfirmDisconnectShopify}
+                              className="rounded-xl text-sm bg-rose-600 hover:bg-rose-500 text-white gap-2"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                              Yes, Disconnect &amp; Delete Data
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </>
                   )}
                 </div>
               </CardContent>

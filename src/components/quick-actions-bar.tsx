@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { useData } from '@/context/data-context';
 import { AddProductModal } from '@/components/add-product-modal';
@@ -17,6 +17,8 @@ import {
   AlertOctagon,
   Sparkles,
   Loader2,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -51,6 +53,13 @@ export function QuickActionsBar() {
   const [isAddSupplierOpen, setIsAddSupplierOpen] = useState(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
 
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scroll = (dir: 'left' | 'right') => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollBy({ left: dir === 'left' ? -160 : 160, behavior: 'smooth' });
+    }
+  };
+
   return (
     <>
       <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border/40 backdrop-blur-md space-y-2.5">
@@ -61,96 +70,120 @@ export function QuickActionsBar() {
           </span>
         </div>
 
-        <div className="flex items-center gap-2.5 overflow-x-auto pb-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden text-xs">
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => loadDemoBusiness(businessProfile?.businessType || 'Retail')}
-            disabled={isLoadingDemo}
-            className={cn(
-              "rounded-xl text-xs gap-1.5 shrink-0 border-amber-500/40 text-amber-500 hover:bg-amber-500/10 font-bold h-9 px-3.5 transition-all shadow-sm",
-              isLoadingDemo && "opacity-90 shadow-amber-500/30 animate-pulse cursor-wait"
-            )}
+        <div className="flex items-center gap-1.5">
+          {/* Left scroll arrow */}
+          <button
+            onClick={() => scroll('left')}
+            className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg border border-border/50 bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground transition-all"
+            aria-label="Scroll left"
           >
-            {isLoadingDemo ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
-                <span>Uploading Demo...</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4 text-amber-500" />
-                <span>{hasDemoData ? 'Reload Demo' : 'Load Demo'}</span>
-              </>
-            )}
-          </Button>
+            <ChevronLeft className="w-4 h-4" />
+          </button>
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setIsAuditModalOpen(true)}
-            className="rounded-xl text-xs gap-1.5 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-bold h-9 px-3.5"
+          {/* Scrollable button row */}
+          <div
+            ref={scrollRef}
+            className="flex items-center gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden text-xs flex-1"
           >
-            <History className="w-4 h-4 text-primary" />
-            View Audit Log
-          </Button>
-
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setIsAddProductOpen(true)}
-            className="rounded-xl text-xs gap-1.5 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-9 px-3.5"
-          >
-            <PlusCircle className="w-4 h-4 text-primary" />
-            Add Product
-          </Button>
-
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setIsImportOpen(true)}
-            className="rounded-xl text-xs gap-1.5 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-9 px-3.5"
-          >
-            <FileSpreadsheet className="w-4 h-4 text-primary" />
-            Import CSV / Excel
-          </Button>
-
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setShowShopifyModal(true)}
-            className="rounded-xl text-xs gap-1.5 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-9 px-3.5"
-          >
-            <ShoppingBag className="w-4 h-4 text-primary" />
-            Connect Shopify
-          </Button>
-
-          {isRestockUnlocked && (
             <Button
               size="sm"
               variant="outline"
-              onClick={() => {
-                const el = document.getElementById('out-of-stock-hub');
-                if (el) {
-                  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                }
-              }}
-              className="rounded-xl text-xs gap-1.5 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-9 px-3.5"
+              onClick={() => loadDemoBusiness(businessProfile?.businessType || 'Retail')}
+              disabled={isLoadingDemo}
+              className={cn(
+                "rounded-xl text-xs gap-1.5 shrink-0 border-amber-500/40 text-amber-500 hover:bg-amber-500/10 font-bold h-9 px-3 transition-all shadow-sm",
+                isLoadingDemo && "opacity-90 shadow-amber-500/30 animate-pulse cursor-wait"
+              )}
             >
-              <AlertOctagon className="w-4 h-4 text-primary" />
-              <span>Out of Stock {outOfStockCount > 0 ? `(${outOfStockCount})` : ''}</span>
+              {isLoadingDemo ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500" />
+                  <span>Loading...</span>
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                  <span>{hasDemoData ? 'Reload Demo' : 'Demo'}</span>
+                </>
+              )}
             </Button>
-          )}
 
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setIsAddSupplierOpen(true)}
-            className="rounded-xl text-xs gap-1.5 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-9 px-3.5"
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIsAuditModalOpen(true)}
+              className="rounded-xl text-xs gap-1.5 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-bold h-9 px-3"
+            >
+              <History className="w-3.5 h-3.5 text-primary" />
+              Audit Log
+            </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIsAddProductOpen(true)}
+              className="rounded-xl text-xs gap-1.5 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-9 px-3"
+            >
+              <PlusCircle className="w-3.5 h-3.5 text-primary" />
+              Add Product
+            </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIsImportOpen(true)}
+              className="rounded-xl text-xs gap-1.5 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-9 px-3"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-primary" />
+              Import
+            </Button>
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setShowShopifyModal(true)}
+              className="rounded-xl text-xs gap-1.5 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-9 px-3"
+            >
+              <ShoppingBag className="w-3.5 h-3.5 text-primary" />
+              Shopify
+            </Button>
+
+            {isRestockUnlocked && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const el = document.getElementById('out-of-stock-hub');
+                  if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }
+                }}
+                className="rounded-xl text-xs gap-1.5 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-9 px-3"
+              >
+                <AlertOctagon className="w-3.5 h-3.5 text-primary" />
+                <span>Out of Stock{outOfStockCount > 0 ? ` (${outOfStockCount})` : ''}</span>
+              </Button>
+            )}
+
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setIsAddSupplierOpen(true)}
+              className="rounded-xl text-xs gap-1.5 shrink-0 border-primary/30 text-primary hover:bg-primary/10 font-semibold h-9 px-3"
+            >
+              <Truck className="w-3.5 h-3.5 text-primary" />
+              Supplier
+            </Button>
+          </div>
+
+          {/* Right scroll arrow */}
+          <button
+            onClick={() => scroll('right')}
+            className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg border border-border/50 bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground transition-all"
+            aria-label="Scroll right"
           >
-            <Truck className="w-4 h-4 text-primary" />
-            Add Supplier
-          </Button>
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
@@ -162,3 +195,4 @@ export function QuickActionsBar() {
     </>
   );
 }
+
