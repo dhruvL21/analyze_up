@@ -4,8 +4,12 @@
  * LLM-based business intelligence reasoning layer.
  * Turns Model 2 predictive outputs and standardized business data into
  * structured 5-part actionable recommendations and insights.
+ * 
+ * Integrated with AIPrivacySession to ensure zero sensitive product or merchant
+ * names leak to OpenAI.
  */
 import { openai, isOpenAIConfigured, AI_MODELS } from '@/ai/openai';
+import { withPrivacySession } from '@/ai/privacy/privacy-gateway';
 import { CanonicalProduct, CanonicalSale } from '@/schemas/canonical';
 import { Model2PredictionResult } from '@/schemas/prediction-contract';
 import { Model3AnalystResult, Model3AnalystResultSchema } from '@/schemas/analyst-contract';
@@ -29,37 +33,45 @@ export async function runAIBusinessAnalyst(
     })
     .slice(0, 15);
 
-  const payload = {
-    businessName: businessProfile?.businessName || 'My Business',
-    industry: industry.label,
-    currency: currencySymbol,
-    aggregateForecast: {
-      projected30DayRevenue: predictions.aggregate_forecast.projected_30_day_revenue,
-      projected30DayProfit: predictions.aggregate_forecast.projected_30_day_profit,
-      marginPercent: predictions.aggregate_forecast.projected_margin_percent,
-      growthRatePercent: predictions.aggregate_forecast.revenue_growth_rate_percent,
-      criticalStockouts: predictions.aggregate_forecast.critical_stockouts_count,
-      deadStockCapital: predictions.aggregate_forecast.tied_up_dead_stock_capital,
-      overallModelConfidence: predictions.overall_system_confidence,
-    },
-    topProductPredictions: criticalPredictions.map(p => ({
-      name: p.product_name,
-      sku: p.sku,
-      currentStock: p.current_stock,
-      price: p.price,
-      costPrice: p.cost_price,
-      dailyVelocity: p.demand_forecast.daily_velocity,
-      forecast30DaysDemand: p.demand_forecast['30_days'],
-      stockoutProbability: p.stockout.probability,
-      daysUntilStockout: p.stockout.days_until_stockout,
-      riskLevel: p.stockout.risk,
-      recommendedReorderQty: p.stockout.recommended_reorder_qty,
-      modelConfidence: p.model_confidence,
-      algorithm: p.algorithm_used,
-    })),
-  };
+  if (isOpenAIConfigured()) {
+    try {
+      return await withPrivacySession(async (session) => {
+        const companyToken = session.tokenize(businessProfile?.businessName || 'My Business', 'COMPANY');
 
-  const prompt = `
+        const sanitizedProductPredictions = criticalPredictions.map(p => ({
+          id: session.tokenize(p.product_id, 'PRODUCT'),
+          name: session.tokenize(p.product_name, 'PRODUCT'),
+          sku: p.sku ? `SKU_${session.tokenize(p.sku, 'PRODUCT').replace('PRODUCT_', '')}` : 'SKU_STANDARD',
+          currentStock: p.current_stock,
+          price: p.price,
+          costPrice: p.cost_price,
+          dailyVelocity: p.demand_forecast.daily_velocity,
+          forecast30DaysDemand: p.demand_forecast['30_days'],
+          stockoutProbability: p.stockout.probability,
+          daysUntilStockout: p.stockout.days_until_stockout,
+          riskLevel: p.stockout.risk,
+          recommendedReorderQty: p.stockout.recommended_reorder_qty,
+          modelConfidence: p.model_confidence,
+          algorithm: p.algorithm_used,
+        }));
+
+        const payload = {
+          businessName: companyToken,
+          industry: industry.label,
+          currency: currencySymbol,
+          aggregateForecast: {
+            projected30DayRevenue: predictions.aggregate_forecast.projected_30_day_revenue,
+            projected30DayProfit: predictions.aggregate_forecast.projected_30_day_profit,
+            marginPercent: predictions.aggregate_forecast.projected_margin_percent,
+            growthRatePercent: predictions.aggregate_forecast.revenue_growth_rate_percent,
+            criticalStockouts: predictions.aggregate_forecast.critical_stockouts_count,
+            deadStockCapital: predictions.aggregate_forecast.tied_up_dead_stock_capital,
+            overallModelConfidence: predictions.overall_system_confidence,
+          },
+          topProductPredictions: sanitizedProductPredictions,
+        };
+
+        const prompt = `
 You are MODEL 3: AI Business Analyst for AnalyzeUp, an advanced inventory intelligence platform.
 You are advising the founder of "${payload.businessName}" in the ${payload.industry} industry.
 
@@ -127,26 +139,28 @@ Respond ONLY in valid JSON matching this exact structure:
 }
 `;
 
-  if (isOpenAIConfigured()) {
-    try {
-      const response = await openai.chat.completions.create({
-        model: AI_MODELS.FLAGSHIP,
-        messages: [
-          { role: 'system', content: 'You are an expert executive business intelligence analyst. Respond strictly in valid JSON.' },
-          { role: 'user', content: prompt },
-        ],
-        response_format: { type: 'json_object' },
-        temperature: 0.1,
-      });
-
-      const content = response.choices[0]?.message?.content;
-      if (content) {
-        const parsed = JSON.parse(content);
-        return Model3AnalystResultSchema.parse({
-          ...parsed,
-          generated_at: new Date().toISOString(),
+        const response = await openai.chat.completions.create({
+          model: AI_MODELS.FLAGSHIP,
+          messages: [
+            { role: 'system', content: 'You are an expert executive business intelligence analyst. Respond strictly in valid JSON.' },
+            { role: 'user', content: prompt },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.1,
         });
-      }
+
+        const content = response.choices[0]?.message?.content;
+        if (content) {
+          const parsed = JSON.parse(content);
+          // Detokenize the generated insights and scorecard back to original names
+          const resolved = session.detokenizeObject(parsed);
+          return Model3AnalystResultSchema.parse({
+            ...resolved,
+            generated_at: new Date().toISOString(),
+          });
+        }
+        throw new Error('Empty response from analyst LLM');
+      });
     } catch (error) {
       console.warn('Model 3 LLM analysis failed, generating rule-based business synthesis:', error);
     }

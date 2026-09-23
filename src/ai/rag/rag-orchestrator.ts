@@ -1,4 +1,5 @@
 import { openai, isOpenAIConfigured, AI_MODELS } from '@/ai/openai';
+import { withPrivacySession } from '@/ai/privacy/privacy-gateway';
 import type {
   RAGQueryRequest,
   RAGResponse,
@@ -206,40 +207,50 @@ export async function executeRAGQuery(
   let finalAnswer = '';
   let confidence: 'HIGH' | 'MEDIUM' | 'LOW' = 'HIGH';
 
-  // 3. Call OpenAI LLM
+  // 3. Call OpenAI LLM via AI Privacy Gateway
   if (isOpenAIConfigured()) {
     try {
-      const messagesPayload: any[] = [
-        { role: 'system', content: builtContext.systemPrompt },
-        ...chatHistory.slice(-4).map((m) => ({ role: m.role, content: m.content })),
-        { role: 'user', content: builtContext.userPrompt },
-      ];
+      finalAnswer = await withPrivacySession(async (session) => {
+        const sanitizedSystemPrompt = session.sanitizeText(builtContext.systemPrompt);
+        const sanitizedUserPrompt = session.sanitizeText(builtContext.userPrompt);
+        const sanitizedHistory = chatHistory.slice(-4).map((m) => ({
+          role: m.role,
+          content: session.sanitizeText(m.content),
+        }));
 
-      // Tune temperature based on intent
-      const temperature =
-        intent === 'GREETING' || intent === 'CONVERSATIONAL'
-          ? 0.7
-          : intent === 'GENERAL_KNOWLEDGE'
-          ? 0.5
-          : intent === 'CAPABILITIES'
-          ? 0.3
-          : 0.15;
+        const messagesPayload: any[] = [
+          { role: 'system', content: sanitizedSystemPrompt },
+          ...sanitizedHistory,
+          { role: 'user', content: sanitizedUserPrompt },
+        ];
 
-      const maxTokens =
-        intent === 'GREETING' || intent === 'CONVERSATIONAL'
-          ? 350
-          : intent === 'CAPABILITIES'
-          ? 600
-          : 1200;
+        // Tune temperature based on intent
+        const temperature =
+          intent === 'GREETING' || intent === 'CONVERSATIONAL'
+            ? 0.7
+            : intent === 'GENERAL_KNOWLEDGE'
+            ? 0.5
+            : intent === 'CAPABILITIES'
+            ? 0.3
+            : 0.15;
 
-      const response = await openai.chat.completions.create({
-        model: AI_MODELS.FLAGSHIP,
-        messages: messagesPayload,
-        temperature,
-        max_tokens: maxTokens,
+        const maxTokens =
+          intent === 'GREETING' || intent === 'CONVERSATIONAL'
+            ? 350
+            : intent === 'CAPABILITIES'
+            ? 600
+            : 1200;
+
+        const response = await openai.chat.completions.create({
+          model: AI_MODELS.FLAGSHIP,
+          messages: messagesPayload,
+          temperature,
+          max_tokens: maxTokens,
+        });
+
+        const rawAnswer = response.choices[0]?.message?.content || '';
+        return session.detokenizeText(rawAnswer);
       });
-
-      finalAnswer = response.choices[0]?.message?.content || '';
     } catch (llmErr) {
       console.warn('[RAG Orchestrator] OpenAI LLM call failed, falling back to synthesis:', llmErr);
     }

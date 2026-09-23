@@ -1,6 +1,7 @@
 'use server';
 
 import { openai, isOpenAIConfigured, AI_MODELS, createChatCompletionWithFallback } from '@/ai/openai';
+import { withPrivacySession } from '@/ai/privacy/privacy-gateway';
 import type { Product, Transaction, BusinessProfile } from '@/lib/types';
 
 export interface FrontierForecastScenario {
@@ -37,7 +38,7 @@ export interface FrontierForecastResult {
 
 /**
  * Executes Frontier Deep Demand Forecasting & Macro Scenario Analysis
- * Powered by GPT-5 (with resilient fallback to GPT-4o).
+ * Protected by the AI Privacy Gateway (anonymized tokens + detokenization).
  */
 export async function runFrontierDemandForecast(
   products: Product[],
@@ -104,32 +105,27 @@ export async function runFrontierDemandForecast(
     });
   }
 
-  const prompt = `
+  return withPrivacySession(async (session) => {
+    // 1. Sanitize business data into opaque tokens
+    const { companyToken, industry, currency } = session.sanitizeCompany(businessProfile);
+    const sanitizedProducts = session.sanitizeProducts(activeProducts);
+    const sanitizedTransactions = session.sanitizeTransactions(transactions.slice(-25));
+
+    const prompt = `
 You are an advanced Supply Chain & Demand Forecasting AI for AnalyzeUp.
-Analyze the following inventory and sales patterns to compute high-precision 30/60/90-day demand curves under macro scenarios.
+Analyze the following sanitized inventory and sales patterns to compute high-precision 30/60/90-day demand curves under macro scenarios.
 
 BUSINESS CONTEXT:
-- Business Vertical: ${businessProfile?.businessType || 'D2C Retail & E-Commerce'}
-- Currency: ${businessProfile?.currency || 'INR'}
+- Company Identifier: ${companyToken}
+- Business Vertical: ${industry}
+- Currency: ${currency}
 - Total Catalog SKUs: ${products.length}
 
-PRODUCT SAMPLES (Top Critical SKUs):
-${JSON.stringify(
-  activeProducts.map((p) => ({
-    id: p.id,
-    name: p.name,
-    sku: p.sku || 'N/A',
-    currentStock: p.stock,
-    price: p.price,
-    costPrice: p.costPrice || p.price * 0.6,
-    category: p.category || 'General',
-  })),
-  null,
-  2
-)}
+SANITIZED PRODUCTS (Opaque Identifiers & Metrics Only):
+${JSON.stringify(sanitizedProducts, null, 2)}
 
-RECENT SALES ACTIVITY (Sample):
-${JSON.stringify(transactions.slice(-25), null, 2)}
+RECENT SALES ACTIVITY (Sanitized):
+${JSON.stringify(sanitizedTransactions, null, 2)}
 
 INSTRUCTIONS:
 For each product, generate a deep predictive forecast accounting for:
@@ -185,58 +181,61 @@ RESPOND STRICTLY IN VALID JSON matching this array structure:
 ]
 `;
 
-  try {
-    const response = await createChatCompletionWithFallback({
-      model: AI_MODELS.FRONTIER,
-      messages: [
-        {
-          role: 'system',
-          content: 'You are an elite quantitative inventory forecasting system. Always output strictly valid JSON.',
-        },
-        { role: 'user', content: prompt },
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2,
-    });
-
-    const content = response.choices[0]?.message?.content;
-    if (!content) throw new Error('Empty AI response from Frontier model');
-
-    const parsed = JSON.parse(content);
-    const forecasts: FrontierProductForecast[] = Array.isArray(parsed)
-      ? parsed
-      : parsed.productForecasts || parsed.forecasts || Object.values(parsed)[0];
-
-    return Array.isArray(forecasts) ? forecasts : [];
-  } catch (error) {
-    console.error('[Frontier Forecast Engine] Error executing AI forecast:', error);
-    // Fallback to local heuristic computation
-    return activeProducts.map((p) => {
-      const stock = Number(p.stock) || 0;
-      const velocity = Math.max(0.3, (Number(p.stock) || 10) / 30);
-      const days = Math.round(stock / velocity);
-      return {
-        productId: p.id,
-        productName: p.name,
-        currentStock: stock,
-        dailyVelocity: Number(velocity.toFixed(2)),
-        predictedStockoutDate: new Date(Date.now() + days * 86400000).toISOString().split('T')[0],
-        seasonalityImpact: 'Standard steady cycle',
-        supplierLeadTimeRisk: '7-10 day supplier lead time',
-        scenarios: [
+    try {
+      const response = await createChatCompletionWithFallback({
+        model: AI_MODELS.FRONTIER,
+        messages: [
           {
-            scenario: 'BASELINE',
-            projected30DayDemand: Math.round(velocity * 30),
-            projected60DayDemand: Math.round(velocity * 60),
-            projected90DayDemand: Math.round(velocity * 90),
-            stockoutRiskPercent: stock < velocity * 30 ? 85 : 20,
-            recommendedBufferUnits: Math.round(velocity * 10),
-            reorderWindowDays: Math.max(2, days - 7),
-            strategicRationale: 'Baseline run-rate protection.',
+            role: 'system',
+            content: 'You are an elite quantitative inventory forecasting system. Always output strictly valid JSON.',
           },
+          { role: 'user', content: prompt },
         ],
-        executiveActionPlan: `Maintain buffer stock of ${Math.round(velocity * 10)} units.`,
-      };
-    });
-  }
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (!content) throw new Error('Empty AI response from Frontier model');
+
+      const parsed = JSON.parse(content);
+      const rawForecasts: FrontierProductForecast[] = Array.isArray(parsed)
+        ? parsed
+        : parsed.productForecasts || parsed.forecasts || Object.values(parsed)[0];
+
+      // 2. Detokenize OpenAI response, restoring original product names and IDs locally
+      const resolvedForecasts = session.detokenizeObject(rawForecasts);
+      return Array.isArray(resolvedForecasts) ? resolvedForecasts : [];
+    } catch (error) {
+      console.error('[Frontier Forecast Engine] Error executing AI forecast:', error);
+      // Fallback to local heuristic computation
+      return activeProducts.map((p) => {
+        const stock = Number(p.stock) || 0;
+        const velocity = Math.max(0.3, (Number(p.stock) || 10) / 30);
+        const days = Math.round(stock / velocity);
+        return {
+          productId: p.id,
+          productName: p.name,
+          currentStock: stock,
+          dailyVelocity: Number(velocity.toFixed(2)),
+          predictedStockoutDate: new Date(Date.now() + days * 86400000).toISOString().split('T')[0],
+          seasonalityImpact: 'Standard steady cycle',
+          supplierLeadTimeRisk: '7-10 day supplier lead time',
+          scenarios: [
+            {
+              scenario: 'BASELINE',
+              projected30DayDemand: Math.round(velocity * 30),
+              projected60DayDemand: Math.round(velocity * 60),
+              projected90DayDemand: Math.round(velocity * 90),
+              stockoutRiskPercent: stock < velocity * 30 ? 85 : 20,
+              recommendedBufferUnits: Math.round(velocity * 10),
+              reorderWindowDays: Math.max(2, days - 7),
+              strategicRationale: 'Baseline run-rate protection.',
+            },
+          ],
+          executiveActionPlan: `Maintain buffer stock of ${Math.round(velocity * 10)} units.`,
+        };
+      });
+    }
+  });
 }

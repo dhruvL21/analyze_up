@@ -1,6 +1,7 @@
 'use server';
 
 import { openai, AI_MODELS } from '@/ai/openai';
+import { scrubPII } from '@/ai/privacy/privacy-gateway';
 import { INVENTORY_FIELDS, FieldMapping, TargetFieldDef } from './import-mapper-constants';
 
 export async function getSmartMapping(
@@ -14,7 +15,8 @@ export async function getSmartMapping(
   const sampleSnippet = sampleRows.slice(0, 3).map(row => {
     const cleaned: Record<string, any> = {};
     externalHeaders.forEach(h => {
-      cleaned[h] = row[h];
+      const val = row[h];
+      cleaned[h] = typeof val === 'string' ? scrubPII(val) : val;
     });
     return cleaned;
   });

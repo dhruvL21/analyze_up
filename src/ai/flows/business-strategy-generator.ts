@@ -1,6 +1,7 @@
 'use server';
 
 import { openai, AI_MODELS } from '@/ai/openai';
+import { withPrivacySession } from '@/ai/privacy/privacy-gateway';
 import { z } from 'zod';
 
 /* -------------------- INPUT SCHEMA -------------------- */
@@ -36,19 +37,24 @@ export async function generateBusinessStrategy(
 ): Promise<BusinessStrategyOutput> {
   const validatedInput = BusinessStrategyInputSchema.parse(input);
 
-  const prompt = `
+  return withPrivacySession(async (session) => {
+    const sanitizedSales = session.sanitizeText(validatedInput.salesData);
+    const sanitizedProduct = session.sanitizeText(validatedInput.productData);
+    const sanitizedMarket = validatedInput.marketTrends ? session.sanitizeText(validatedInput.marketTrends) : 'Not provided';
+
+    const prompt = `
 You are a seasoned business consultant tasked with creating a comprehensive business growth strategy.
 
-Analyze the data provided below carefully:
+Analyze the sanitized data provided below carefully:
 
 Sales Data:
-${validatedInput.salesData}
+${sanitizedSales}
 
 Product Data:
-${validatedInput.productData}
+${sanitizedProduct}
 
 Market Trends (if available):
-${validatedInput.marketTrends || 'Not provided'}
+${sanitizedMarket}
 
 Based on this information, generate:
 
@@ -62,33 +68,34 @@ Respond ONLY in valid JSON with these exact keys:
 "strategySummary", "keyRecommendations", "potentialRisks", "expectedOutcomes"
 `;
 
-  try {
-    const response = await openai.chat.completions.create({
-      model: AI_MODELS.FLAGSHIP,
-      messages: [
-        { role: 'system', content: 'You are a helpful business consultant. You must respond strictly with the requested JSON structure.' },
-        { role: 'user', content: prompt },
-      ],
-      response_format: { type: 'json_object' },
-    });
+    try {
+      const response = await openai.chat.completions.create({
+        model: AI_MODELS.FLAGSHIP,
+        messages: [
+          { role: 'system', content: 'You are a helpful business consultant. You must respond strictly with the requested JSON structure.' },
+          { role: 'user', content: prompt },
+        ],
+        response_format: { type: 'json_object' },
+      });
 
-    const content = response.choices[0].message.content;
+      const content = response.choices[0].message.content;
 
-    if (!content) {
-      throw new Error('No output received from the AI model.');
-    }
+      if (!content) {
+        throw new Error('No output received from the AI model.');
+      }
 
-    const rawParsed = JSON.parse(content);
-    
-    // Attempt to fix common key naming variations from AI
-    const normalizedData = {
-        strategySummary: rawParsed.strategySummary || rawParsed.summary || rawParsed.strategy_summary || '',
-        keyRecommendations: rawParsed.keyRecommendations || rawParsed.recommendations || rawParsed.key_recommendations || '',
-        potentialRisks: rawParsed.potentialRisks || rawParsed.risks || rawParsed.potential_risks || '',
-        expectedOutcomes: rawParsed.expectedOutcomes || rawParsed.outcomes || rawParsed.expected_outcomes || '',
-    };
+      const rawParsed = JSON.parse(content);
+      const detokenized = session.detokenizeObject(rawParsed);
+      
+      // Attempt to fix common key naming variations from AI
+      const normalizedData = {
+          strategySummary: detokenized.strategySummary || detokenized.summary || detokenized.strategy_summary || '',
+          keyRecommendations: detokenized.keyRecommendations || detokenized.recommendations || detokenized.key_recommendations || '',
+          potentialRisks: detokenized.potentialRisks || detokenized.risks || detokenized.potential_risks || '',
+          expectedOutcomes: detokenized.expectedOutcomes || detokenized.outcomes || detokenized.expected_outcomes || '',
+      };
 
-    const validated = BusinessStrategyOutputSchema.parse(normalizedData);
+      const validated = BusinessStrategyOutputSchema.parse(normalizedData);
 
     // Sanitize the output to ensure everything is a string for the UI
     const formatValue = (val: any): string => {
@@ -141,15 +148,16 @@ Respond ONLY in valid JSON with these exact keys:
         return String(val);
     };
 
-    return {
-      strategySummary: formatValue(validated.strategySummary),
-      keyRecommendations: formatValue(validated.keyRecommendations),
-      potentialRisks: formatValue(validated.potentialRisks),
-      expectedOutcomes: formatValue(validated.expectedOutcomes),
-    };
-  } catch (error) {
-    console.error('Error in generateBusinessStrategy:', error);
-    throw error;
-  }
+      return {
+        strategySummary: formatValue(validated.strategySummary),
+        keyRecommendations: formatValue(validated.keyRecommendations),
+        potentialRisks: formatValue(validated.potentialRisks),
+        expectedOutcomes: formatValue(validated.expectedOutcomes),
+      };
+    } catch (error) {
+      console.error('Error in generateBusinessStrategy:', error);
+      throw error;
+    }
+  });
 }
 

@@ -1,6 +1,7 @@
 'use server';
 
 import { openai, AI_MODELS } from '@/ai/openai';
+import { withPrivacySession } from '@/ai/privacy/privacy-gateway';
 import { z } from 'zod';
 
 const ReportInputSchema = z.object({
@@ -23,9 +24,24 @@ export async function generateReportInsights(
   data: Record<string, any>[] = []
 ): Promise<ReportInsights> {
   const validated = ReportInputSchema.parse({ chartTitle, metric, data });
-  const dataString = JSON.stringify(validated.data.slice(-12)); // Take last 12 points for context
 
-  const prompt = `
+  return withPrivacySession(async (session) => {
+    // Sanitize any potential entity names in chart data points
+    const sanitizedData = validated.data.slice(-12).map((item) => {
+      const sanitizedItem: Record<string, any> = {};
+      for (const [k, v] of Object.entries(item)) {
+        if (typeof v === 'string') {
+          sanitizedItem[k] = session.sanitizeText(v);
+        } else {
+          sanitizedItem[k] = v;
+        }
+      }
+      return sanitizedItem;
+    });
+
+    const dataString = JSON.stringify(sanitizedData);
+
+    const prompt = `
 You are a senior business analyst for AnalyzeUp, an advanced inventory and sales management platform.
 Your task is to analyze the following chart data and provide professional insights.
 
@@ -47,26 +63,29 @@ Schema:
 }
 `;
 
-  try {
-    const response = await openai.chat.completions.create({
-      model: AI_MODELS.FLAGSHIP,
-      messages: [
-        { role: 'system', content: 'You are a professional business analyst.' },
-        { role: 'user', content: prompt },
-      ],
-      response_format: { type: 'json_object' },
-    });
+    try {
+      const response = await openai.chat.completions.create({
+        model: AI_MODELS.FLAGSHIP,
+        messages: [
+          { role: 'system', content: 'You are a professional business analyst.' },
+          { role: 'user', content: prompt },
+        ],
+        response_format: { type: 'json_object' },
+      });
 
-    const content = response.choices[0].message.content;
-    if (!content) throw new Error('Empty AI response');
+      const content = response.choices[0].message.content;
+      if (!content) throw new Error('Empty AI response');
 
-    return ReportInsightsSchema.parse(JSON.parse(content));
-  } catch (error) {
-    console.error('Error generating report insights:', error);
-    return {
-      summary: "Performance data for the selected period is displayed in the chart.",
-      keyObservations: ["Data trends are currently within normal operating parameters.", "Maintain current inventory levels and monitor sales velocity."],
-      recommendations: ["Regularly review sales data to identify seasonal patterns.", "Ensure lead times are accounted for in reorder points."]
-    };
-  }
+      const parsed = JSON.parse(content);
+      const detokenized = session.detokenizeObject(parsed);
+      return ReportInsightsSchema.parse(detokenized);
+    } catch (error) {
+      console.error('Error generating report insights:', error);
+      return {
+        summary: "Performance data for the selected period is displayed in the chart.",
+        keyObservations: ["Data trends are currently within normal operating parameters.", "Maintain current inventory levels and monitor sales velocity."],
+        recommendations: ["Regularly review sales data to identify seasonal patterns.", "Ensure lead times are accounted for in reorder points."]
+      };
+    }
+  });
 }

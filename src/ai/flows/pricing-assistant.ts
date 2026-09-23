@@ -1,6 +1,7 @@
 'use server';
 
 import { openai, isOpenAIConfigured, AI_MODELS } from '@/ai/openai';
+import { scrubPII } from '@/ai/privacy/privacy-gateway';
 import {
   getStructuredPricingContext,
   PLAN_CONFIGS,
@@ -58,9 +59,9 @@ ${pricingContext}`;
         { role: 'system', content: systemPrompt },
         ...chatHistory.slice(-6).map((m) => ({
           role: m.role,
-          content: m.content,
+          content: scrubPII(m.content),
         })),
-        { role: 'user', content: trimmed },
+        { role: 'user', content: scrubPII(trimmed) },
       ];
 
       const completion = await openai.chat.completions.create({
