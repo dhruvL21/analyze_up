@@ -185,7 +185,7 @@ export const PLAN_CONFIGS: Record<PlanType, PlanConfig> = {
     proactiveMonitoringAllowed: true,
     auditLogsAllowed: false,
     popular: false,
-    ctaText: 'Upgrade to Founder',
+    ctaText: 'Upgrade to Founder →',
     features: [
       '750 Products',
       '5,000 Transactions/mo',
@@ -220,7 +220,7 @@ export const PLAN_CONFIGS: Record<PlanType, PlanConfig> = {
     proactiveMonitoringAllowed: true,
     auditLogsAllowed: false,
     popular: false,
-    ctaText: 'Upgrade to Founder',
+    ctaText: 'Upgrade to Founder →',
     features: [
       '750 Products',
       '5,000 Transactions/mo',
@@ -290,7 +290,7 @@ export const PLAN_CONFIGS: Record<PlanType, PlanConfig> = {
     proactiveMonitoringAllowed: true,
     auditLogsAllowed: true,
     popular: false,
-    ctaText: 'Upgrade to Scale',
+    ctaText: 'Upgrade to Scale →',
     features: [
       '25,000 Products',
       '100,000 Transactions/mo',
@@ -325,7 +325,7 @@ export const PLAN_CONFIGS: Record<PlanType, PlanConfig> = {
     proactiveMonitoringAllowed: true,
     auditLogsAllowed: true,
     popular: false,
-    ctaText: 'Upgrade to Scale',
+    ctaText: 'Upgrade to Scale →',
     features: [
       '25,000 Products',
       '100,000 Transactions/mo',

@@ -1,6 +1,6 @@
 'use server';
 
-import { openai, isOpenAIConfigured } from '@/ai/openai';
+import { openai, isOpenAIConfigured, AI_MODELS } from '@/ai/openai';
 import {
   BusinessFileType,
   FILE_TYPE_DEFINITIONS,
@@ -71,7 +71,7 @@ Respond ONLY with valid JSON.
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: AI_MODELS.FLAGSHIP,
       messages: [
         { role: 'system', content: 'You are an intelligent business file classifier.' },
         { role: 'user', content: prompt },
@@ -235,7 +235,7 @@ Respond ONLY with valid JSON.
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: AI_MODELS.FLAGSHIP,
       messages: [
         { role: 'system', content: 'You are an intelligent semantic data mapper.' },
         { role: 'user', content: prompt },

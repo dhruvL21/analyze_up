@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { openai, isOpenAIConfigured } from '@/ai/openai';
+import { openai, isOpenAIConfigured, AI_MODELS } from '@/ai/openai';
 import { getDefaultMarketIntelligence, IndustryCategory } from '@/lib/business-buddy-engine';
 
 export async function POST(req: NextRequest) {
@@ -53,7 +53,7 @@ Respond STRICTLY in JSON format with these exact keys:
 
     try {
       const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: AI_MODELS.FLAGSHIP,
         messages: [
           {
             role: 'system',

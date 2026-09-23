@@ -1,4 +1,4 @@
-import { openai, isOpenAIConfigured } from '@/ai/openai';
+import { openai, isOpenAIConfigured, AI_MODELS } from '@/ai/openai';
 import type {
   RAGQueryRequest,
   RAGResponse,
@@ -233,7 +233,7 @@ export async function executeRAGQuery(
           : 1200;
 
       const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: AI_MODELS.FLAGSHIP,
         messages: messagesPayload,
         temperature,
         max_tokens: maxTokens,

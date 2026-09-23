@@ -5,7 +5,7 @@
  * Turns Model 2 predictive outputs and standardized business data into
  * structured 5-part actionable recommendations and insights.
  */
-import { openai, isOpenAIConfigured } from '@/ai/openai';
+import { openai, isOpenAIConfigured, AI_MODELS } from '@/ai/openai';
 import { CanonicalProduct, CanonicalSale } from '@/schemas/canonical';
 import { Model2PredictionResult } from '@/schemas/prediction-contract';
 import { Model3AnalystResult, Model3AnalystResultSchema } from '@/schemas/analyst-contract';
@@ -130,7 +130,7 @@ Respond ONLY in valid JSON matching this exact structure:
   if (isOpenAIConfigured()) {
     try {
       const response = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: AI_MODELS.FLAGSHIP,
         messages: [
           { role: 'system', content: 'You are an expert executive business intelligence analyst. Respond strictly in valid JSON.' },
           { role: 'user', content: prompt },

@@ -1,6 +1,6 @@
 'use server';
 
-import { openai, isOpenAIConfigured } from '@/ai/openai';
+import { openai, isOpenAIConfigured, AI_MODELS } from '@/ai/openai';
 import {
   getStructuredPricingContext,
   PLAN_CONFIGS,
@@ -64,7 +64,7 @@ ${pricingContext}`;
       ];
 
       const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model: AI_MODELS.FLAGSHIP,
         messages,
         temperature: 0.2,
         max_tokens: 600,

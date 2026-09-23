@@ -62,11 +62,6 @@ export function Footer() {
                   Get Started Free <ArrowRight className="w-4 h-4" />
                 </Button>
               </Link>
-              <Link href="/login" className="w-full sm:w-auto lg:w-full">
-                <Button size="lg" variant="outline" className="w-full border-border/60 hover:bg-secondary/60 text-foreground font-semibold h-11">
-                  Explore Live Demo
-                </Button>
-              </Link>
             </div>
           </div>
         </div>

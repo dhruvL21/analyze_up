@@ -1,6 +1,6 @@
 'use server';
 
-import { openai } from '@/ai/openai';
+import { openai, AI_MODELS } from '@/ai/openai';
 import { z } from 'zod';
 
 const ReportInputSchema = z.object({
@@ -49,7 +49,7 @@ Schema:
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: AI_MODELS.FLAGSHIP,
       messages: [
         { role: 'system', content: 'You are a professional business analyst.' },
         { role: 'user', content: prompt },

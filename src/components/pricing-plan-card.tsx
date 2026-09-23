@@ -165,9 +165,11 @@ export function PricingPlanCard({
               <li key={`${planKey}-feat-${idx}`} className="flex items-start gap-2">
                 <div
                   className={`w-4 h-4 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
-                    isFree
-                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                      : 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                    isCurrent || isFree || isFreePromoActive
+                      ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-sm'
+                      : isGrowth
+                      ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                      : 'bg-zinc-700/30 text-zinc-300 border border-zinc-700/50'
                   }`}
                 >
                   <Check className="w-2.5 h-2.5 stroke-[3]" />

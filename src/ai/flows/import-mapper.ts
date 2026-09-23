@@ -1,6 +1,6 @@
 'use server';
 
-import { openai } from '@/ai/openai';
+import { openai, AI_MODELS } from '@/ai/openai';
 import { INVENTORY_FIELDS, FieldMapping, TargetFieldDef } from './import-mapper-constants';
 
 export async function getSmartMapping(
@@ -75,7 +75,7 @@ Respond ONLY with valid JSON.
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: AI_MODELS.FLAGSHIP,
       messages: [
         { role: 'system', content: 'You are an intelligent data mapping and normalization assistant.' },
         { role: 'user', content: prompt },

@@ -1,6 +1,6 @@
 'use server';
 
-import { openai } from '@/ai/openai';
+import { openai, AI_MODELS } from '@/ai/openai';
 import { z } from 'zod';
 
 /* -------------------- INPUT SCHEMA -------------------- */
@@ -64,7 +64,7 @@ Respond ONLY in valid JSON with these exact keys:
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: AI_MODELS.FLAGSHIP,
       messages: [
         { role: 'system', content: 'You are a helpful business consultant. You must respond strictly with the requested JSON structure.' },
         { role: 'user', content: prompt },
