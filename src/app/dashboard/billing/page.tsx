@@ -51,6 +51,11 @@ import {
   getStoredWorkspaceMembers,
 } from '@/lib/saas-engine';
 import PlanFeatureComparisonTable from '@/components/plan-feature-comparison-table';
+import { PricingPlanCard } from '@/components/pricing-plan-card';
+import { FindMyPlanModal } from '@/components/find-my-plan-modal';
+import { AskPricingAiModal } from '@/components/ask-pricing-ai-modal';
+import { PricingAssistanceCta } from '@/components/pricing-assistance-cta';
+import { PricingFaq } from '@/components/pricing-faq';
 import { getStoredReportSnapshots } from '@/lib/executive-intelligence-engine';
 
 import { useUser } from '@/firebase';
@@ -78,6 +83,8 @@ export default function BillingPage() {
   const [couponError, setCouponError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'cards' | 'comparison'>('cards');
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
+  const [isFindMyPlanOpen, setIsFindMyPlanOpen] = useState<boolean>(false);
+  const [isAskAiOpen, setIsAskAiOpen] = useState<boolean>(false);
 
   const resolvedPlanKey: PlanType = React.useMemo(() => {
     if (activePlan === 'Scale' || activePlan === 'SCALE' || activePlan === 'Enterprise Pro' || activePlan === 'Pro Plan' || activePlan === 'PRO') return 'PRO';
@@ -524,178 +531,55 @@ export default function BillingPage() {
           </div>
         </div>
 
-        {/* View Mode 1: Clean 4 Pricing Cards */}
+        {/* 1. Plan View: Either 4 Cards Grid or Full Comparison Table */}
         {viewMode === 'cards' ? (
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 items-stretch">
               {ORDERED_PLANS.map((key) => {
                 const plan = PLAN_CONFIGS[key];
                 const isCurrent = key === currentPlanKey;
-                const isGrowth = key === 'GROWTH';
-                const isPro = key === 'PRO';
-                const isFree = key === 'FREE';
-                const isAnnual = billingCycle === 'annual';
-
-                const displayPrice = isFree
-                  ? '₹0'
-                  : isAnnual
-                  ? `₹${plan.priceYearly.toLocaleString('en-IN')}`
-                  : `₹${plan.priceMonthly.toLocaleString('en-IN')}`;
-
-                const pricePeriod = isFree
-                  ? '/month'
-                  : isAnnual
-                  ? '/year'
-                  : '/month';
+                const isProcessing = Boolean(isProcessingPayment);
 
                 return (
-                  <Card
-                    key={key}
-                    className={`ios-glass rounded-2xl flex flex-col justify-between transition-all duration-300 relative border ${
-                      isGrowth
-                        ? 'border-amber-500/70 bg-gradient-to-b from-amber-500/10 via-zinc-900/90 to-zinc-950 shadow-xl shadow-amber-500/15 ring-1 ring-amber-500/40'
-                        : isCurrent
-                        ? 'border-primary ring-2 ring-primary/25 shadow-lg shadow-primary/5 bg-primary/[0.03]'
-                        : isPro && appliedCoupon
-                        ? 'border-emerald-500/60 ring-2 ring-emerald-500/20 bg-emerald-500/[0.02]'
-                        : 'border-border/40 hover:border-primary/40'
-                    }`}
-                  >
-                    {/* Growth Most Popular Badge */}
-                    {isGrowth && (
-                      <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
-                        <span className="px-2.5 py-0.5 rounded-full bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-zinc-950 text-[10px] font-black uppercase tracking-wider shadow-md shadow-amber-500/30 flex items-center gap-1 whitespace-nowrap">
-                          <Zap className="w-3 h-3 fill-current" />
-                          MOST POPULAR
-                        </span>
-                      </div>
-                    )}
-
-                    <div>
-                      <CardHeader className="pb-3 space-y-2 min-h-[142px] flex flex-col justify-between">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-black text-foreground">{plan.name}</span>
-                          {isCurrent && (
-                            <Badge className="bg-primary text-primary-foreground text-[10px] font-bold">
-                              {appliedCoupon && isPro ? 'Active (Free)' : 'Current Plan'}
-                            </Badge>
-                          )}
-                        </div>
-
-                        {/* Price Display */}
-                        <div className="flex items-baseline gap-1.5">
-                          {appliedCoupon && isPro ? (
-                            <>
-                              <span className="text-base line-through text-muted-foreground/60 font-medium font-mono">
-                                ₹{(isAnnual ? plan.priceYearly : plan.priceMonthly).toLocaleString('en-IN')}
-                              </span>
-                              <span className="text-2xl font-black text-emerald-400 font-mono">
-                                FREE
-                              </span>
-                              <span className="text-[11px] font-bold text-emerald-400">
-                                (Promo Pass)
-                              </span>
-                            </>
-                          ) : (
-                            <>
-                              <span className="text-2xl font-black text-foreground font-mono">
-                                {displayPrice}
-                              </span>
-                              <span className="text-xs text-muted-foreground">{pricePeriod}</span>
-                            </>
-                          )}
-                        </div>
-                        <p className="text-[10px] text-muted-foreground">
-                          {isFree
-                            ? 'Permanent Free tier'
-                            : appliedCoupon && isPro
-                            ? '100% Free with active promo pass'
-                            : isAnnual
-                            ? 'Save ~2 months with yearly billing'
-                            : 'Billed monthly, cancel anytime'}
-                        </p>
-                      </CardHeader>
-
-                      {/* Card Features List (ONLY 7-8 features per plan) */}
-                      <CardContent className="space-y-3 text-xs pt-1">
-                        <div className="border-t border-border/30 pt-3">
-                          <ul className="space-y-2 text-muted-foreground text-[11px] min-h-[224px]">
-                            {plan.features.map((f, i) => (
-                              <li key={i} className="flex items-center gap-2">
-                                <div
-                                  className={`w-3.5 h-3.5 rounded-full flex items-center justify-center shrink-0 ${
-                                    isGrowth
-                                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
-                                      : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
-                                  }`}
-                                >
-                                  <Check className="w-2.5 h-2.5 stroke-[2.5]" />
-                                </div>
-                                <span className="leading-tight text-zinc-200">{f}</span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      </CardContent>
-                    </div>
-
-                    {/* Action Button */}
-                    <div className="p-4 pt-2">
-                      <Button
-                        disabled={Boolean(isCurrent || isProcessingPayment)}
-                        onClick={() => handleSelectUpgrade(key)}
-                        className={`w-full rounded-xl text-xs gap-1.5 font-bold h-9 transition-all ${
-                          isCurrent
-                            ? 'bg-secondary text-muted-foreground cursor-default'
-                            : isPro && appliedCoupon
-                            ? 'bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-500 text-zinc-950 font-black shadow-md shadow-emerald-500/20 hover:scale-[1.02]'
-                            : isGrowth
-                            ? 'bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-zinc-950 font-extrabold shadow-md shadow-amber-500/25 hover:shadow-amber-500/40 hover:scale-[1.02]'
-                            : 'bg-card hover:bg-secondary text-foreground border border-border/80 hover:border-primary/60 shadow-sm hover:scale-[1.02]'
-                        }`}
-                      >
-                        {isCurrent ? (
-                          appliedCoupon && isPro ? 'Current Plan (Free Pass)' : 'Current Plan'
-                        ) : isFree ? (
-                          'Start Free'
-                        ) : isPro && appliedCoupon ? (
-                          <>
-                            <Sparkles className="w-3.5 h-3.5" /> Activate Scale (Free)
-                          </>
-                        ) : (
-                          <>
-                            Upgrade to {plan.name} <ArrowRight className="w-3.5 h-3.5" />
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </Card>
+                  <PricingPlanCard
+                    key={`billing-card-${key}`}
+                    planKey={key}
+                    plan={plan}
+                    isCurrent={isCurrent}
+                    billingCycle={billingCycle}
+                    appliedCoupon={appliedCoupon}
+                    isProcessing={isProcessing}
+                    onSelect={(k) => handleSelectUpgrade(k)}
+                  />
                 );
               })}
             </div>
 
-            {/* Quick Link to Feature Comparison Table */}
-            <div className="text-center pt-2">
-              <button
-                type="button"
-                onClick={() => setViewMode('comparison')}
-                className="text-xs font-bold text-primary hover:text-primary/80 hover:underline inline-flex items-center gap-1.5 transition-colors py-1 px-3 rounded-lg hover:bg-primary/5"
-              >
-                Compare all 28+ features & limits in detail <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            {/* "Which plan is right for you?" CTA Section */}
+            <PricingAssistanceCta
+              onOpenFindMyPlan={() => setIsFindMyPlanOpen(true)}
+              onOpenAskAi={() => setIsAskAiOpen(true)}
+              onCompareFeaturesClick={() => setViewMode('comparison')}
+            />
+
+            {/* Frequently Asked Questions */}
+            <PricingFaq />
           </div>
         ) : (
-          /* View Mode 2: Detailed Feature Comparison Matrix */
-          <div className="space-y-3">
-            <PlanFeatureComparisonTable
-              billingCycle={billingCycle}
-              currencySymbol={currencySymbol}
-              currentPlanKey={currentPlanKey}
-              appliedCoupon={appliedCoupon}
-              onSelectUpgrade={handleSelectUpgrade}
-              isProcessingPayment={isProcessingPayment}
-            />
+          <div className="space-y-6">
+            <div id="feature-comparison" className="space-y-3 pt-2">
+              <PlanFeatureComparisonTable
+                billingCycle={billingCycle}
+                currencySymbol={currencySymbol}
+                currentPlanKey={currentPlanKey}
+                appliedCoupon={appliedCoupon}
+                onSelectUpgrade={handleSelectUpgrade}
+                isProcessingPayment={isProcessingPayment}
+              />
+            </div>
+
+            {/* Frequently Asked Questions */}
+            <PricingFaq />
           </div>
         )}
       </div>
@@ -785,6 +669,31 @@ export default function BillingPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* 4. Plan Selection Assistance Modals */}
+      <FindMyPlanModal
+        isOpen={isFindMyPlanOpen}
+        onClose={() => setIsFindMyPlanOpen(false)}
+        onSelectPlan={(planKey) => handleSelectUpgrade(planKey)}
+        onViewComparison={() => {
+          const el = document.getElementById('feature-comparison');
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth' });
+          }
+        }}
+      />
+
+      <AskPricingAiModal
+        isOpen={isAskAiOpen}
+        onClose={() => setIsAskAiOpen(false)}
+        onSelectPlan={(planKey) => handleSelectUpgrade(planKey)}
+        onViewComparison={() => {
+          const el = document.getElementById('feature-comparison');
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth' });
+          }
+        }}
+      />
     </div>
   );
 }

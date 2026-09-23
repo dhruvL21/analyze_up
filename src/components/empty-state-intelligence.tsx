@@ -1,16 +1,18 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useData } from '@/context/data-context';
 import { useRouter } from 'next/navigation';
 import { Sparkles, FileSpreadsheet, ShoppingBag, PlusCircle, Zap, ArrowRight, Loader2 } from 'lucide-react';
+import { ConfirmDemoDialog } from '@/components/confirm-demo-dialog';
 
 export function EmptyStateIntelligence() {
   const { loadDemoBusiness, setShowShopifyModal, businessProfile, isLoadingDemo } = useData();
   const router = useRouter();
+  const [isConfirmDemoOpen, setIsConfirmDemoOpen] = useState(false);
 
   return (
     <Card className="ios-glass rounded-3xl border border-border/50 p-6 md:p-8 shadow-2xl overflow-hidden relative text-center">
@@ -54,21 +56,13 @@ export function EmptyStateIntelligence() {
               </div>
             </div>
             <Button
-              onClick={() => loadDemoBusiness(businessProfile?.businessType || 'Fashion')}
+              onClick={() => setIsConfirmDemoOpen(true)}
               disabled={isLoadingDemo}
-              className="w-full rounded-xl text-xs gap-1.5 bg-primary text-primary-foreground hover:brightness-110 shadow-md font-semibold h-10 mt-auto"
+              className="w-full rounded-xl text-xs gap-1.5 bg-primary text-primary-foreground hover:brightness-110 shadow-md font-semibold h-10 mt-auto cursor-pointer"
             >
-              {isLoadingDemo ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  Uploading Demo Business...
-                </>
-              ) : (
-                <>
-                  Load Demo Business
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </>
-              )}
+              <Sparkles className="w-3.5 h-3.5 text-primary-foreground" />
+              Load Demo Business
+              <ArrowRight className="w-3.5 h-3.5" />
             </Button>
           </div>
 
@@ -118,6 +112,13 @@ export function EmptyStateIntelligence() {
           </Button>
         </div>
       </CardContent>
+
+      {/* Confirmation Dialog before Loading Demo */}
+      <ConfirmDemoDialog
+        open={isConfirmDemoOpen}
+        onOpenChange={setIsConfirmDemoOpen}
+        businessType={businessProfile?.businessType || 'Fashion'}
+      />
     </Card>
   );
 }

@@ -137,13 +137,23 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(timer);
   }, [user, loading, setIsTourOpen, setShowSubscriptionModal]);
 
-  // Prompt subscription modal if workspace product quota limit is exceeded
+  // Ensure Insights & Health pages are visible and accessible for all plans without subscription modal
+  useEffect(() => {
+    if (pathname.startsWith('/dashboard/insights') || pathname.startsWith('/dashboard/business-health')) {
+      if (showSubscriptionModal) {
+        setShowSubscriptionModal(false);
+      }
+    }
+  }, [pathname, showSubscriptionModal, setShowSubscriptionModal]);
+
+  // Prompt subscription modal if workspace product quota limit is exceeded (except on free exploration pages)
   useEffect(() => {
     if (isTourOpen) return;
+    if (pathname.startsWith('/dashboard/insights') || pathname.startsWith('/dashboard/business-health') || pathname.startsWith('/dashboard/billing')) return;
     if (isLimitExceeded) {
       setShowSubscriptionModal(true);
     }
-  }, [isLimitExceeded, setShowSubscriptionModal, isTourOpen]);
+  }, [isLimitExceeded, setShowSubscriptionModal, isTourOpen, pathname]);
 
   if (loading || !user) {
     return <DashboardLoading />;

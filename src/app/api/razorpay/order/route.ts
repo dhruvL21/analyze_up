@@ -14,7 +14,7 @@ export async function POST(req: Request) {
       const isAnnual = parts[1] === 'ANNUAL';
       if (PLAN_CONFIGS[planKey]) {
         const config = PLAN_CONFIGS[planKey];
-        verifiedAmount = isAnnual ? Math.round(config.priceMonthly * 0.8 * 12) : config.priceMonthly;
+        verifiedAmount = isAnnual ? (config.priceYearly || Math.round(config.priceMonthly * 0.8 * 12)) : config.priceMonthly;
       }
     }
 

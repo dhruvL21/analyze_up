@@ -183,18 +183,8 @@ function NavContent({ isMobile = false }: { isMobile?: boolean }) {
     return healthSummary.color;
   }, [healthSummary.color]);
 
-  const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
-    const isPremiumRoute =
-      href.startsWith("/dashboard/insights") ||
-      href.startsWith("/dashboard/business-health");
-
-    const isPro = activePlan === "Enterprise Pro" || activePlan === "Pro Plan" || activePlan === "PRO";
-    const isLocked = isPremiumRoute && (!isPro || isLimitExceeded);
-
-    if (isLocked) {
-      e.preventDefault();
-      setShowSubscriptionModal(true);
-    }
+  const handleNavClick = (_e: React.MouseEvent<HTMLAnchorElement>, _href: string) => {
+    // Insights & Health and all core workspace modules are accessible for all plans
   };
 
   const isItemActive = (item: NavItem) => {

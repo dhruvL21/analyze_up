@@ -35,8 +35,8 @@ describe('SaaS Engine - Account-Level Usage & Monthly Billing Cycle', () => {
 
   it('verifies Scale plan limits match expected workspace quotas', () => {
     const pro = PLAN_CONFIGS.PRO;
-    expect(pro.productLimit).toBe(50000);
-    expect(pro.transactionsLimit).toBe(250000);
+    expect(pro.productLimit).toBe(25000);
+    expect(pro.transactionsLimit).toBe(100000);
     expect(pro.aiQueriesLimit).toBe(2000);
     expect(pro.reportsLimit).toBe(1000);
     expect(pro.teamMembersLimit).toBe(15);
@@ -44,7 +44,7 @@ describe('SaaS Engine - Account-Level Usage & Monthly Billing Cycle', () => {
 
     // Check usage meter checks on PRO (Scale)
     const productCheck = checkUsageLimit('PRO', 'products', 85);
-    expect(productCheck.limit).toBe(50000);
+    expect(productCheck.limit).toBe(25000);
     expect(productCheck.usagePercent).toBe(0);
     expect(productCheck.allowed).toBe(true);
 
@@ -65,14 +65,14 @@ describe('SaaS Engine - Account-Level Usage & Monthly Billing Cycle', () => {
   });
 
   it('enforces limit warning at 80% and blocking at 100%', () => {
-    // 80% warning for Free tier (limit is 20 AI queries)
-    const warning = checkUsageLimit('FREE', 'aiQueries', 16); // 16/20 = 80%
+    // 80% warning for Free tier (limit is 10 AI queries)
+    const warning = checkUsageLimit('FREE', 'aiQueries', 8); // 8/10 = 80%
     expect(warning.isWarning80).toBe(true);
     expect(warning.isBlocked100).toBe(false);
     expect(warning.allowed).toBe(true);
 
     // 100% blocked
-    const blocked = checkUsageLimit('FREE', 'aiQueries', 20); // 20/20 = 100%
+    const blocked = checkUsageLimit('FREE', 'aiQueries', 10); // 10/10 = 100%
     expect(blocked.isBlocked100).toBe(true);
     expect(blocked.allowed).toBe(false);
   });

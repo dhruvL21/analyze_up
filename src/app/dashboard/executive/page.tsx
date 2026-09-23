@@ -279,9 +279,9 @@ function ExecutiveIntelligencePageContent() {
 
   // Dynamic Plan Key Resolution
   const resolvedPlanKey: PlanType = useMemo(() => {
-    if (activePlan === 'Enterprise Pro' || activePlan === 'Pro Plan') return 'PRO';
-    if (activePlan === 'Growth Plan') return 'GROWTH';
-    if (activePlan === 'Starter Plan') return 'STARTER';
+    if (activePlan === 'Scale' || activePlan === 'SCALE' || activePlan === 'Enterprise Pro' || activePlan === 'Pro Plan' || activePlan === 'PRO') return 'PRO';
+    if (activePlan === 'Growth' || activePlan === 'Growth Plan' || activePlan === 'GROWTH') return 'GROWTH';
+    if (activePlan === 'Founder' || activePlan === 'FOUNDER' || activePlan === 'Starter Plan' || activePlan === 'STARTER') return 'STARTER';
     return 'FREE';
   }, [activePlan]);
 

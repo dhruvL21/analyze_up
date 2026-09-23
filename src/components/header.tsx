@@ -4,7 +4,7 @@ import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState, useMemo, useEffect } from 'react';
 import { computeBusinessHealth } from '@/lib/command-center-engine';
-import { LogOut, Settings, Menu, Sun, Moon, X, LayoutDashboard, Boxes, ShoppingCart, Truck, BarChart3, Sparkles, Activity, RefreshCw, Compass, TrendingUp, Bell, Crown, Layers, CreditCard } from 'lucide-react';
+import { LogOut, Settings, Menu, X, LayoutDashboard, Boxes, ShoppingCart, Truck, BarChart3, Sparkles, Activity, RefreshCw, Compass, TrendingUp, Bell, Crown, Layers, CreditCard } from 'lucide-react';
 import {
   Tooltip,
   TooltipContent,
@@ -16,7 +16,6 @@ import Link from 'next/link';
 import { AnalyzeUpIcon } from './analyze-up-icon';
 import { useUser, useAuth } from '@/firebase';
 import { signOut } from '@/firebase/auth/auth-service';
-import { useTheme } from 'next-themes';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -64,7 +63,6 @@ export function Header() {
   const pathname = usePathname();
   const { user } = useUser();
   const auth = useAuth();
-  const { theme, setTheme } = useTheme();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [notifDrawerOpen, setNotifDrawerOpen] = useState(false);
   const [isDataReadinessOpen, setIsDataReadinessOpen] = useState(false);
@@ -206,19 +204,6 @@ export function Header() {
                 Account Settings
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="cursor-pointer text-xs">
-              {theme === 'light' ? (
-                <>
-                  <Moon className="mr-2 h-4 w-4" />
-                  Dark Mode
-                </>
-              ) : (
-                <>
-                  <Sun className="mr-2 h-4 w-4" />
-                  Light Mode
-                </>
-              )}
-            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout} className="text-destructive cursor-pointer text-xs">
               <LogOut className="mr-2 h-4 w-4 text-destructive" />
@@ -279,11 +264,14 @@ export function Header() {
                     ? pathname === '/dashboard'
                     : pathname.startsWith(item.href);
 
-                  const isPremiumRoute =
-                    item.href.startsWith("/dashboard/ai-advisor") ||
-                    item.href.startsWith("/dashboard/insights") ||
-                    item.href.startsWith("/dashboard/business-health");
-                  const isPro = activePlan === "Enterprise Pro" || activePlan === "Pro Plan" || activePlan === "PRO";
+                  // Insights & Health and all standard dashboard routes are accessible for all plans
+                  const isPremiumRoute = item.href.startsWith("/dashboard/ai-advisor");
+                  const isPro =
+                    activePlan === "Scale" ||
+                    activePlan === "SCALE" ||
+                    activePlan === "Enterprise Pro" ||
+                    activePlan === "Pro Plan" ||
+                    activePlan === "PRO";
                   const isLocked = isPremiumRoute && (!isPro || isLimitExceeded);
 
                   return (

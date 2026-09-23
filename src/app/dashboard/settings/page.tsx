@@ -43,11 +43,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Check, Loader2, X, Sparkles, Building2, Zap, Trash2, RefreshCw, LogOut, Sun, Moon, KeyRound, Lock, Eye, EyeOff, ShieldCheck, AlertTriangle, Download, UploadCloud, Image as ImageIcon, Link as LinkIcon } from "lucide-react";
+import { Check, Loader2, X, Sparkles, Building2, Zap, Trash2, RefreshCw, LogOut, KeyRound, Lock, Eye, EyeOff, ShieldCheck, AlertTriangle, Download, UploadCloud, Image as ImageIcon, Link as LinkIcon } from "lucide-react";
 import { useUser, useAuth } from "@/firebase";
 import { signOut, updateUserPassword } from "@/firebase/auth/auth-service";
 import { useRouter } from "next/navigation";
-import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 
 export default function SettingsPage() {
@@ -55,7 +54,6 @@ export default function SettingsPage() {
   const router = useRouter();
   const auth = useAuth();
   const { user } = useUser();
-  const { theme, setTheme } = useTheme();
 
   const handleLogout = async () => {
     if (auth) {
@@ -72,8 +70,10 @@ export default function SettingsPage() {
     businessProfile,
     updateBusinessProfile,
     loadDemoBusiness,
+    clearDemoBusiness,
     hasDemoData,
     isLoadingDemo,
+    isDeletingDemo,
     setShowOnboardingWizard,
     products,
     transactions,
@@ -622,90 +622,46 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Compact 2-Column Grid: Appearance & Data Export */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Appearance & Theme Preferences Card */}
-          <Card className="ios-glass rounded-2xl border-border/50 flex flex-col justify-between">
-            <CardHeader className="p-4 pb-2">
-              <CardTitle className="text-sm font-bold flex items-center gap-2">
-                <Moon className="w-4 h-4 text-primary" />
-                Appearance & Theme
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Toggle light, dark, or follow system default theme.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 pt-1">
-              <div className="grid grid-cols-3 gap-2">
-                <Button
-                  variant={theme === 'light' ? 'default' : 'outline'}
-                  onClick={() => setTheme('light')}
-                  className="flex items-center justify-center gap-1.5 h-9 rounded-xl px-2 text-xs font-semibold transition-all cursor-pointer"
-                >
-                  <Sun className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                  <span>Light</span>
-                </Button>
-                <Button
-                  variant={theme === 'dark' ? 'default' : 'outline'}
-                  onClick={() => setTheme('dark')}
-                  className="flex items-center justify-center gap-1.5 h-9 rounded-xl px-2 text-xs font-semibold transition-all cursor-pointer"
-                >
-                  <Moon className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                  <span>Dark</span>
-                </Button>
-                <Button
-                  variant={theme === 'system' ? 'default' : 'outline'}
-                  onClick={() => setTheme('system')}
-                  className="flex items-center justify-center gap-1.5 h-9 rounded-xl px-2 text-xs font-semibold transition-all cursor-pointer"
-                >
-                  <RefreshCw className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                  <span>System</span>
-                </Button>
+        {/* SaaS Workspace Data Export Card */}
+        <Card className="ios-glass rounded-2xl border-border/50">
+          <CardHeader className="p-4 pb-2">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-primary" />
+              SaaS Data Export
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Export workspace inventory, suppliers, orders & reports.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-4 pt-1">
+            <div className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-secondary/30 border border-border/30 text-xs">
+              <div className="min-w-0">
+                <h4 className="font-semibold text-foreground text-xs truncate">Workspace Archive (JSON)</h4>
+                <p className="text-muted-foreground text-[10.5px] truncate">
+                  Structured records for SaaS data portability
+                </p>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* SaaS Workspace Data Export Card */}
-          <Card className="ios-glass rounded-2xl border-border/50 flex flex-col justify-between">
-            <CardHeader className="p-4 pb-2">
-              <CardTitle className="text-sm font-bold flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-primary" />
-                SaaS Data Export
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Export workspace inventory, suppliers, orders & reports.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-4 pt-1">
-              <div className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-secondary/30 border border-border/30 text-xs">
-                <div className="min-w-0">
-                  <h4 className="font-semibold text-foreground text-xs truncate">Workspace Archive (JSON)</h4>
-                  <p className="text-muted-foreground text-[10.5px] truncate">
-                    Structured records for SaaS data portability
-                  </p>
-                </div>
-                <Button
-                  onClick={() => {
-                    const dump = JSON.stringify({ businessProfile, products, transactions, suppliers, returns }, null, 2);
-                    const blob = new Blob([dump], { type: 'application/json' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `AnalyzeUp_Workspace_Export_${Date.now()}.json`;
-                    a.click();
-                    toast({ title: 'Workspace Exported', description: 'JSON archive downloaded.' });
-                  }}
-                  variant="outline"
-                  size="sm"
-                  className="rounded-xl text-xs gap-1.5 border-border/40 shrink-0 h-9 px-3 cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Download
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+              <Button
+                onClick={() => {
+                  const dump = JSON.stringify({ businessProfile, products, transactions, suppliers, returns }, null, 2);
+                  const blob = new Blob([dump], { type: 'application/json' });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement('a');
+                  a.href = url;
+                  a.download = `AnalyzeUp_Workspace_Export_${Date.now()}.json`;
+                  a.click();
+                  toast({ title: 'Workspace Exported', description: 'JSON archive downloaded.' });
+                }}
+                variant="outline"
+                size="sm"
+                className="rounded-xl text-xs gap-1.5 border-border/40 shrink-0 h-9 px-3 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Download
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* 2-Column Grid: Account & Security Management */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -842,27 +798,51 @@ export default function SettingsPage() {
                     200+ products, 15+ suppliers & 500+ orders
                   </p>
                 </div>
-                <Button
-                  onClick={() => loadDemoBusiness(bizType)}
-                  disabled={isLoadingDemo}
-                  size="sm"
-                  className={cn(
-                    "rounded-xl text-xs gap-1.5 bg-amber-600 hover:bg-amber-500 text-white shrink-0 h-9 px-3.5 cursor-pointer font-semibold transition-all duration-200 shadow-md",
-                    isLoadingDemo && "opacity-90 shadow-lg shadow-amber-500/40 animate-pulse cursor-wait"
-                  )}
-                >
-                  {isLoadingDemo ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-100" />
-                      <span>Uploading Demo...</span>
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      <span>{hasDemoData ? 'Reload Demo' : 'Load Demo'}</span>
-                    </>
-                  )}
-                </Button>
+                {hasDemoData ? (
+                  <Button
+                    onClick={() => clearDemoBusiness()}
+                    disabled={isDeletingDemo}
+                    size="sm"
+                    className={cn(
+                      "rounded-xl text-xs gap-1.5 bg-rose-600 hover:bg-rose-500 text-white shrink-0 h-9 px-3.5 cursor-pointer font-semibold transition-all duration-200 shadow-md",
+                      isDeletingDemo && "opacity-90 shadow-lg shadow-rose-500/40 animate-pulse cursor-wait"
+                    )}
+                  >
+                    {isDeletingDemo ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-rose-100" />
+                        <span>Deleting Demo...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Delete Demo</span>
+                      </>
+                    )}
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => loadDemoBusiness(bizType)}
+                    disabled={isLoadingDemo}
+                    size="sm"
+                    className={cn(
+                      "rounded-xl text-xs gap-1.5 bg-amber-600 hover:bg-amber-500 text-white shrink-0 h-9 px-3.5 cursor-pointer font-semibold transition-all duration-200 shadow-md",
+                      isLoadingDemo && "opacity-90 shadow-lg shadow-amber-500/40 animate-pulse cursor-wait"
+                    )}
+                  >
+                    {isLoadingDemo ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-100" />
+                        <span>Uploading Demo...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Load Demo</span>
+                      </>
+                    )}
+                  </Button>
+                )}
               </div>
 
               <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-rose-500/5 border border-rose-500/20 text-xs">

@@ -90,20 +90,27 @@ export interface Workspace {
 export interface PlanConfig {
   key: PlanType;
   name: string;
+  stage: string;
+  tagline: string;
   priceMonthly: number; // In INR
   priceMonthlyUSD: number;
   priceYearly: number; // In INR (Save ~2 months)
   priceYearlyUSD: number;
+  priceSubtext: string;
+  description: string;
+  highlightedText: string;
   productLimit: number;
   transactionsLimit: number;
   aiQueriesLimit: number;
   reportsLimit: number;
   teamMembersLimit: number;
+  shopifyStoresLimit: number;
   shopifySyncAllowed: boolean;
   forecastingAllowed: boolean;
   proactiveMonitoringAllowed: boolean;
   auditLogsAllowed: boolean;
   popular?: boolean;
+  ctaText: string;
   features: string[];
 }
 
@@ -123,51 +130,66 @@ export const PLAN_CONFIGS: Record<PlanType, PlanConfig> = {
   FREE: {
     key: 'FREE',
     name: 'Free',
+    stage: 'STAGE 1',
+    tagline: 'For validating the idea',
     priceMonthly: 0,
     priceMonthlyUSD: 0,
     priceYearly: 0,
     priceYearlyUSD: 0,
-    productLimit: 500,
-    transactionsLimit: 2000,
-    aiQueriesLimit: 20,
+    priceSubtext: 'Free forever, no card needed',
+    description: "You're pre-revenue, testing the idea, or have a handful of SKUs. Just enough to prove this beats a spreadsheet — not enough to run a real, growing catalog.",
+    highlightedText: 'prove this beats a spreadsheet',
+    productLimit: 50,
+    transactionsLimit: 150,
+    aiQueriesLimit: 10,
     reportsLimit: 10,
     teamMembersLimit: 1,
+    shopifyStoresLimit: 0,
     shopifySyncAllowed: false,
     forecastingAllowed: false,
     proactiveMonitoringAllowed: false,
     auditLogsAllowed: false,
     popular: false,
+    ctaText: 'Start Free',
     features: [
-      '500 Products',
-      '2,000 Transactions',
-      '20 AI Queries / month',
+      '50 Products',
+      '150 Transactions/mo',
+      '10 AI Queries/month',
       'Business Dashboard',
       'Business Health Score',
-      'Inventory Intelligence',
-      'CSV & Excel Import',
+      'Basic Inventory Intelligence',
+      'CSV & Excel Import (up to 100 rows)',
+      '1 Team Member',
     ],
   },
   STARTER: {
     key: 'STARTER',
     name: 'Founder',
+    stage: 'STAGE 2',
+    tagline: 'For running it solo, live',
     priceMonthly: 499,
     priceMonthlyUSD: 6,
     priceYearly: 4990,
     priceYearlyUSD: 60,
-    productLimit: 2500,
-    transactionsLimit: 10000,
+    priceSubtext: 'Billed monthly, cancel anytime',
+    description: "You're live on Shopify or D2C, doing it all yourself. Your real fear is stockouts or overstock because it's all in your head.",
+    highlightedText: 'stockouts or overstock',
+    productLimit: 750,
+    transactionsLimit: 5000,
     aiQueriesLimit: 100,
     reportsLimit: 50,
     teamMembersLimit: 2,
+    shopifyStoresLimit: 1,
     shopifySyncAllowed: true,
     forecastingAllowed: true,
     proactiveMonitoringAllowed: true,
     auditLogsAllowed: false,
     popular: false,
+    ctaText: 'Upgrade to Founder',
     features: [
-      '2,500 Products',
-      '10,000 Transactions',
-      '100 AI Queries / month',
+      '750 Products',
+      '5,000 Transactions/mo',
+      '100 AI Queries/month',
       '30-Day Demand Forecasting',
       'Shopify Integration',
       'Reorder Recommendations',
@@ -178,24 +200,31 @@ export const PLAN_CONFIGS: Record<PlanType, PlanConfig> = {
   FOUNDER: {
     key: 'FOUNDER',
     name: 'Founder',
+    stage: 'STAGE 2',
+    tagline: 'For running it solo, live',
     priceMonthly: 499,
     priceMonthlyUSD: 6,
     priceYearly: 4990,
     priceYearlyUSD: 60,
-    productLimit: 2500,
-    transactionsLimit: 10000,
+    priceSubtext: 'Billed monthly, cancel anytime',
+    description: "You're live on Shopify or D2C, doing it all yourself. Your real fear is stockouts or overstock because it's all in your head.",
+    highlightedText: 'stockouts or overstock',
+    productLimit: 750,
+    transactionsLimit: 5000,
     aiQueriesLimit: 100,
     reportsLimit: 50,
     teamMembersLimit: 2,
+    shopifyStoresLimit: 1,
     shopifySyncAllowed: true,
     forecastingAllowed: true,
     proactiveMonitoringAllowed: true,
     auditLogsAllowed: false,
     popular: false,
+    ctaText: 'Upgrade to Founder',
     features: [
-      '2,500 Products',
-      '10,000 Transactions',
-      '100 AI Queries / month',
+      '750 Products',
+      '5,000 Transactions/mo',
+      '100 AI Queries/month',
       '30-Day Demand Forecasting',
       'Shopify Integration',
       'Reorder Recommendations',
@@ -206,24 +235,31 @@ export const PLAN_CONFIGS: Record<PlanType, PlanConfig> = {
   GROWTH: {
     key: 'GROWTH',
     name: 'Growth',
+    stage: 'STAGE 3',
+    tagline: 'For running it with a team',
     priceMonthly: 999,
     priceMonthlyUSD: 12,
     priceYearly: 9990,
     priceYearlyUSD: 120,
-    productLimit: 10000,
-    transactionsLimit: 50000,
+    priceSubtext: 'Billed monthly, cancel anytime',
+    description: "You've hired people and can't personally check stock anymore. You need the system to flag what needs a decision so the team can act without you.",
+    highlightedText: 'flag what needs a decision',
+    productLimit: 5000,
+    transactionsLimit: 25000,
     aiQueriesLimit: 500,
     reportsLimit: 200,
     teamMembersLimit: 5,
+    shopifyStoresLimit: 1,
     shopifySyncAllowed: true,
     forecastingAllowed: true,
     proactiveMonitoringAllowed: true,
     auditLogsAllowed: true,
     popular: true,
+    ctaText: 'Upgrade to Growth →',
     features: [
-      '10,000 Products',
-      '50,000 Transactions',
-      '500 AI Queries / month',
+      '5,000 Products',
+      '25,000 Transactions/mo',
+      '500 AI Queries/month',
       '90-Day Demand Forecasting',
       'Advanced Inventory Intelligence',
       'AI Action Center',
@@ -234,24 +270,31 @@ export const PLAN_CONFIGS: Record<PlanType, PlanConfig> = {
   PRO: {
     key: 'PRO',
     name: 'Scale',
+    stage: 'STAGE 4',
+    tagline: 'For scaling past yourself',
     priceMonthly: 2499,
     priceMonthlyUSD: 30,
     priceYearly: 24990,
     priceYearlyUSD: 300,
-    productLimit: 50000,
-    transactionsLimit: 250000,
+    priceSubtext: 'Billed monthly, cancel anytime',
+    description: "You have real revenue and 12 months of runway to think about. You don't need more data — you need the app to interpret it and act, because time is scarcer than money now.",
+    highlightedText: 'interpret it and act',
+    productLimit: 25000,
+    transactionsLimit: 100000,
     aiQueriesLimit: 2000,
     reportsLimit: 1000,
     teamMembersLimit: 15,
+    shopifyStoresLimit: 10,
     shopifySyncAllowed: true,
     forecastingAllowed: true,
     proactiveMonitoringAllowed: true,
     auditLogsAllowed: true,
     popular: false,
+    ctaText: 'Upgrade to Scale',
     features: [
-      '50,000 Products',
-      '250,000 Transactions',
-      '2,000 AI Queries / month',
+      '25,000 Products',
+      '100,000 Transactions/mo',
+      '2,000 AI Queries/month',
       '180-Day Demand Forecasting',
       'Multi-Store Shopify',
       'Advanced Supplier Intelligence',
@@ -262,24 +305,31 @@ export const PLAN_CONFIGS: Record<PlanType, PlanConfig> = {
   SCALE: {
     key: 'SCALE',
     name: 'Scale',
+    stage: 'STAGE 4',
+    tagline: 'For scaling past yourself',
     priceMonthly: 2499,
     priceMonthlyUSD: 30,
     priceYearly: 24990,
     priceYearlyUSD: 300,
-    productLimit: 50000,
-    transactionsLimit: 250000,
+    priceSubtext: 'Billed monthly, cancel anytime',
+    description: "You have real revenue and 12 months of runway to think about. You don't need more data — you need the app to interpret it and act, because time is scarcer than money now.",
+    highlightedText: 'interpret it and act',
+    productLimit: 25000,
+    transactionsLimit: 100000,
     aiQueriesLimit: 2000,
     reportsLimit: 1000,
     teamMembersLimit: 15,
+    shopifyStoresLimit: 10,
     shopifySyncAllowed: true,
     forecastingAllowed: true,
     proactiveMonitoringAllowed: true,
     auditLogsAllowed: true,
     popular: false,
+    ctaText: 'Upgrade to Scale',
     features: [
-      '50,000 Products',
-      '250,000 Transactions',
-      '2,000 AI Queries / month',
+      '25,000 Products',
+      '100,000 Transactions/mo',
+      '2,000 AI Queries/month',
       '180-Day Demand Forecasting',
       'Multi-Store Shopify',
       'Advanced Supplier Intelligence',
@@ -451,9 +501,9 @@ export const PLAN_FEATURE_CATEGORIES: FeatureCategoryGroup[] = [
   {
     category: '1. DATA & USAGE',
     rows: [
-      { name: 'Products', free: '500', founder: '2,500', growth: '10,000', scale: '50,000' },
-      { name: 'Transactions', free: '2,000', founder: '10,000', growth: '50,000', scale: '250,000' },
-      { name: 'AI Queries', free: '20/month', founder: '100/month', growth: '500/month', scale: '2,000/month' },
+      { name: 'Products', free: '50', founder: '750', growth: '5,000', scale: '25,000' },
+      { name: 'Transactions', free: '150/mo', founder: '5,000/mo', growth: '25,000/mo', scale: '100,000/mo' },
+      { name: 'AI Queries', free: '10/month', founder: '100/month', growth: '500/month', scale: '2,000/month' },
       { name: 'Team Members', free: '1', founder: '2', growth: '5', scale: '15' },
       { name: 'Connected Shopify Stores', free: false, founder: '1 Store', growth: '1 Store', scale: 'Multi-Store' },
     ],
@@ -706,3 +756,329 @@ export function saveStoredWorkspaceMembers(members: WorkspaceMember[], userId?: 
     console.error('Failed to save workspace members:', err);
   }
 }
+
+// 8. Questionnaire & Deterministic Plan Recommendation Engine
+export interface PlanQuestionnaireAnswers {
+  businessType: string;
+  productCountRange: string;
+  monthlyOrdersRange: string;
+  salesChannels: string[];
+  teamSizeRange: string;
+  primaryNeeds: string[];
+  growthExpectation: string;
+}
+
+export interface PlanFitMetric {
+  label: string;
+  requiredDisplay: string;
+  capacityDisplay: string;
+  requiredValue: number;
+  capacityValue: number;
+  percentage: number;
+  isWithinLimit: boolean;
+}
+
+export interface PlanRecommendationResult {
+  recommendedPlanKey: PlanType | 'CUSTOM';
+  planName: string;
+  isBeyondStandardPlans: boolean;
+  userSummary: {
+    businessType: string;
+    productEstimate: string;
+    orderEstimate: string;
+    shopifyStoresEstimate: number;
+    teamSizeEstimate: string;
+    primaryNeeds: string[];
+    growthExpectation: string;
+  };
+  whyThisPlan: string[];
+  metrics: PlanFitMetric[];
+}
+
+export function recommendPlan(answers: PlanQuestionnaireAnswers): PlanRecommendationResult {
+  let productReq = 50;
+  let productDisplay = 'Under 100';
+  if (answers.productCountRange === '100–500') {
+    productReq = 500;
+    productDisplay = '500';
+  } else if (answers.productCountRange === '500–2,000') {
+    productReq = 2000;
+    productDisplay = '2,000';
+  } else if (answers.productCountRange === '2,000–10,000') {
+    productReq = 10000;
+    productDisplay = '10,000';
+  } else if (answers.productCountRange === '10,000+') {
+    productReq = 25000;
+    productDisplay = '10,000+';
+  } else {
+    productReq = 50;
+    productDisplay = 'Under 100';
+  }
+
+  let orderReq = 100;
+  let orderDisplay = 'Under 100';
+  if (answers.monthlyOrdersRange === '100–1,000') {
+    orderReq = 1000;
+    orderDisplay = '1,000';
+  } else if (answers.monthlyOrdersRange === '1,000–5,000') {
+    orderReq = 5000;
+    orderDisplay = '5,000';
+  } else if (answers.monthlyOrdersRange === '5,000–20,000') {
+    orderReq = 20000;
+    orderDisplay = '20,000';
+  } else if (answers.monthlyOrdersRange === '20,000+') {
+    orderReq = 50000;
+    orderDisplay = '20,000+';
+  } else {
+    orderReq = 100;
+    orderDisplay = 'Under 100';
+  }
+
+  let teamReq = 1;
+  let teamDisplay = '1 user';
+  if (answers.teamSizeRange === '2–3') {
+    teamReq = 3;
+    teamDisplay = '3 users';
+  } else if (answers.teamSizeRange === '4–10') {
+    teamReq = 10;
+    teamDisplay = '10 users';
+  } else if (answers.teamSizeRange === '11–25') {
+    teamReq = 20;
+    teamDisplay = '20 users';
+  } else if (answers.teamSizeRange === '25+') {
+    teamReq = 50;
+    teamDisplay = '25+ users';
+  } else {
+    teamReq = 1;
+    teamDisplay = '1 user';
+  }
+
+  const channels = answers.salesChannels || [];
+  const needs = answers.primaryNeeds || [];
+
+  const requiresShopify = channels.includes('Shopify') || needs.includes('Shopify management');
+  const requiresMultiStore =
+    needs.includes('Multiple stores') ||
+    (channels.includes('Multiple channels') && needs.includes('Shopify management'));
+
+  const storesReq = requiresMultiStore ? 2 : requiresShopify ? 1 : 0;
+
+  // Check for beyond standard plans (Scale max: 25,000 products, 100,000 orders, 15 team members)
+  const isBeyondStandard =
+    teamReq > 15 ||
+    (answers.productCountRange === '10,000+' && answers.monthlyOrdersRange === '20,000+' && teamReq > 15);
+
+  if (isBeyondStandard) {
+    return {
+      recommendedPlanKey: 'CUSTOM',
+      planName: 'Enterprise / Custom',
+      isBeyondStandardPlans: true,
+      userSummary: {
+        businessType: answers.businessType || 'D2C / E-commerce',
+        productEstimate: productDisplay,
+        orderEstimate: orderDisplay,
+        shopifyStoresEstimate: storesReq,
+        teamSizeEstimate: teamDisplay,
+        primaryNeeds: needs.length > 0 ? needs : ['Enterprise Catalog Management'],
+        growthExpectation: answers.growthExpectation || 'Scaling past standard limits',
+      },
+      whyThisPlan: [
+        'Your business requirements exceed our standard public plan tiers',
+        `Requires support for ${teamDisplay} (standard plans support up to 15 team seats)`,
+        'Dedicated high-throughput database synchronization & custom API endpoints',
+        'Custom enterprise service level agreement (SLA) & dedicated account manager',
+      ],
+      metrics: [
+        {
+          label: 'Products',
+          requiredDisplay: productDisplay,
+          capacityDisplay: '25,000+ (Custom)',
+          requiredValue: productReq,
+          capacityValue: 25000,
+          percentage: 100,
+          isWithinLimit: true,
+        },
+        {
+          label: 'Monthly Transactions',
+          requiredDisplay: orderDisplay,
+          capacityDisplay: '100,000+ (Custom)',
+          requiredValue: orderReq,
+          capacityValue: 100000,
+          percentage: 100,
+          isWithinLimit: true,
+        },
+        {
+          label: 'Shopify Stores',
+          requiredDisplay: `${storesReq}`,
+          capacityDisplay: 'Unlimited',
+          requiredValue: storesReq,
+          capacityValue: 10,
+          percentage: 100,
+          isWithinLimit: true,
+        },
+        {
+          label: 'Team Members',
+          requiredDisplay: teamDisplay,
+          capacityDisplay: '15 (Standard Max)',
+          requiredValue: teamReq,
+          capacityValue: 15,
+          percentage: 100,
+          isWithinLimit: false,
+        },
+      ],
+    };
+  }
+
+  // Deterministic evaluation against public plans in order: FREE -> STARTER (Founder) -> GROWTH -> PRO (Scale)
+  // Recommends the lowest plan that satisfies all user requirements (no upselling)
+  const candidateKeys: PlanType[] = ['FREE', 'STARTER', 'GROWTH', 'PRO'];
+  let chosenKey: PlanType = 'PRO';
+
+  for (const key of candidateKeys) {
+    const config = PLAN_CONFIGS[key];
+
+    // 1. Product capacity check
+    if (config.productLimit < productReq) continue;
+
+    // 2. Transaction capacity check
+    if (config.transactionsLimit < orderReq) continue;
+
+    // 3. Team capacity check
+    if (config.teamMembersLimit < teamReq) continue;
+
+    // 4. Shopify store support check
+    if (requiresShopify && !config.shopifySyncAllowed) continue;
+
+    // 5. Multi-store check
+    if (requiresMultiStore && config.shopifyStoresLimit < 2) continue;
+
+    // 6. Advanced features check
+    if (needs.includes('Multiple stores') && key !== 'PRO' && key !== 'SCALE') continue;
+
+    // All criteria satisfied by this tier!
+    chosenKey = key;
+    break;
+  }
+
+  const chosenConfig = PLAN_CONFIGS[chosenKey];
+
+  // Generate specific transparent reasons why this plan was chosen
+  const whyReasons: string[] = [
+    `Supports your product volume (${productDisplay} within ${chosenConfig.productLimit.toLocaleString()} limit)`,
+    `Supports your transaction volume (${orderDisplay} orders within ${chosenConfig.transactionsLimit.toLocaleString()} limit)`,
+  ];
+
+  if (requiresMultiStore) {
+    whyReasons.push(`Supports your multi-store Shopify operations (${storesReq} stores)`);
+  } else if (requiresShopify) {
+    whyReasons.push(`Includes dedicated live Shopify integration`);
+  } else {
+    whyReasons.push(`Includes standard CSV & Excel catalog data import`);
+  }
+
+  if (teamReq > 1) {
+    whyReasons.push(`Provides multi-user team seats (${teamDisplay} within ${chosenConfig.teamMembersLimit} seats limit)`);
+  } else {
+    whyReasons.push(`Tailored for solo founder execution without paying for unused team seats`);
+  }
+
+  if (chosenKey === 'FREE') {
+    whyReasons.push(`100% free forever — ideal for validating your business concept`);
+  } else if (chosenKey === 'STARTER' || chosenKey === 'FOUNDER') {
+    whyReasons.push(`Includes 30-day demand forecasting & supplier reorder intelligence`);
+  } else if (chosenKey === 'GROWTH') {
+    whyReasons.push(`Includes 90-day demand forecasting, AI action center & What-If simulator`);
+  } else {
+    whyReasons.push(`Includes 180-day forecasting, multi-store sync & advanced AI copilot`);
+  }
+
+  // Visual fit metrics
+  const metrics: PlanFitMetric[] = [
+    {
+      label: 'Products',
+      requiredDisplay: productDisplay,
+      capacityDisplay: chosenConfig.productLimit.toLocaleString(),
+      requiredValue: productReq,
+      capacityValue: chosenConfig.productLimit,
+      percentage: Math.min(100, Math.round((productReq / chosenConfig.productLimit) * 100)),
+      isWithinLimit: productReq <= chosenConfig.productLimit,
+    },
+    {
+      label: 'Monthly Transactions',
+      requiredDisplay: orderDisplay,
+      capacityDisplay: chosenConfig.transactionsLimit.toLocaleString(),
+      requiredValue: orderReq,
+      capacityValue: chosenConfig.transactionsLimit,
+      percentage: Math.min(100, Math.round((orderReq / chosenConfig.transactionsLimit) * 100)),
+      isWithinLimit: orderReq <= chosenConfig.transactionsLimit,
+    },
+    {
+      label: 'Shopify Stores',
+      requiredDisplay: `${storesReq}`,
+      capacityDisplay: `${chosenConfig.shopifyStoresLimit === 0 ? '0' : chosenConfig.shopifyStoresLimit >= 10 ? 'Multi-Store (10+)' : chosenConfig.shopifyStoresLimit}`,
+      requiredValue: storesReq,
+      capacityValue: Math.max(1, chosenConfig.shopifyStoresLimit),
+      percentage: Math.min(100, Math.round((storesReq / Math.max(1, chosenConfig.shopifyStoresLimit)) * 100)),
+      isWithinLimit: storesReq <= chosenConfig.shopifyStoresLimit,
+    },
+    {
+      label: 'Team Members',
+      requiredDisplay: teamDisplay,
+      capacityDisplay: `${chosenConfig.teamMembersLimit} users`,
+      requiredValue: teamReq,
+      capacityValue: chosenConfig.teamMembersLimit,
+      percentage: Math.min(100, Math.round((teamReq / chosenConfig.teamMembersLimit) * 100)),
+      isWithinLimit: teamReq <= chosenConfig.teamMembersLimit,
+    },
+  ];
+
+  return {
+    recommendedPlanKey: chosenKey,
+    planName: chosenConfig.name,
+    isBeyondStandardPlans: false,
+    userSummary: {
+      businessType: answers.businessType || 'D2C / E-commerce',
+      productEstimate: productDisplay,
+      orderEstimate: orderDisplay,
+      shopifyStoresEstimate: storesReq,
+      teamSizeEstimate: teamDisplay,
+      primaryNeeds: needs.length > 0 ? needs : ['Inventory Intelligence'],
+      growthExpectation: answers.growthExpectation || 'Growing steadily',
+    },
+    whyThisPlan: whyReasons,
+    metrics,
+  };
+}
+
+export function getStructuredPricingContext(): string {
+  const plansText = ORDERED_PLANS.map((key) => {
+    const p = PLAN_CONFIGS[key];
+    return `### Plan: ${p.name.toUpperCase()} (Internal Key: ${key})
+- Stage: ${p.stage}
+- Tagline: "${p.tagline}"
+- Price: ₹${p.priceMonthly.toLocaleString('en-IN')}/month ($${p.priceMonthlyUSD}/month) | Yearly: ₹${p.priceYearly.toLocaleString('en-IN')}/year ($${p.priceYearlyUSD}/year)
+- Price Subtext: "${p.priceSubtext}"
+- Limits:
+  * Products: ${p.productLimit.toLocaleString()} products
+  * Transactions: ${p.transactionsLimit.toLocaleString()} transactions/month
+  * AI Queries: ${p.aiQueriesLimit.toLocaleString()} queries/month
+  * Team Members: ${p.teamMembersLimit} user${p.teamMembersLimit > 1 ? 's' : ''}
+  * Connected Shopify Stores: ${p.shopifyStoresLimit === 0 ? 'Not included' : p.shopifyStoresLimit >= 10 ? 'Multi-Store (up to 10 stores)' : '1 Store'}
+- Features Included:
+${p.features.map((f) => `  * ${f}`).join('\n')}
+- Narrative Description: "${p.description}"
+`;
+  }).join('\n');
+
+  return `ANALYZEUP OFFICIAL PRICING & PLANS CONFIGURATION (Single Source of Truth)
+
+${plansText}
+
+IMPORTANT POLICY & UPGRADE RULES:
+1. Users can start with Free or any plan, and upgrade or downgrade at any time.
+2. If requirements exceed 25,000 products, 100,000 transactions/mo, or 15 team members, users need an Enterprise/Custom plan and should contact AnalyzeUp support.
+3. Free does NOT support Shopify integration. Minimum plan for Shopify is Founder (₹499/mo).
+4. For multi-store Shopify, Scale (₹2,499/mo) is required.
+5. Always recommend the LOWEST plan that satisfies the user's requirements (no upselling).`;
+}
+

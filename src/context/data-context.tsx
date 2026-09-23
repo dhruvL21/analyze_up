@@ -68,6 +68,7 @@ interface DataContextProps {
   purgeDemoDataOnly: () => Promise<void>;
   hasDemoData: boolean;
   isLoadingDemo: boolean;
+  isDeletingDemo: boolean;
   demoProgress: {
     stage: number;
     stepName: string;
@@ -579,6 +580,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [showShopifyModal, setShowShopifyModal] = useState<boolean>(false);
   const [hasDemoData, setHasDemoData] = useState<boolean>(false);
   const [isLoadingDemo, setIsLoadingDemo] = useState<boolean>(false);
+  const [isDeletingDemo, setIsDeletingDemo] = useState<boolean>(false);
   const [demoProgress, setDemoProgress] = useState<{
     stage: number;
     stepName: string;
@@ -1009,10 +1011,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const activePlanLimit = useMemo(() => {
-    if (activePlan === "Starter Plan" || activePlan === "STARTER") return 25000;
-    if (activePlan === "Growth Plan" || activePlan === "GROWTH") return 50000;
-    if (activePlan === "Enterprise Pro" || activePlan === "Pro Plan" || activePlan === "PRO") return 250000;
-    return 10000; // Free Baseline allows 10,000 records
+    const p = (activePlan || '').toUpperCase();
+    if (p.includes('SCALE') || p.includes('ENTERPRISE') || p.includes('PRO')) return 500000;
+    if (p.includes('GROWTH')) return 100000;
+    if (p.includes('FOUNDER') || p.includes('STARTER')) return 50000;
+    return 25000; // Free baseline allows 25,000 records
   }, [activePlan]);
 
   const isLimitExceeded = useMemo(() => {
@@ -2769,10 +2772,132 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   }, [firestore, user, businessProfile, toast]);
 
   const clearDemoBusiness = useCallback(async () => {
-    await clearAllData();
-    setHasDemoData(false);
-    toast({ title: 'Demo Business Cleared', description: 'Demo data has been removed from your workspace.' });
-  }, [clearAllData, toast]);
+    if (!firestore || !user?.uid) return;
+    const uid = user.uid;
+    setIsDeletingDemo(true);
+
+    try {
+      console.log('[DataContext] Deleting all demo data only...');
+      const cols = ['products', 'transactions', 'suppliers', 'categories', 'orders', 'returns'];
+      const deletionBatches: ReturnType<typeof writeBatch>[] = [];
+      let currentBatch = writeBatch(firestore);
+      let countInBatch = 0;
+      let totalPurged = 0;
+
+      for (const colName of cols) {
+        const snap = await getDocs(collection(firestore, 'users', uid, colName));
+        for (const docSnap of snap.docs) {
+          const data = docSnap.data() || {};
+
+          // Reciprocal Immunity: Strictly protect real business data
+          const isProtectedReal =
+            data.source?.toUpperCase() === 'SHOPIFY' ||
+            data.source?.toUpperCase() === 'GOOGLE_DRIVE' ||
+            data.source?.toUpperCase() === 'CSV' ||
+            data.source?.toUpperCase() === 'IMPORT' ||
+            data.source?.toUpperCase() === 'MANUAL' ||
+            Boolean(data.shopifyProductId) ||
+            Boolean(data.shopifyVariantId) ||
+            Boolean(data.driveFileId) ||
+            Boolean(data.fileId) ||
+            docSnap.id.startsWith('shopify_') ||
+            docSnap.id.startsWith('tx_shopify_') ||
+            docSnap.id.startsWith('gdrive_') ||
+            docSnap.id.startsWith('drive_');
+
+          if (isProtectedReal) {
+            continue;
+          }
+
+          const isDemo =
+            data.isDemo === true ||
+            data.source === 'DEMO' ||
+            data.source === 'demo' ||
+            docSnap.id.startsWith('prod-') ||
+            docSnap.id.startsWith('demo_') ||
+            docSnap.id.startsWith('sup-') ||
+            docSnap.id.startsWith('cat-') ||
+            docSnap.id.startsWith('tx-') ||
+            docSnap.id.startsWith('ord-') ||
+            docSnap.id.startsWith('po-') ||
+            docSnap.id.startsWith('ret-');
+
+          if (isDemo) {
+            currentBatch.delete(docSnap.ref);
+            countInBatch++;
+            totalPurged++;
+            if (countInBatch >= 400) {
+              deletionBatches.push(currentBatch);
+              currentBatch = writeBatch(firestore);
+              countInBatch = 0;
+            }
+          }
+        }
+      }
+
+      if (countInBatch > 0) {
+        deletionBatches.push(currentBatch);
+      }
+
+      for (const b of deletionBatches) {
+        await b.commit();
+      }
+
+      setHasDemoData(false);
+
+      if (businessProfile?.inventorySetupMethod === 'demo') {
+        const profileUpdate = {
+          inventorySetupMethod: 'manual',
+          updatedAt: new Date().toISOString(),
+        };
+        await setDoc(doc(firestore, 'users', uid, 'settings', 'business_profile'), profileUpdate, { merge: true }).catch(() => {});
+        setBusinessProfile(prev => prev ? { ...prev, inventorySetupMethod: 'manual' } : null);
+        if (typeof window !== 'undefined') {
+          try {
+            const stored = localStorage.getItem(`analyzeup_profile_${uid}`);
+            if (stored) {
+              const parsed = JSON.parse(stored);
+              parsed.inventorySetupMethod = 'manual';
+              localStorage.setItem(`analyzeup_profile_${uid}`, JSON.stringify(parsed));
+            }
+          } catch {}
+        }
+      }
+
+      const remainingProducts = products.filter(p => !p?.isDemo && p?.source !== 'DEMO' && p?.source !== 'demo' && !String(p?.id || '').startsWith('prod-') && !String(p?.id || '').startsWith('demo_'));
+      const remainingTransactions = transactions.filter(t => !t?.isDemo && t?.source !== 'DEMO' && t?.source !== 'demo' && !String(t?.id || '').startsWith('tx-') && !String(t?.id || '').startsWith('demo_'));
+      const remainingSuppliers = suppliers.filter(s => !s?.isDemo && s?.source !== 'DEMO' && s?.source !== 'demo' && !String(s?.id || '').startsWith('sup-') && !String(s?.id || '').startsWith('demo_'));
+      const remainingOrders = orders.filter(o => !o?.isDemo && o?.source !== 'DEMO' && o?.source !== 'demo' && !String(o?.id || '').startsWith('ord-') && !String(o?.id || '').startsWith('po-') && !String(o?.id || '').startsWith('demo_'));
+      const remainingReturns = returns.filter(r => !r?.isDemo && r?.source !== 'DEMO' && r?.source !== 'demo' && !String(r?.id || '').startsWith('ret-') && !String(r?.id || '').startsWith('demo_'));
+
+      const sumRef = doc(firestore, 'users', uid, 'analytics', 'summary');
+      if (remainingProducts.length > 0 || remainingTransactions.length > 0) {
+        await recalculateAndSaveAnalyticsSummary(firestore, uid, {
+          products: remainingProducts,
+          transactions: remainingTransactions,
+          suppliers: remainingSuppliers,
+          orders: remainingOrders,
+          returns: remainingReturns,
+        }).catch(console.error);
+      } else {
+        await setDoc(sumRef, DEFAULT_ANALYTICS_SUMMARY, { merge: true }).catch(console.error);
+      }
+
+      toast({
+        title: 'Demo Data Deleted',
+        description: `Successfully removed ${totalPurged > 0 ? totalPurged + ' ' : ''}sample demo records. Your real business data remains untouched.`,
+      });
+    } catch (err) {
+      console.error('[DataContext] Error deleting demo data:', err);
+      toast({
+        variant: 'destructive',
+        title: 'Error Deleting Demo Data',
+        description: 'Failed to delete demo records. Please try again.',
+      });
+    } finally {
+      setIsDeletingDemo(false);
+    }
+  }, [firestore, user, businessProfile, products, transactions, suppliers, orders, returns, toast]);
 
   const purgeDemoDataOnly = useCallback(async () => {
     if (!firestore || !user?.uid) return;
@@ -4279,6 +4404,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     purgeDemoDataOnly,
     hasDemoData,
     isLoadingDemo,
+    isDeletingDemo,
     demoProgress,
     showOnboardingWizard,
     setShowOnboardingWizard,
@@ -4362,6 +4488,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     purgeDemoDataOnly,
     hasDemoData,
     isLoadingDemo,
+    isDeletingDemo,
     demoProgress,
     showOnboardingWizard,
     setShowOnboardingWizard,

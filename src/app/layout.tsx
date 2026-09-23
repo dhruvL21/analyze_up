@@ -24,15 +24,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="h-full" suppressHydrationWarning>
+    <html lang="en" className="h-full dark" style={{ colorScheme: 'dark' }} suppressHydrationWarning>
       <head>
         <meta name="google-site-verification" content="Kme1cRKkJTNrqxNoLJLwMRA-33kdA1SSWhW8WcPuEwU" />
       </head>
-      <body className={`${inter.variable} font-sans antialiased h-full bg-background`} suppressHydrationWarning>
+      <body className={`${inter.variable} font-sans antialiased h-full bg-background dark`} suppressHydrationWarning>
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
-          enableSystem
+          defaultTheme="dark"
+          forcedTheme="dark"
+          enableSystem={false}
           disableTransitionOnChange
         >
           <FirebaseClientProvider>
