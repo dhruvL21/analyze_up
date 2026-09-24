@@ -642,8 +642,8 @@ export function AIActionCenter() {
                     {dataReadiness?.historicalDays ?? 0} / 14 Days
                   </p>
                   {(dataReadiness?.historicalDays ?? 0) >= 14 ? (
-                    <p className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
-                      <Check className="w-3 h-3" /> Baseline Met
+                    <p className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1 leading-tight" title="Enabled: Sales Trends, Stockout Risk Alerts & Safety Stock Buffers">
+                      <Check className="w-3 h-3 shrink-0" /> Trends &amp; Restock Alerts Enabled
                     </p>
                   ) : (
                     <p className="text-[10px] text-amber-400">
@@ -658,8 +658,8 @@ export function AIActionCenter() {
                     {dataReadiness?.totalOrders ?? 0} / 80 Orders
                   </p>
                   {(dataReadiness?.totalOrders ?? 0) >= 80 ? (
-                    <p className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1">
-                      <Check className="w-3 h-3" /> Volume Met
+                    <p className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1 leading-tight" title="Enabled: 30-Day Demand Forecasting & Dead Stock Detection">
+                      <Check className="w-3 h-3 shrink-0" /> Forecasts &amp; Risk Engine Enabled
                     </p>
                   ) : (
                     <p className="text-[10px] text-amber-400">

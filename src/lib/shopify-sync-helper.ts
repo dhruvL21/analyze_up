@@ -228,13 +228,9 @@ export function isShopifyAutoSyncDue(profile?: any): boolean {
     return false;
   }
 
-  // If Real-Time Sync is active, automatically refresh every 20 seconds
-  if (isRealtimeActive) {
-    return !lastSync || elapsedMs >= 20 * 1000;
-  }
-
-  // Otherwise, only Scheduled Auto-Sync is active:
-  if (!isScheduledActive) {
+  // In pure real-time mode (or frequency === 'realtime'), updates are delivered by Shopify webhooks.
+  // Scheduled interval polling is not due, preventing aggressive continuous API polling.
+  if (!isScheduledActive || profile.shopifySyncFrequency === 'realtime') {
     return false;
   }
 
