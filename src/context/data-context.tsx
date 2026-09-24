@@ -3979,45 +3979,63 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       return;
     }
 
-    // Real-time synchronization is event-driven via Shopify Webhooks (products/create, orders/create, inventory, etc.)
-    // We do NOT poll Shopify on an aggressive timer (every 15s or 1min) to avoid rate limits and unnecessary memory churn.
-    
     // 1. Initial seed sync: If connected store has never synced once, run one-time initial seed
     if (!businessProfile.shopifyLastSyncedAt && !isShopifySyncingRef.current) {
       autoSyncShopifyNow(false);
     }
 
-    // 2. Scheduled Auto-Sync: Only run if merchant explicitly enabled scheduled auto-sync AND it is not realtime mode
-    const isScheduledActive =
-      businessProfile?.shopifyAutoSyncEnabled === true &&
-      businessProfile?.shopifySyncFrequency !== 'realtime';
+    const isRealtimeActive = Boolean(businessProfile?.shopifyRealtimeSyncEnabled);
+    const isScheduledActive = Boolean(businessProfile?.shopifyAutoSyncEnabled);
 
-    if (!isScheduledActive) {
-      return; // Zero recurring polling! Webhooks push changes directly from Shopify when events occur.
+    if (!isRealtimeActive && !isScheduledActive) {
+      return;
     }
 
     let lastTrigger = 0;
     const checkShopifyBackgroundSync = () => {
       if (isShopifySyncingRef.current) return;
       const now = Date.now();
-      if (now - lastTrigger < 30000) return;
+      if (now - lastTrigger < 10000) return;
 
       if (isShopifyAutoSyncDue(businessProfile)) {
         lastTrigger = now;
-        console.log('[Shopify Sync] Scheduled batch auto-sync triggered...');
         autoSyncShopifyNow(false);
       }
     };
 
-    // Check at low frequency (once every 60s) whether a scheduled daily/weekly batch time has arrived
-    const intervalId = setInterval(checkShopifyBackgroundSync, 60000);
+    // Check automatically on interval (every 15 seconds)
+    const intervalId = setInterval(checkShopifyBackgroundSync, 15000);
+
+    // Also automatically sync when user focuses back on the tab (e.g. after making a change on Shopify)
+    const handleFocus = () => {
+      if (isShopifySyncingRef.current) return;
+      const now = Date.now();
+      if (now - lastTrigger < 10000) return;
+
+      const lastSync = businessProfile?.shopifyLastSyncedAt
+        ? new Date(businessProfile.shopifyLastSyncedAt).getTime()
+        : 0;
+      if (now - lastSync >= 10000) {
+        lastTrigger = now;
+        autoSyncShopifyNow(false);
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') {
+        handleFocus();
+      }
+    });
 
     return () => {
       clearInterval(intervalId);
+      window.removeEventListener('focus', handleFocus);
     };
   }, [
     businessProfile?.shopifyConnected,
     businessProfile?.shopifyStoreUrl,
+    businessProfile?.shopifyRealtimeSyncEnabled,
     businessProfile?.shopifyAutoSyncEnabled,
     businessProfile?.shopifySyncFrequency,
     businessProfile?.shopifyLastSyncedAt,

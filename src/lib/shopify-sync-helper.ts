@@ -209,28 +209,28 @@ export function isShopifyAutoSyncDue(profile?: any): boolean {
     return false;
   }
 
-  // REAL-TIME SYNC IS EVENT-DRIVEN VIA WEBHOOKS:
-  // We NEVER trigger periodic polling when in real-time mode to prevent continuous API calls and rate-limiting.
-  // Scheduled batch sync only runs if the user explicitly enabled scheduled auto-sync (e.g. daily/weekly backup).
-  const isScheduledActive = profile.shopifyAutoSyncEnabled === false ? false : Boolean(profile.shopifyAutoSyncEnabled);
-  if (!isScheduledActive) {
+  const isRealtimeActive = Boolean(profile.shopifyRealtimeSyncEnabled);
+  const isScheduledActive = Boolean(profile.shopifyAutoSyncEnabled);
+
+  if (!isRealtimeActive && !isScheduledActive) {
     return false;
   }
 
   const freq = profile.shopifySyncFrequency || 'daily';
-  if (freq === 'realtime') {
-    return false; // Real-time is pushed by webhooks, not pulled by intervals
-  }
-
   const lastSync = profile.shopifyLastSyncedAt
     ? new Date(profile.shopifyLastSyncedAt).getTime()
     : 0;
   const now = Date.now();
   const elapsedMs = now - lastSync;
 
-  // 15-second minimum cooldown between auto-sync runs
-  if (elapsedMs < 15 * 1000) {
+  // 10-second minimum cooldown between auto-sync runs
+  if (elapsedMs < 10 * 1000) {
     return false;
+  }
+
+  // If Real-Time Sync is active, automatically refresh every 20 seconds
+  if (isRealtimeActive) {
+    return !lastSync || elapsedMs >= 20 * 1000;
   }
 
   // 1. Specific Date & Time Sync

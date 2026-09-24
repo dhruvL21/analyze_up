@@ -23,24 +23,16 @@ import {
 } from '@/components/ui/select';
 import { useData } from '@/context/data-context';
 import {
-  formatShopifyScheduleSummary,
-  getNextShopifySyncDisplay,
-} from '@/lib/shopify-sync-helper';
-import {
   Clock,
   Zap,
   Calendar,
-  Sparkles,
-  ShoppingBag,
-  CheckCircle2,
   RefreshCw,
   Sliders,
-  ShieldCheck,
+  Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { useUser } from '@/firebase';
-import { Loader2 } from 'lucide-react';
 
 interface ShopifyScheduleModalProps {
   open: boolean;
@@ -52,7 +44,6 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
     businessProfile,
     updateShopifyScheduleSettings,
     autoSyncShopifyNow,
-    isShopifySyncing,
   } = useData();
   const { toast } = useToast();
   const { user } = useUser();
@@ -80,24 +71,35 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
   const [syncTime, setSyncTime] = useState(businessProfile?.shopifySyncTime || '09:00');
   const [syncDay, setSyncDay] = useState(businessProfile?.shopifySyncDay || 'monday');
 
-  // Webhook host configuration for local development / ngrok tunnels
-  const [webhookHost, setWebhookHost] = useState(businessProfile?.shopifyWebhookHost || '');
-  const [isRegisteringWebhooks, setIsRegisteringWebhooks] = useState(false);
-  const [isSimulatingOrder, setIsSimulatingOrder] = useState(false);
-
-  // Default target date/time: tomorrow at 09:00 local time
-  const getTomorrowDefault = () => {
+  // Helper date/time functions
+  const getTomorrowDate = () => {
     const d = new Date();
     d.setDate(d.getDate() + 1);
     const yyyy = d.getFullYear();
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     const dd = String(d.getDate()).padStart(2, '0');
-    return `${yyyy}-${mm}-${dd}T09:00`;
+    return `${yyyy}-${mm}-${dd}`;
   };
 
-  const [scheduledDateTime, setScheduledDateTime] = useState(
-    businessProfile?.shopifyScheduledDateTime || getTomorrowDefault()
-  );
+  const parseDateTime = (dtStr?: string) => {
+    if (dtStr && dtStr.includes('T')) {
+      const [d, t] = dtStr.split('T');
+      return { date: d || getTomorrowDate(), time: (t || '09:00').slice(0, 5) };
+    }
+    return { date: getTomorrowDate(), time: '09:00' };
+  };
+
+  const initialDt = parseDateTime(businessProfile?.shopifyScheduledDateTime);
+  const [scheduledDate, setScheduledDate] = useState(initialDt.date);
+  const [scheduledTime, setScheduledTime] = useState(initialDt.time);
+
+  const scheduledDateTime = `${scheduledDate}T${scheduledTime}`;
+
+  const setFullDateTime = (isoString: string) => {
+    const [d, t] = isoString.split('T');
+    if (d) setScheduledDate(d);
+    if (t) setScheduledTime(t.slice(0, 5));
+  };
 
   const [isSaving, setIsSaving] = useState(false);
 
@@ -128,109 +130,89 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
       if (businessProfile.shopifySyncTime) setSyncTime(businessProfile.shopifySyncTime);
       if (businessProfile.shopifySyncDay) setSyncDay(businessProfile.shopifySyncDay);
       if (businessProfile.shopifyScheduledDateTime) {
-        setScheduledDateTime(businessProfile.shopifyScheduledDateTime);
-      }
-      if (businessProfile.shopifyWebhookHost) {
-        setWebhookHost(businessProfile.shopifyWebhookHost);
+        const parsed = parseDateTime(businessProfile.shopifyScheduledDateTime);
+        setScheduledDate(parsed.date);
+        setScheduledTime(parsed.time);
       }
     }
   }, [open, businessProfile]);
 
-  const handleRegisterWebhooksNow = async () => {
-    if (!businessProfile?.shopifyStoreUrl) {
-      toast({
-        variant: 'destructive',
-        title: 'Shopify Not Connected',
-        description: 'Connect a Shopify store first to register webhooks.',
-      });
-      return;
-    }
-
-    setIsRegisteringWebhooks(true);
+  // Handle Real-Time Sync Toggle with immediate automatic Shopify sync
+  const handleRealtimeToggle = async (checked: boolean) => {
+    setRealtimeEnabled(checked);
     try {
-      const res = await fetch('/api/shopify/webhooks/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          shop: businessProfile.shopifyStoreUrl,
-          webhookHost: webhookHost.trim() || undefined,
-          accessToken: businessProfile?.shopifyAccessToken || undefined,
-        }),
+      await updateShopifyScheduleSettings({
+        shopifyRealtimeSyncEnabled: checked,
       });
 
-      const data = await res.json();
-      if (data.success) {
-        const total = (data.registered?.length || 0) + (data.alreadyExisted?.length || 0);
+      if (checked) {
         toast({
-          title: 'Shopify Webhooks Active! ⚡',
-          description: `All ${total} topics verified and registered on ${data.shop}. Real-time events will reflect immediately with zero polling.`,
+          title: 'Real-Time Auto-Sync Active! ⚡',
+          description: 'Syncing live data from Shopify now. Real-time changes will reflect instantly.',
         });
-        await updateShopifyScheduleSettings({
-          shopifyWebhooksActive: true,
-          shopifyWebhookHost: webhookHost.trim(),
-        });
-      } else if (data.isLocalhost) {
-        toast({
-          variant: 'destructive',
-          title: 'Public HTTPS Endpoint Required',
-          description: data.error || 'Shopify requires an HTTPS tunnel URL (e.g. ngrok) to deliver live webhooks.',
-        });
+
+        // Directly trigger Shopify sync immediately as soon as toggle is turned on
+        autoSyncShopifyNow(true);
+
+        // Silently register webhooks in background if applicable
+        if (businessProfile?.shopifyStoreUrl) {
+          fetch('/api/shopify/webhooks/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              shop: businessProfile.shopifyStoreUrl,
+              ...(businessProfile?.shopifyAccessToken ? { accessToken: businessProfile.shopifyAccessToken } : {}),
+            }),
+          }).catch(() => {});
+        }
       } else {
         toast({
-          variant: 'destructive',
-          title: 'Webhook Registration Notice',
-          description: data.error || 'Could not verify webhooks on Shopify.',
+          title: 'Real-Time Sync Paused',
+          description: 'Automatic real-time sync is now paused. You can sync manually anytime.',
         });
       }
     } catch (err: any) {
       toast({
         variant: 'destructive',
-        title: 'Registration Error',
-        description: err.message || 'Failed to contact webhook service.',
+        title: 'Error Updating Sync Setting',
+        description: err.message || 'Could not update sync preference.',
       });
-    } finally {
-      setIsRegisteringWebhooks(false);
     }
   };
 
-  const handleSimulateInstantOrder = async () => {
-    setIsSimulatingOrder(true);
+  // Handle Scheduled Auto-Sync Toggle with immediate sync
+  const handleAutoSyncToggle = async (checked: boolean) => {
+    setAutoSyncEnabled(checked);
     try {
-      const idToken = user ? await user.getIdToken().catch(() => null) : null;
-      const res = await fetch('/api/shopify/webhooks/simulate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
-        },
-        body: JSON.stringify({
-          shop: businessProfile?.shopifyStoreUrl,
-          eventType: 'orders/create',
-          userId: user?.uid,
-        }),
+      const chosenFrequency = scheduleType === 'custom_datetime' ? 'custom_datetime' : frequency;
+      await updateShopifyScheduleSettings({
+        shopifyAutoSyncEnabled: checked,
+        shopifySyncFrequency: chosenFrequency,
+        shopifySyncTime: syncTime,
+        shopifySyncDay: syncDay,
+        shopifyScheduledDateTime: scheduleType === 'custom_datetime' ? scheduledDateTime : '',
       });
 
-      const data = await res.json();
-      if (data.success) {
+      if (checked) {
         toast({
-          title: 'Instant Shopify Order Ingested! 🛍️',
-          description: `Order ${data.orderNumber} (₹${data.totalAmount}) received via Webhook. Stock & revenue updated in real time!`,
+          title: 'Scheduled Auto-Sync Activated! ⏰',
+          description: `Auto-sync active (${chosenFrequency}). Fetching latest Shopify data now...`,
         });
+
+        // Directly trigger Shopify sync immediately as soon as toggle is turned on
+        autoSyncShopifyNow(true);
       } else {
         toast({
-          variant: 'destructive',
-          title: 'Simulation Notice',
-          description: data.error || 'Failed to simulate webhook order.',
+          title: 'Scheduled Auto-Sync Paused',
+          description: 'Scheduled sync paused. Manual sync is still available.',
         });
       }
     } catch (err: any) {
       toast({
         variant: 'destructive',
-        title: 'Simulation Error',
-        description: err.message,
+        title: 'Error Updating Auto-Sync',
+        description: err.message || 'Could not update schedule preference.',
       });
-    } finally {
-      setIsSimulatingOrder(false);
     }
   };
 
@@ -247,18 +229,21 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
         shopifySyncFrequency: chosenFrequency,
         shopifySyncTime: syncTime,
         shopifySyncDay: syncDay,
-        shopifyScheduledDateTime: scheduleType === 'custom_datetime' ? (scheduledDateTime || '') : '',
-        shopifyWebhookHost: webhookHost.trim(),
+        shopifyScheduledDateTime: scheduleType === 'custom_datetime' ? scheduledDateTime : '',
       });
 
-      // Register webhooks in background if store is connected and public URL or live app is configured
+      // Automatically sync store details if any sync mode is active
+      if (realtimeEnabled || autoSyncEnabled) {
+        autoSyncShopifyNow(true);
+      }
+
+      // Background webhook registration
       if (businessProfile?.shopifyStoreUrl) {
         fetch('/api/shopify/webhooks/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             shop: businessProfile.shopifyStoreUrl,
-            webhookHost: webhookHost.trim() || undefined,
             ...(businessProfile?.shopifyAccessToken ? { accessToken: businessProfile.shopifyAccessToken } : {}),
           }),
         }).catch(console.warn);
@@ -268,18 +253,6 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const previewProfile = {
-    shopifyConnected: true,
-    shopifyStoreUrl: businessProfile?.shopifyStoreUrl,
-    shopifyRealtimeSyncEnabled: realtimeEnabled,
-    shopifySyncFrequency: scheduleType === 'custom_datetime'
-      ? 'custom_datetime'
-      : frequency,
-    shopifySyncTime: syncTime,
-    shopifySyncDay: syncDay,
-    shopifyScheduledDateTime: scheduledDateTime,
   };
 
   if (!open) return null;
@@ -318,85 +291,45 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
                   <span className="font-bold text-foreground text-sm">Real-Time Sync</span>
                   {realtimeEnabled && (
                     <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/40 text-[10px] py-0 px-2 shrink-0">
-                      Webhook-Driven
+                      Live Event-Driven
                     </Badge>
                   )}
                 </div>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
-                  Event-driven live sync: orders & inventory instantly update with zero API polling.
+                  Automatically syncs orders, products, and inventory the exact moment changes occur on Shopify. Zero continuous API polling.
                 </p>
               </div>
               <Switch
                 checked={realtimeEnabled}
-                onCheckedChange={setRealtimeEnabled}
+                onCheckedChange={handleRealtimeToggle}
                 className="shrink-0"
               />
             </div>
 
             {realtimeEnabled && (
               <div className="pt-3 border-t border-emerald-500/20 space-y-3 text-[11px]">
-                <div className="grid grid-cols-2 gap-2 text-[10px] text-emerald-400">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    <span>Instant Shopify Webhooks</span>
+                <div className="p-3 rounded-xl bg-background/60 border border-emerald-500/25 space-y-2">
+                  <div className="flex items-center gap-2 text-emerald-400 font-semibold text-xs">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span>Instant Event-Driven Sync Active</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>Zero Polling Active</span>
-                  </div>
-                </div>
-
-                {/* Public Tunnel Configuration for Local Development */}
-                <div className="p-2.5 rounded-xl bg-background/60 border border-border/50 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
-                      Public Webhook / Tunnel URL
-                    </span>
-                    <span className="text-[9px] text-emerald-400 font-medium">Requires HTTPS</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      value={webhookHost}
-                      onChange={(e) => setWebhookHost(e.target.value)}
-                      placeholder="e.g. https://your-brand.ngrok-free.app"
-                      className="h-8 text-xs bg-background/80"
-                    />
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={handleRegisterWebhooksNow}
-                      disabled={isRegisteringWebhooks || !businessProfile?.shopifyStoreUrl}
-                      className="h-8 text-[11px] font-semibold px-3 bg-emerald-600 hover:bg-emerald-500 text-white shrink-0 cursor-pointer"
-                    >
-                      {isRegisteringWebhooks ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Register'}
-                    </Button>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">
-                    Shopify cloud pushes new orders and inventory changes to this HTTPS endpoint. For local development, start ngrok (<code className="text-emerald-400">ngrok http 9002</code>) and paste your HTTPS tunnel URL above.
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Whenever a sale, refund, or stock change occurs in Shopify, it is instantly pushed and reflected in your AnalyzeUp analytics with zero manual clicks.
                   </p>
-                </div>
-
-                {/* Immediate Real-Time Simulation Action */}
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-emerald-950/20 border border-emerald-500/20">
-                  <div>
-                    <div className="font-semibold text-foreground text-xs flex items-center gap-1.5">
-                      <Zap className="w-3.5 h-3.5 text-emerald-400" />
-                      Test Real-Time Event
+                  <div className="flex items-center gap-2 flex-wrap pt-1 text-[10px] text-emerald-400 font-medium">
+                    <div className="flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                      <Check className="w-3 h-3" />
+                      <span>Live Order Reflection</span>
                     </div>
-                    <div className="text-[10px] text-muted-foreground">
-                      Simulate a live Shopify order to verify instant reflection
+                    <div className="flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                      <Check className="w-3 h-3" />
+                      <span>Instant Stock Sync</span>
+                    </div>
+                    <div className="flex items-center gap-1 bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">
+                      <Check className="w-3 h-3" />
+                      <span>Zero API Polling</span>
                     </div>
                   </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={handleSimulateInstantOrder}
-                    disabled={isSimulatingOrder}
-                    className="h-7 text-[11px] font-bold border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10 shrink-0 cursor-pointer"
-                  >
-                    {isSimulatingOrder ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Simulate Order ⚡'}
-                  </Button>
                 </div>
               </div>
             )}
@@ -416,7 +349,7 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
               </div>
               <Switch
                 checked={autoSyncEnabled}
-                onCheckedChange={setAutoSyncEnabled}
+                onCheckedChange={handleAutoSyncToggle}
                 className="shrink-0"
               />
             </div>
@@ -458,60 +391,94 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
                   </div>
                 </div>
 
-                {/* MODE A: CUSTOM SPECIFIC DATE & TIME */}
+                {/* MODE A: CUSTOM SPECIFIC DATE & TIME (SEPARATE DATE AND TIME FIELDS) */}
                 {scheduleType === 'custom_datetime' && (
-                  <div className="space-y-2.5 p-3 rounded-xl bg-secondary/40 border border-border/40">
-                    <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                      <Calendar className="w-3.5 h-3.5 text-primary" />
-                      Set Automatic Sync Date & Time
-                    </Label>
-                    <Input
-                      type="datetime-local"
-                      value={scheduledDateTime}
-                      onChange={(e) => setScheduledDateTime(e.target.value)}
-                      className="text-xs rounded-xl h-9 bg-background/60 border-border/60"
-                    />
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {[
-                        {
-                          label: 'In 1 Minute',
-                          calc: () => {
-                            const d = new Date(Date.now() + 60 * 1000);
-                            return d.toISOString().slice(0, 16);
+                  <div className="space-y-3 p-3.5 rounded-2xl bg-secondary/40 border border-border/40">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-primary" />
+                        Set Automatic Sync Date & Time
+                      </Label>
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        {scheduledDate} • {scheduledTime}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {/* Separate Date Field */}
+                      <div className="space-y-1.5">
+                        <Label className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+                          <Calendar className="w-3 h-3 text-emerald-400" />
+                          <span>Sync Date</span>
+                        </Label>
+                        <Input
+                          type="date"
+                          value={scheduledDate}
+                          onChange={(e) => setScheduledDate(e.target.value)}
+                          className="text-xs rounded-xl h-9 bg-background/80 border-border/60 font-medium"
+                        />
+                      </div>
+
+                      {/* Separate Time Field */}
+                      <div className="space-y-1.5">
+                        <Label className="text-[11px] font-medium text-muted-foreground flex items-center gap-1">
+                          <Clock className="w-3 h-3 text-emerald-400" />
+                          <span>Sync Time</span>
+                        </Label>
+                        <Input
+                          type="time"
+                          value={scheduledTime}
+                          onChange={(e) => setScheduledTime(e.target.value)}
+                          className="text-xs rounded-xl h-9 bg-background/80 border-border/60 font-medium"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Quick Presets */}
+                    <div className="space-y-1 pt-1 border-t border-border/30">
+                      <span className="text-[10px] text-muted-foreground block font-medium">Quick Presets:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {[
+                          {
+                            label: 'In 1 Minute',
+                            calc: () => {
+                              const d = new Date(Date.now() + 60 * 1000);
+                              return d.toISOString().slice(0, 16);
+                            },
                           },
-                        },
-                        {
-                          label: 'In 5 Minutes',
-                          calc: () => {
-                            const d = new Date(Date.now() + 5 * 60 * 1000);
-                            return d.toISOString().slice(0, 16);
+                          {
+                            label: 'In 5 Minutes',
+                            calc: () => {
+                              const d = new Date(Date.now() + 5 * 60 * 1000);
+                              return d.toISOString().slice(0, 16);
+                            },
                           },
-                        },
-                        {
-                          label: '+1 Hour',
-                          calc: () => {
-                            const d = new Date(Date.now() + 60 * 60 * 1000);
-                            return d.toISOString().slice(0, 16);
+                          {
+                            label: '+1 Hour',
+                            calc: () => {
+                              const d = new Date(Date.now() + 60 * 60 * 1000);
+                              return d.toISOString().slice(0, 16);
+                            },
                           },
-                        },
-                        {
-                          label: 'Tomorrow 9 AM',
-                          calc: () => {
-                            const d = new Date();
-                            d.setDate(d.getDate() + 1);
-                            return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T09:00`;
+                          {
+                            label: 'Tomorrow 9 AM',
+                            calc: () => {
+                              const d = new Date();
+                              d.setDate(d.getDate() + 1);
+                              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T09:00`;
+                            },
                           },
-                        },
-                      ].map((preset) => (
-                        <button
-                          key={preset.label}
-                          type="button"
-                          onClick={() => setScheduledDateTime(preset.calc())}
-                          className="text-[10px] py-1 px-2 rounded-lg bg-secondary border border-border/40 hover:bg-secondary/80 text-muted-foreground transition-all cursor-pointer"
-                        >
-                          {preset.label}
-                        </button>
-                      ))}
+                        ].map((preset) => (
+                          <button
+                            key={preset.label}
+                            type="button"
+                            onClick={() => setFullDateTime(preset.calc())}
+                            className="text-[10px] py-1 px-2 rounded-lg bg-secondary border border-border/40 hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-all cursor-pointer font-medium"
+                          >
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -604,32 +571,6 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
                 )}
               </div>
             )}
-          </div>
-
-          {/* ACTIVE SUMMARY PREVIEW PILL */}
-          <div className="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-xs flex items-center justify-between text-emerald-300">
-            <div className="flex items-center gap-2">
-              <Sparkles className="w-4 h-4 text-emerald-400 shrink-0" />
-              <div className="space-y-0.5">
-                <span className="block font-bold text-foreground">
-                  {formatShopifyScheduleSummary(previewProfile)}
-                </span>
-                <span className="text-[10px] text-muted-foreground block">
-                  Next Check: {getNextShopifySyncDisplay(previewProfile)}
-                </span>
-              </div>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={isShopifySyncing}
-              onClick={() => autoSyncShopifyNow(true)}
-              className="rounded-xl text-[11px] h-7 px-2.5 text-emerald-400 hover:bg-emerald-500/20 gap-1"
-            >
-              <RefreshCw className={cn("w-3 h-3", isShopifySyncing && "animate-spin")} />
-              Sync Now
-            </Button>
           </div>
         </div>
 

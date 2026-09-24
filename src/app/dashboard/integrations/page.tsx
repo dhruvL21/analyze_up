@@ -1717,6 +1717,7 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
                               await updateShopifyScheduleSettings({
                                 shopifyRealtimeSyncEnabled: true,
                               });
+                              autoSyncShopifyNow(true);
                             }}
                             className="h-6 px-2.5 text-[10px] rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold cursor-pointer"
                           >
