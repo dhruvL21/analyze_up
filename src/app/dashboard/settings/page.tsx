@@ -378,9 +378,16 @@ export default function SettingsPage() {
                   Your business context directly customizes AI Advisor recommendations and benchmarks.
                 </CardDescription>
               </div>
-              <Badge className="bg-primary/15 text-primary border-primary/25 text-xs px-3 py-1">
-                {INDUSTRY_CONFIGS[bizType]?.label || bizType}
-              </Badge>
+              <div className="flex items-center gap-2">
+                {hasChanges && (
+                  <Badge variant="outline" className="border-amber-500/40 text-amber-400 bg-amber-500/10 text-xs px-2.5 py-0.5 animate-pulse font-medium">
+                    Unsaved Changes
+                  </Badge>
+                )}
+                <Badge className="bg-primary/15 text-primary border-primary/25 text-xs px-3 py-1 font-semibold">
+                  Active: {INDUSTRY_CONFIGS[activeProfile.businessType]?.label || activeProfile.businessType}
+                </Badge>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -582,16 +589,104 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div className="p-3.5 rounded-2xl bg-secondary/50 border border-border/40 text-xs space-y-1.5">
-              <div className="flex items-center gap-1.5 font-semibold text-primary">
-                <Sparkles className="w-3.5 h-3.5" /> Industry AI Context Active
+            {bizType !== activeProfile.businessType ? (
+              <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-semibold text-amber-400">
+                    <Sparkles className="w-3.5 h-3.5" /> Industry AI Context (Pending Save — Not Yet Active)
+                  </div>
+                  <Badge variant="outline" className="border-amber-500/40 text-amber-300 bg-amber-500/15 text-[10px] px-2 py-0.5 font-medium">
+                    Preview Only
+                  </Badge>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-foreground font-medium text-[11.5px]">
+                    Pending Context for {INDUSTRY_CONFIGS[bizType]?.label || bizType}:
+                  </p>
+                  <p className="text-muted-foreground leading-relaxed">{INDUSTRY_CONFIGS[bizType]?.aiPriority}</p>
+                </div>
+                <div className="pt-2 border-t border-amber-500/20 text-[11px] text-amber-300/90 flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                  <span>
+                    Currently active: <strong>{INDUSTRY_CONFIGS[activeProfile.businessType]?.label || activeProfile.businessType}</strong>. Without clicking <strong>Save Business Profile</strong>, no changes will be applied.
+                  </span>
+                </div>
               </div>
-              <p className="text-muted-foreground">{INDUSTRY_CONFIGS[bizType]?.aiPriority}</p>
-            </div>
+            ) : hasChanges ? (
+              <div className="p-3.5 rounded-2xl bg-secondary/50 border border-border/40 text-xs space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-semibold text-primary">
+                    <Sparkles className="w-3.5 h-3.5" /> Industry AI Context Active
+                  </div>
+                  <Badge variant="outline" className="border-amber-500/40 text-amber-300 bg-amber-500/10 text-[10px] px-2 py-0.5 font-medium">
+                    Unsaved Profile Edits
+                  </Badge>
+                </div>
+                <p className="text-muted-foreground leading-relaxed">{INDUSTRY_CONFIGS[bizType]?.aiPriority}</p>
+                <div className="pt-1.5 border-t border-border/30 text-[11px] text-amber-400 flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>You have unsaved changes above. Click <strong>Save Business Profile</strong> to apply them.</span>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3.5 rounded-2xl bg-secondary/50 border border-border/40 text-xs space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-semibold text-primary">
+                    <Sparkles className="w-3.5 h-3.5" /> Industry AI Context Active
+                  </div>
+                  <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 bg-emerald-500/10 text-[10px] px-2 py-0.5 flex items-center gap-1 font-medium">
+                    <Check className="w-3 h-3" /> Saved & Active
+                  </Badge>
+                </div>
+                <p className="text-muted-foreground leading-relaxed">{INDUSTRY_CONFIGS[bizType]?.aiPriority}</p>
+              </div>
+            )}
 
-            <Button onClick={handleSaveBusinessProfile} className="rounded-xl text-xs gap-1.5 bg-primary text-primary-foreground">
-              Save Business Profile
-            </Button>
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <Button
+                id="save-business-profile-btn"
+                type="button"
+                onClick={handleSaveBusinessProfile}
+                disabled={isSavingProfile}
+                className={cn(
+                  "rounded-xl text-xs gap-1.5 font-bold transition-all cursor-pointer h-9 px-4",
+                  hasChanges
+                    ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/25 ring-2 ring-primary/40 ring-offset-2 ring-offset-background"
+                    : "bg-primary text-primary-foreground"
+                )}
+              >
+                {isSavingProfile ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving Profile...</span>
+                  </>
+                ) : hasChanges ? (
+                  <>
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Save Business Profile (Unsaved Changes)</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Save Business Profile</span>
+                  </>
+                )}
+              </Button>
+
+              {hasChanges && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isSavingProfile}
+                  onClick={handleDiscardChanges}
+                  className="rounded-xl text-xs h-9 px-3 gap-1.5 border-border/60 hover:bg-secondary cursor-pointer text-muted-foreground hover:text-foreground"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Discard Changes</span>
+                </Button>
+              )}
+            </div>
           </CardContent>
         </Card>
 

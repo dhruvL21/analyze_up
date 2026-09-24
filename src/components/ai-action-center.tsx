@@ -69,8 +69,17 @@ export function AIActionCenter() {
   const router = useRouter();
 
   const hasNoData = (products?.length || 0) === 0 && (transactions?.length || 0) === 0;
-  // Bypass learning gate if the primary criteria (14 days + 50 orders) are independently met
-  const criteriaGraduated = ((dataReadiness?.historicalDays ?? 0) >= 14 && (dataReadiness?.totalOrders ?? 0) >= 50) || (dataReadiness?.totalOrders ?? 0) >= 100;
+  const currentOrders = dataReadiness?.totalOrders ?? (transactions.filter(t => t.type === 'Sale' || !t.type).length);
+  const currentDays = dataReadiness?.historicalDays ?? 0;
+  const currentScore = dataReadiness?.score ?? 0;
+
+  // Fully dynamic criteria graduation: Early Insights unlocks at 50 orders OR 14 days with score >= 40, or Level !== LEARNING, or 100+ orders
+  const criteriaGraduated = Boolean(
+    businessBuddyCalibration?.isOverridden ||
+    (currentScore >= 40 && (currentOrders >= 50 || currentDays >= 14)) ||
+    (dataReadiness?.level && dataReadiness.level !== 'LEARNING') ||
+    currentOrders >= 100
+  );
   const isLearning = !criteriaGraduated && (dataReadiness?.level === 'LEARNING' || businessBuddyCalibration?.status === 'LEARNING');
 
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -593,7 +602,7 @@ export function AIActionCenter() {
                 <div className="p-3 rounded-xl bg-secondary/20 border border-border/30 space-y-1">
                   <span className="text-[10px] uppercase font-bold text-muted-foreground block">Customer Orders</span>
                   <p className="text-sm font-bold text-foreground font-mono">
-                    0 / 40 Orders
+                    0 / 50 Orders
                   </p>
                   <p className="text-[10px] text-muted-foreground">Awaiting data</p>
                 </div>
@@ -655,15 +664,15 @@ export function AIActionCenter() {
                 <div className="p-3 rounded-xl bg-secondary/20 border border-border/30 space-y-1">
                   <span className="text-[10px] uppercase font-bold text-muted-foreground block">Customer Orders</span>
                   <p className="text-sm font-bold text-foreground font-mono">
-                    {dataReadiness?.totalOrders ?? 0} / 80 Orders
+                    {currentOrders} / 50 Orders
                   </p>
-                  {(dataReadiness?.totalOrders ?? 0) >= 80 ? (
+                  {currentOrders >= 50 ? (
                     <p className="text-[10px] text-emerald-400 font-semibold flex items-center gap-1 leading-tight" title="Enabled: 30-Day Demand Forecasting & Dead Stock Detection">
-                      <Check className="w-3 h-3 shrink-0" /> Forecasts &amp; Risk Engine Enabled
+                      <Check className="w-3 h-3 shrink-0" /> Orders Baseline Met
                     </p>
                   ) : (
                     <p className="text-[10px] text-amber-400">
-                      {Math.max(0, 80 - (dataReadiness?.totalOrders ?? 0))} orders left
+                      {Math.max(0, 50 - currentOrders)} orders left
                     </p>
                   )}
                 </div>
