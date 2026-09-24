@@ -134,17 +134,9 @@ export function Header() {
     <header className="sticky top-0 z-20 flex h-16 w-full items-center justify-between gap-2 px-4 lg:px-6 navbar">
       <div className="flex flex-shrink-0 items-center gap-2 font-semibold">
         <Link href="/dashboard" data-tour="header-logo" className="flex items-center gap-2.5 group">
-          {businessProfile?.logoUrl ? (
-            <img
-              src={businessProfile.logoUrl}
-              alt={businessProfile.businessName || 'Business Logo'}
-              className="h-7 w-7 rounded-xl object-cover border border-border/60 shadow-sm transition-transform duration-300 group-hover:scale-105"
-            />
-          ) : (
-            <AnalyzeUpIcon className="h-6 w-6 transition-transform duration-300 group-hover:scale-110" healthColor={healthLogoColor} />
-          )}
-          <span className="text-lg font-bold tracking-tight text-foreground truncate max-w-[160px] sm:max-w-xs">
-            {businessProfile?.businessName || 'AnalyzeUp'}
+          <AnalyzeUpIcon className="h-6 w-6 transition-transform duration-300 group-hover:scale-110" healthColor={healthLogoColor} />
+          <span className="text-lg font-bold tracking-tight text-foreground truncate">
+            AnalyzeUp
           </span>
         </Link>
       </div>
