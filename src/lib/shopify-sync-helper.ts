@@ -212,11 +212,11 @@ export function isShopifyAutoSyncDue(profile?: any): boolean {
   const isRealtimeActive = Boolean(profile.shopifyRealtimeSyncEnabled);
   const isScheduledActive = Boolean(profile.shopifyAutoSyncEnabled);
 
+  // If both are disabled, NEVER auto-sync
   if (!isRealtimeActive && !isScheduledActive) {
     return false;
   }
 
-  const freq = profile.shopifySyncFrequency || 'daily';
   const lastSync = profile.shopifyLastSyncedAt
     ? new Date(profile.shopifyLastSyncedAt).getTime()
     : 0;
@@ -233,12 +233,20 @@ export function isShopifyAutoSyncDue(profile?: any): boolean {
     return !lastSync || elapsedMs >= 20 * 1000;
   }
 
-  // 1. Specific Date & Time Sync
+  // Otherwise, only Scheduled Auto-Sync is active:
+  if (!isScheduledActive) {
+    return false;
+  }
+
+  const freq = profile.shopifySyncFrequency || 'daily';
+
+  // 1. Specific Date & Time Sync: strictly check that the scheduled datetime has arrived
   if (freq === 'custom_datetime') {
     if (!profile.shopifyScheduledDateTime) return false;
     const scheduledTime = new Date(profile.shopifyScheduledDateTime).getTime();
     if (isNaN(scheduledTime)) return false;
 
+    // Only due if current time is past scheduled time AND we haven't synced after that scheduled time
     return now >= scheduledTime && lastSync < scheduledTime;
   }
 

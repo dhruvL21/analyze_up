@@ -3987,6 +3987,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     const isRealtimeActive = Boolean(businessProfile?.shopifyRealtimeSyncEnabled);
     const isScheduledActive = Boolean(businessProfile?.shopifyAutoSyncEnabled);
 
+    // If both real-time and scheduled sync are disabled, do not run any background sync
     if (!isRealtimeActive && !isScheduledActive) {
       return;
     }
@@ -4003,34 +4004,37 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       }
     };
 
-    // Check automatically on interval (every 15 seconds)
+    // Check automatically on interval (checks isShopifyAutoSyncDue)
     const intervalId = setInterval(checkShopifyBackgroundSync, 15000);
 
-    // Also automatically sync when user focuses back on the tab (e.g. after making a change on Shopify)
+    // Tab focus listener: ONLY syncs if Real-Time Sync is active (never when only scheduled or off!)
     const handleFocus = () => {
+      if (!isRealtimeActive) return; // STRICT GUARD: Do not sync on window focus if real-time sync is off!
       if (isShopifySyncingRef.current) return;
       const now = Date.now();
-      if (now - lastTrigger < 10000) return;
+      if (now - lastTrigger < 15000) return;
 
       const lastSync = businessProfile?.shopifyLastSyncedAt
         ? new Date(businessProfile.shopifyLastSyncedAt).getTime()
         : 0;
-      if (now - lastSync >= 10000) {
+      if (now - lastSync >= 15000) {
         lastTrigger = now;
         autoSyncShopifyNow(false);
       }
     };
 
     window.addEventListener('focus', handleFocus);
-    document.addEventListener('visibilitychange', () => {
+    const handleVisibility = () => {
       if (document.visibilityState === 'visible') {
         handleFocus();
       }
-    });
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
 
     return () => {
       clearInterval(intervalId);
       window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [
     businessProfile?.shopifyConnected,

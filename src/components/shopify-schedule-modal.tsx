@@ -180,7 +180,7 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
     }
   };
 
-  // Handle Scheduled Auto-Sync Toggle with immediate sync
+  // Handle Scheduled Auto-Sync Toggle
   const handleAutoSyncToggle = async (checked: boolean) => {
     setAutoSyncEnabled(checked);
     try {
@@ -195,12 +195,11 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
 
       if (checked) {
         toast({
-          title: 'Scheduled Auto-Sync Activated! ⏰',
-          description: `Auto-sync active (${chosenFrequency}). Fetching latest Shopify data now...`,
+          title: 'Scheduled Auto-Sync Set! ⏰',
+          description: scheduleType === 'custom_datetime'
+            ? `Store will automatically sync on ${scheduledDate} at ${scheduledTime}.`
+            : `Scheduled auto-sync active (${chosenFrequency}).`,
         });
-
-        // Directly trigger Shopify sync immediately as soon as toggle is turned on
-        autoSyncShopifyNow(true);
       } else {
         toast({
           title: 'Scheduled Auto-Sync Paused',
@@ -232,8 +231,8 @@ export function ShopifyScheduleModal({ open, onOpenChange }: ShopifyScheduleModa
         shopifyScheduledDateTime: scheduleType === 'custom_datetime' ? scheduledDateTime : '',
       });
 
-      // Automatically sync store details if any sync mode is active
-      if (realtimeEnabled || autoSyncEnabled) {
+      // Only trigger immediate sync if Real-Time sync was just newly activated
+      if (realtimeEnabled && !businessProfile?.shopifyRealtimeSyncEnabled) {
         autoSyncShopifyNow(true);
       }
 

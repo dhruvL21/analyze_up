@@ -16,7 +16,7 @@ import { BusinessActivityTimeline } from '@/components/business-activity-timelin
 import { DataReadinessModal } from '@/components/data-readiness-modal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Store, Building2 } from 'lucide-react';
 
 export default function DashboardPage() {
   const { products, transactions, businessProfile, dataReadiness } = useData();
@@ -24,15 +24,38 @@ export default function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-6 pb-8 max-w-full overflow-hidden">
-      {/* Top Welcome Title with Data Readiness Score Badge */}
+      {/* Top Welcome Title with Business Logo & Data Readiness Score Badge */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight md:text-3xl text-foreground">
-            Business Copilot
-          </h1>
-          <p className="text-xs md:text-sm text-muted-foreground mt-1 font-medium">
-            Welcome back, <span className="font-semibold text-foreground">{businessProfile?.businessName || 'Founder'}</span> — Know what&apos;s happening. Decide what matters.
-          </p>
+        <div className="flex items-center gap-3.5">
+          {businessProfile?.logoUrl ? (
+            <div className="relative shrink-0">
+              <img
+                src={businessProfile.logoUrl}
+                alt={businessProfile.businessName || 'Business Logo'}
+                className="w-12 h-12 md:w-14 md:h-14 rounded-2xl object-cover border border-border/60 bg-secondary/30 shadow-md ring-1 ring-border/40"
+              />
+              <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-emerald-500 border-2 border-background" title="Active" />
+            </div>
+          ) : (
+            <div className="w-12 h-12 md:w-14 md:h-14 rounded-2xl bg-gradient-to-br from-primary/20 via-primary/10 to-secondary/30 border border-border/60 flex items-center justify-center shrink-0 shadow-md">
+              <Store className="w-6 h-6 text-primary" />
+            </div>
+          )}
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-2xl font-extrabold tracking-tight md:text-3xl text-foreground">
+                {businessProfile?.businessName || 'Business Copilot'}
+              </h1>
+              {businessProfile?.businessType && (
+                <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-wider py-0.5 px-2 bg-secondary/40 border-border/60 text-muted-foreground">
+                  {businessProfile.businessType.replace(/_/g, ' ')}
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs md:text-sm text-muted-foreground mt-1 font-medium">
+              Welcome back, <span className="font-semibold text-foreground">{businessProfile?.businessName || 'Founder'}</span> — Know what&apos;s happening. Decide what matters.
+            </p>
+          </div>
         </div>
 
         {/* Data Readiness Interactive Badge */}
