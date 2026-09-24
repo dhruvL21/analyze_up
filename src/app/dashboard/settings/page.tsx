@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import {
   Card,
   CardContent,
@@ -43,7 +43,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Check, Loader2, X, Sparkles, Building2, Zap, Trash2, RefreshCw, LogOut, KeyRound, Lock, Eye, EyeOff, ShieldCheck, AlertTriangle, Download, UploadCloud, Image as ImageIcon, Link as LinkIcon } from "lucide-react";
+import { Check, Loader2, X, Sparkles, Building2, Zap, Trash2, RefreshCw, LogOut, KeyRound, Lock, Eye, EyeOff, ShieldCheck, AlertTriangle, AlertCircle, Save, Download, UploadCloud, Image as ImageIcon, Link as LinkIcon } from "lucide-react";
 import { useUser, useAuth } from "@/firebase";
 import { signOut, updateUserPassword } from "@/firebase/auth/auth-service";
 import { useRouter } from "next/navigation";
@@ -87,10 +87,34 @@ export default function SettingsPage() {
   const [currency, setCurrency] = useState(businessProfile?.currency || "INR (₹)");
   const [country, setCountry] = useState(businessProfile?.country || "India");
   const [logoUrl, setLogoUrl] = useState(businessProfile?.logoUrl || "");
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [showUrlInput, setShowUrlInput] = useState(false);
+  const isInitialized = useRef(false);
+
+  // Active saved profile in context
+  const activeProfile = useMemo(() => ({
+    businessName: businessProfile?.businessName || "My Business",
+    businessType: (businessProfile?.businessType || "Retail") as BusinessType,
+    businessSize: (businessProfile?.businessSize || "2-10 Employees") as BusinessSize,
+    currency: businessProfile?.currency || "INR (₹)",
+    country: businessProfile?.country || "India",
+    logoUrl: businessProfile?.logoUrl || "",
+  }), [businessProfile]);
+
+  // Determine if there are uncommitted changes
+  const hasChanges = useMemo(() => {
+    return (
+      bizName.trim() !== activeProfile.businessName.trim() ||
+      bizType !== activeProfile.businessType ||
+      bizSize !== activeProfile.businessSize ||
+      currency !== activeProfile.currency ||
+      country !== activeProfile.country ||
+      logoUrl !== activeProfile.logoUrl
+    );
+  }, [bizName, bizType, bizSize, currency, country, logoUrl, activeProfile]);
 
   const processImageFile = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
@@ -158,12 +182,9 @@ export default function SettingsPage() {
     try {
       const dataUrl = await processImageFile(file);
       setLogoUrl(dataUrl);
-      await updateBusinessProfile({
-        logoUrl: dataUrl,
-      }, true);
       toast({
-        title: 'Logo Uploaded! 🎨',
-        description: 'Your business logo has been saved.',
+        title: 'Logo Staged 🎨',
+        description: "Click 'Save Business Profile' below to apply your new logo.",
       });
     } catch (err: any) {
       toast({
@@ -177,39 +198,67 @@ export default function SettingsPage() {
     }
   };
 
-  const handleRemoveLogo = async () => {
+  const handleRemoveLogo = () => {
     setLogoUrl('');
     if (fileInputRef.current) fileInputRef.current.value = '';
-    await updateBusinessProfile({
-      logoUrl: '',
-    }, true);
     toast({
       title: 'Logo Cleared',
-      description: 'Business logo removed.',
+      description: "Click 'Save Business Profile' below to apply changes.",
     });
   };
 
   useEffect(() => {
-    if (businessProfile) {
-      if (businessProfile.businessName) setBizName(businessProfile.businessName);
-      if (businessProfile.businessType) setBizType(businessProfile.businessType);
-      if (businessProfile.businessSize) setBizSize(businessProfile.businessSize);
-      if (businessProfile.currency) setCurrency(businessProfile.currency);
-      if (businessProfile.country) setCountry(businessProfile.country);
-      if (businessProfile.logoUrl !== undefined) setLogoUrl(businessProfile.logoUrl);
+    if (!businessProfile) return;
+    if (!isInitialized.current) {
+      setBizName(businessProfile.businessName || "My Business");
+      setBizType(businessProfile.businessType || "Retail");
+      setBizSize(businessProfile.businessSize || "2-10 Employees");
+      setCurrency(businessProfile.currency || "INR (₹)");
+      setCountry(businessProfile.country || "India");
+      setLogoUrl(businessProfile.logoUrl || "");
+      isInitialized.current = true;
     }
   }, [businessProfile]);
 
-  const handleSaveBusinessProfile = async () => {
-    await updateBusinessProfile({
-      businessName: bizName,
-      businessType: bizType,
-      businessSize: bizSize,
-      currency: currency,
-      country: country,
-      logoUrl: logoUrl,
-      industry: INDUSTRY_CONFIGS[bizType]?.label || "General Business",
+  const handleDiscardChanges = () => {
+    setBizName(activeProfile.businessName);
+    setBizType(activeProfile.businessType);
+    setBizSize(activeProfile.businessSize);
+    setCurrency(activeProfile.currency);
+    setCountry(activeProfile.country);
+    setLogoUrl(activeProfile.logoUrl);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    toast({
+      title: "Changes Discarded",
+      description: "Reverted back to your saved profile settings.",
     });
+  };
+
+  const handleSaveBusinessProfile = async () => {
+    setIsSavingProfile(true);
+    try {
+      await updateBusinessProfile({
+        businessName: bizName.trim() || 'My Business',
+        businessType: bizType,
+        businessSize: bizSize,
+        currency: currency,
+        country: country,
+        logoUrl: logoUrl,
+        industry: INDUSTRY_CONFIGS[bizType]?.label || "General Business",
+      }, true);
+      toast({
+        title: "Business Profile Saved! 🏢",
+        description: "Your business details and Industry AI Context are now active across your workspace.",
+      });
+    } catch (err: any) {
+      toast({
+        variant: "destructive",
+        title: "Save Failed",
+        description: err?.message || "Could not update business profile.",
+      });
+    } finally {
+      setIsSavingProfile(false);
+    }
   };
 
   // Password Change State

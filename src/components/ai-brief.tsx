@@ -20,6 +20,8 @@ export function AIBrief() {
 
   const [brief, setBrief] = useState<AIBriefOutput | null>(null);
   const isPaid = activePlan !== 'Free Trial';
+  const isLearning = Boolean(dataReadiness?.level === 'LEARNING' || (!capabilities?.stockoutPrediction && !capabilities?.slowMoverDetection));
+  const isEverythingUnlocked = isPaid && !isLearning;
 
   // Real-time dynamic brief calculated strictly from current live products & transactions
   const dynamicBrief = useMemo(() => {
@@ -210,7 +212,7 @@ export function AIBrief() {
       <div className="relative flex-1 flex flex-col justify-between gap-4">
         {/* Content grid */}
         <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3.5 flex-1 transition-all duration-300 ${!isPaid ? 'blur-[5px] select-none pointer-events-none opacity-40' : (isRefreshing ? 'opacity-75 transition-opacity' : 'opacity-100')}`}>
-          {Boolean(dataReadiness?.level === 'LEARNING' || (!capabilities?.stockoutPrediction && !capabilities?.slowMoverDetection)) ? (
+          {isLearning ? (
             /* Left 2 Columns: Learning Stage Card for Predictive Stockout & Velocity */
             <div className="sm:col-span-2 relative group flex p-4 rounded-2xl border border-amber-500/25 bg-zinc-900/60 hover:bg-zinc-900/90 transition-all duration-200 flex-col justify-between shadow-sm space-y-3">
               <div className="space-y-2.5">
@@ -363,18 +365,20 @@ export function AIBrief() {
           </div>
         </div>
 
-        {/* Footer Banner */}
-        <div data-tour="ai-suggestions" className={`flex items-center justify-between px-4 py-3 rounded-2xl border border-blue-500/25 bg-gradient-to-r from-blue-950/50 via-indigo-950/30 to-zinc-900/70 shadow-sm transition-all duration-300 ${!isPaid ? 'blur-[5px] select-none pointer-events-none opacity-40' : (isRefreshing ? 'opacity-75 transition-opacity' : 'opacity-100')}`}>
-          <div className="flex items-center gap-2.5 font-bold text-foreground">
-            <Coins className="h-4 w-4 text-blue-400 shrink-0" />
-            <div className="flex items-center gap-1.5 text-xs sm:text-sm">
-              <span className="text-zinc-300 font-medium">Cash Locked in Inventory:</span>
-              <span className="font-bold text-white font-mono text-sm sm:text-base">
-                {activeBrief.savingsText.replace('Cash Locked in Inventory: ', '')}
-              </span>
+        {/* Footer Banner - Cash Locked in Inventory (Shown only when everything is unlocked) */}
+        {isEverythingUnlocked && activeBrief?.savingsText && (
+          <div data-tour="ai-suggestions" className={`flex items-center justify-between px-4 py-3 rounded-2xl border border-blue-500/25 bg-gradient-to-r from-blue-950/50 via-indigo-950/30 to-zinc-900/70 shadow-sm transition-all duration-300 ${isRefreshing ? 'opacity-75 transition-opacity' : 'opacity-100'}`}>
+            <div className="flex items-center gap-2.5 font-bold text-foreground">
+              <Coins className="h-4 w-4 text-blue-400 shrink-0" />
+              <div className="flex items-center gap-1.5 text-xs sm:text-sm">
+                <span className="text-zinc-300 font-medium">Cash Locked in Inventory:</span>
+                <span className="font-bold text-white font-mono text-sm sm:text-base">
+                  {activeBrief.savingsText.replace('Cash Locked in Inventory: ', '')}
+                </span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Paywall Overlay */}
         {!isPaid && (

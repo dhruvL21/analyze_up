@@ -56,8 +56,8 @@ export function evaluateSalesHistory(
     historyDays = Math.max(spanBetweenSales, Math.min(spanFromOldestToNow, 365));
   }
 
-  // Minimum 30 days of sales data required for predictive models
-  const hasMinimumHistory = historyDays >= 30;
+  // Minimum 30 days of sales data OR 14+ days with high order density (>= 40 orders) required for predictive models
+  const hasMinimumHistory = historyDays >= 30 || (historyDays >= 14 && saleTransactions.length >= 40);
 
   // Build product-level sales metrics map with flexible matching
   const productSaleMetrics = new Map<

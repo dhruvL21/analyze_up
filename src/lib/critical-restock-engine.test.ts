@@ -106,6 +106,84 @@ describe('Critical Restock Hub Engine & Data Readiness Gating', () => {
     expect(isRestockUnlocked).toBe(true);
   });
 
+  it('unlocks critical restock when brand reaches 50 customer orders and 14+ days of history with score >= 40', () => {
+    // Exact store parameters from user's live store: 50 orders, 21 days history, score >= 40 (user store had 48)
+    const products: Product[] = [
+      {
+        id: 'p-1',
+        name: 'Runner Pro High',
+        sku: 'RUN-PRO-HI',
+        price: 5999,
+        costPrice: 2999,
+        stock: 0,
+        minStock: 10,
+        leadTimeDays: 7,
+        supplierId: 'sup-1',
+      } as any,
+      {
+        id: 'p-2',
+        name: 'Runner Pro Low',
+        sku: 'RUN-PRO-LO',
+        price: 4999,
+        costPrice: 2499,
+        stock: 15,
+        minStock: 5,
+        leadTimeDays: 7,
+        supplierId: 'sup-1',
+      } as any,
+      {
+        id: 'p-3',
+        name: 'Urban Trail Sneaker',
+        sku: 'URB-TRL',
+        price: 3999,
+        costPrice: 1999,
+        stock: 4,
+        minStock: 10,
+        leadTimeDays: 14,
+        supplierId: 'sup-1',
+      } as any,
+      {
+        id: 'p-4',
+        name: 'Classic Court Leather',
+        sku: 'CRT-LTH',
+        price: 6499,
+        costPrice: 3200,
+        stock: 20,
+        minStock: 5,
+        leadTimeDays: 10,
+        supplierId: 'sup-1',
+      } as any,
+    ];
+
+    const transactions: Transaction[] = Array.from({ length: 50 }, (_, i) => ({
+      id: `tx-${i}`,
+      type: 'Sale',
+      productId: `p-${(i % 4) + 1}`,
+      sku: `SKU-${(i % 4) + 1}`,
+      quantity: 1,
+      totalAmount: 4999,
+      transactionDate: new Date(Date.now() - (i % 21) * MS_PER_DAY).toISOString(),
+    } as any));
+
+    const readiness = evaluateDataReadiness(products, transactions);
+    expect(readiness.score).toBeGreaterThanOrEqual(40);
+    expect(readiness.level).toBe('EARLY_INSIGHTS');
+    expect(readiness.level).not.toBe('LEARNING');
+
+    const currentOrders = readiness.totalOrders;
+    const currentDays = readiness.historicalDays;
+    const currentScore = readiness.score;
+
+    const isThresholdMet = (currentOrders >= 50 || currentDays >= 14) && currentScore >= 40;
+    const isRestockUnlocked = Boolean(
+      isThresholdMet ||
+      (currentScore >= 40 && readiness.level !== 'LEARNING') ||
+      readiness.capabilities.reorderRecommendations
+    );
+
+    expect(isRestockUnlocked).toBe(true);
+  });
+
   it('calculates AI restock quantities and revenue at risk from sales velocity and runway buffer', () => {
     const historicalDays = 30;
     const price = 6000;

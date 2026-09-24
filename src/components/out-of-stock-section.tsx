@@ -58,15 +58,24 @@ export function OutOfStockSection() {
   // Progressive Feature Unlock Gate:
   // Critical Restock Radar & AI Reordering requires:
   // 1. Manual founder override (unlock all features) OR
-  // 2. Data Readiness score >= 40 (graduated from LEARNING to EARLY_INSIGHTS, PREDICTIVE, or OPTIMIZATION)
+  // 2. Met the threshold advertised on the unlock card:
+  //    (50 customer orders OR 14 days of history) with minimum score >= 40 OR
+  // 3. Data Readiness score >= 40 (graduated from LEARNING to EARLY_INSIGHTS, PREDICTIVE, or OPTIMIZATION)
   //    WITH reorder recommendation capability active.
+  const currentOrders = dataReadiness?.totalOrders ?? (transactions.filter(t => t.type === 'Sale' || !t.type).length);
+  const currentDays = dataReadiness?.historicalDays ?? 0;
+  const currentScore = dataReadiness?.score ?? 0;
+
+  const isThresholdMet = (currentOrders >= 50 || currentDays >= 14) && currentScore >= 40;
+
   const isRestockUnlocked = Boolean(
     businessBuddyCalibration?.isOverridden ||
+    isThresholdMet ||
     (
-      (dataReadiness?.score ?? 0) >= 40 &&
-      dataReadiness?.level !== 'LEARNING' &&
-      (capabilities?.reorderRecommendations ?? false)
-    )
+      currentScore >= 40 &&
+      dataReadiness?.level !== 'LEARNING'
+    ) ||
+    (capabilities?.reorderRecommendations && (currentScore >= 40 || currentOrders >= 50))
   );
 
   const [activeTab, setActiveTab] = useState<'out_of_stock' | 'low_stock' | 'all'>('out_of_stock');
@@ -258,7 +267,6 @@ export function OutOfStockSection() {
 
   // If the brand does NOT come under the score required to unlock critical restock, display unlock progress countdown
   if (!isRestockUnlocked) {
-    const currentOrders = dataReadiness?.totalOrders ?? (transactions.filter(t => t.type === 'Sale' || !t.type).length);
     return (
       <div id="out-of-stock-hub" className="scroll-mt-24">
         <UnlockProgressCard
@@ -267,9 +275,9 @@ export function OutOfStockSection() {
           description="AnalyzeUp calculates dynamic safety stock buffers, stockout runway, and supplier MOQ reorders based on verified sales velocity. To prevent premature inventory capital allocation, this feature unlocks when your store reaches 50 customer orders or 14 days of history."
           currentOrders={currentOrders}
           targetOrders={50}
-          currentDays={dataReadiness?.historicalDays ?? 0}
+          currentDays={currentDays}
           targetDays={14}
-          currentScore={dataReadiness?.score ?? 0}
+          currentScore={currentScore}
           targetScore={40}
           accentColor="amber"
           featureName="Critical Restock Radar"

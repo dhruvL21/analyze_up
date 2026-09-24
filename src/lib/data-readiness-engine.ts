@@ -428,10 +428,11 @@ export function evaluateDataReadiness(
   ) {
     level = 'PREDICTIVE';
   } else if (
-    // Primary: score + days + orders (meaningfulSalesDays removed — days & orders criteria are sufficient)
-    (totalScore >= 40 && ((historicalDays >= 14 && totalOrders >= 80) || totalOrders >= 200)) ||
-    // Fallback: high enough orders alone, regardless of score
-    (historicalDays >= 14 && totalOrders >= 80)
+    // Primary: score >= 40 with 14 days and 50 orders (or 150 orders standalone)
+    (totalScore >= 40 && ((historicalDays >= 14 && totalOrders >= 50) || totalOrders >= 150)) ||
+    // Fallback: high enough orders or history alone
+    (historicalDays >= 14 && totalOrders >= 50) ||
+    totalOrders >= 200
   ) {
     level = 'EARLY_INSIGHTS';
   } else {
@@ -446,9 +447,9 @@ export function evaluateDataReadiness(
     trendAnalysis: (historicalDays >= 7 && totalOrders >= 15) || totalOrders >= 50,
     slowMoverDetection: hasInventoryData && ((historicalDays >= 7 && totalOrders >= 15) || totalOrders >= 40),
     stockoutPrediction: hasInventoryData && ((historicalDays >= 7 && totalOrders >= 15) || totalOrders >= 50),
-    safetyStockCalculation: hasInventoryData && ((historicalDays >= 14 && totalOrders >= 30) || totalOrders >= 60),
-    reorderRecommendations: hasInventoryData && (products.some(p => p.stock <= (p.minStock || 5)) || historicalDays >= 7),
-    deadStockDetection: hasInventoryData && level !== 'LEARNING' && totalScore >= 45 && ((historicalDays >= 14 && totalOrders >= 80) || totalOrders >= 200),
+    safetyStockCalculation: hasInventoryData && ((historicalDays >= 14 && totalOrders >= 30) || totalOrders >= 50),
+    reorderRecommendations: hasInventoryData && (products.some(p => p.stock <= (p.minStock || 5)) || historicalDays >= 7 || totalOrders >= 20),
+    deadStockDetection: hasInventoryData && level !== 'LEARNING' && totalScore >= 45 && ((historicalDays >= 14 && totalOrders >= 50) || totalOrders >= 150),
     demandForecasting: (historicalDays >= 30 && totalOrders >= 80) || (totalOrders >= 400 && historicalDays >= 14),
     discountRecommendations: hasInventoryData && level !== 'LEARNING' && ((historicalDays >= 25 && totalOrders >= 50) || (totalOrders >= 300 && historicalDays >= 14)),
     clearancePricing: hasInventoryData && level !== 'LEARNING' && ((historicalDays >= 25 && totalOrders >= 50) || (totalOrders >= 300 && historicalDays >= 14)),

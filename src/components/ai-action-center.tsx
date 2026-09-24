@@ -69,8 +69,8 @@ export function AIActionCenter() {
   const router = useRouter();
 
   const hasNoData = (products?.length || 0) === 0 && (transactions?.length || 0) === 0;
-  // Bypass learning gate if the primary criteria (14 days + 80 orders) are independently met
-  const criteriaGraduated = (dataReadiness?.historicalDays ?? 0) >= 14 && (dataReadiness?.totalOrders ?? 0) >= 80;
+  // Bypass learning gate if the primary criteria (14 days + 50 orders) are independently met
+  const criteriaGraduated = ((dataReadiness?.historicalDays ?? 0) >= 14 && (dataReadiness?.totalOrders ?? 0) >= 50) || (dataReadiness?.totalOrders ?? 0) >= 100;
   const isLearning = !criteriaGraduated && (dataReadiness?.level === 'LEARNING' || businessBuddyCalibration?.status === 'LEARNING');
 
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);

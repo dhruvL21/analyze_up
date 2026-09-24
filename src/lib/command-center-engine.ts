@@ -364,8 +364,8 @@ export function generateActionTasks(
   const readiness = evaluateDataReadiness(rawProducts, rawTransactions);
   const calibration = getBusinessBuddyCalibration(businessProfile, rawProducts, rawTransactions, rawReturns);
   // Respect Data Readiness and Business Buddy learning phase (unless explicitly overridden by founder)
-  // Criteria bypass: if days >= 14 AND orders >= 80 are independently met, treat as graduated regardless of computed level
-  const criteriaMetBypassLearning = readiness.historicalDays >= 14 && readiness.totalOrders >= 80;
+  // Criteria bypass: if days >= 14 AND orders >= 50 are independently met, treat as graduated regardless of computed level
+  const criteriaMetBypassLearning = (readiness.historicalDays >= 14 && readiness.totalOrders >= 50) || readiness.totalOrders >= 100;
   if (!calibration.isOverridden && !criteriaMetBypassLearning && (readiness.level === 'LEARNING' || !readiness.capabilities.reorderRecommendations || calibration.status === 'LEARNING')) {
     return [];
   }

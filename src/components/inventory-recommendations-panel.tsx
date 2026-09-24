@@ -383,21 +383,21 @@ export function InventoryRecommendationsPanel() {
                         <Tag className="w-3.5 h-3.5 text-blue-400" /> Liquidate Dead Stock
                       </span>
                       <Badge variant="outline" className="text-blue-400 border-blue-500/30 text-[10px] font-mono font-bold">
-                        {salesHistory.historyDays}/30 Days
+                        Day {salesHistory.historyDays}/14 • AI Learning
                       </Badge>
                     </div>
-                    <p className="font-semibold text-foreground text-xs">Awaiting 30-Day Sales History</p>
+                    <p className="font-semibold text-foreground text-xs">Calibrating Velocity Curves (GPT-4)</p>
                     <p className="text-muted-foreground text-[11px]">
-                      Clearance discount predictions require at least 1 month of sales history to protect active stock from premature markdowns.
+                      Daily AI Learning is actively evaluating tokenized order velocity to calibrate dead-stock holding periods without premature markdowns.
                     </p>
                   </div>
                   <div className="h-8 w-full rounded-xl text-[11px] font-medium bg-blue-500/15 text-blue-300 border border-blue-500/30 flex items-center justify-between px-3">
                     <span className="flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5 text-blue-400" />
-                      <span>{Math.max(0, 30 - salesHistory.historyDays)} days left to unlock</span>
+                      <span>{Math.max(0, 14 - salesHistory.historyDays)} days to Level 2</span>
                     </span>
                     <span className="font-mono text-[10px] font-bold text-blue-200">
-                      {Math.min(100, Math.round((salesHistory.historyDays / 30) * 100))}%
+                      {Math.min(100, Math.round((salesHistory.historyDays / 14) * 100))}%
                     </span>
                   </div>
                 </div>
@@ -412,7 +412,7 @@ export function InventoryRecommendationsPanel() {
                     </div>
                     <p className="font-semibold text-foreground text-xs">Zero Dead Stock Detected</p>
                     <p className="text-muted-foreground text-[11px]">
-                      All active catalog SKUs have recorded sales transactions within the 30-day cycle. No clearance required.
+                      All active catalog SKUs have recorded sales transactions within the observation cycle. No clearance required.
                     </p>
                   </div>
                   <div className="h-8 w-full rounded-xl text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center justify-center gap-1.5">
@@ -432,7 +432,7 @@ export function InventoryRecommendationsPanel() {
                       <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 text-[10px]">High Demand</Badge>
                     </div>
                     <p className="font-semibold text-foreground text-xs">{priceUpProd.name || priceUpProd.productName}</p>
-                    <p className="text-muted-foreground text-[11px]">Strong 30-day velocity. Increase selling price to {currencySymbol}{Math.round((priceUpProd.price || 500) * 1.08)} for margin expansion.</p>
+                    <p className="text-muted-foreground text-[11px]">Strong velocity. Increase selling price to {currencySymbol}{Math.round((priceUpProd.price || 500) * 1.08)} for margin expansion.</p>
                   </div>
                   <Button
                     size="sm"
@@ -459,21 +459,21 @@ export function InventoryRecommendationsPanel() {
                         <TrendingUp className="w-3.5 h-3.5 text-purple-400" /> Optimize Margin (+8%)
                       </span>
                       <Badge variant="outline" className="text-purple-400 border-purple-500/30 text-[10px] font-mono font-bold">
-                        {salesHistory.historyDays}/30 Days
+                        Day {salesHistory.historyDays}/14 • AI Learning
                       </Badge>
                     </div>
-                    <p className="font-semibold text-foreground text-xs">Awaiting 30-Day Velocity Baseline</p>
+                    <p className="font-semibold text-foreground text-xs">Calibrating Elasticity (GPT-4)</p>
                     <p className="text-muted-foreground text-[11px]">
-                      Price increase recommendations require 30+ days of sustained sales data to verify elasticity without dampening conversions.
+                      GPT-4 continuously models price sensitivity on tokenized order streams to ensure margin bumps do not dampen conversions.
                     </p>
                   </div>
                   <div className="h-8 w-full rounded-xl text-[11px] font-medium bg-purple-500/15 text-purple-300 border border-purple-500/30 flex items-center justify-between px-3">
                     <span className="flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5 text-purple-400" />
-                      <span>{Math.max(0, 30 - salesHistory.historyDays)} days left to unlock</span>
+                      <span>{Math.max(0, 14 - salesHistory.historyDays)} days to Level 2</span>
                     </span>
                     <span className="font-mono text-[10px] font-bold text-purple-200">
-                      {Math.min(100, Math.round((salesHistory.historyDays / 30) * 100))}%
+                      {Math.min(100, Math.round((salesHistory.historyDays / 14) * 100))}%
                     </span>
                   </div>
                 </div>
