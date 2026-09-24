@@ -647,7 +647,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         (snap) => {
           if (snap.exists()) {
             const intData = snap.data();
-            if (intData?.connectionStatus === 'Connected' && Boolean(intData?.accessToken)) {
+            if (intData?.connectionStatus === 'Connected' || Boolean(intData?.shopDomain) || Boolean(intData?.accessToken)) {
               setBusinessProfile((prev) => {
                 const merged: BusinessProfile = {
                   ...(prev || {}),
@@ -659,15 +659,21 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                   timezone: prev?.timezone || 'Asia/Kolkata (GMT+5:30)',
                   country: prev?.country || 'India',
                   shopifyConnected: true,
-                  shopifyStatus: 'Connected',
+                  shopifyStatus: intData?.shopifyStatus || prev?.shopifyStatus || 'Connected',
                   shopifyStoreUrl: intData.shopDomain || prev?.shopifyStoreUrl,
                   shopifyStoreName: intData.storeName || prev?.shopifyStoreName,
                   shopifyAccessToken: intData.accessToken || prev?.shopifyAccessToken,
+                  ...(intData.shopifyRealtimeSyncEnabled !== undefined ? { shopifyRealtimeSyncEnabled: intData.shopifyRealtimeSyncEnabled } : {}),
+                  ...(intData.shopifyAutoSyncEnabled !== undefined ? { shopifyAutoSyncEnabled: intData.shopifyAutoSyncEnabled } : {}),
+                  ...(intData.shopifySyncFrequency ? { shopifySyncFrequency: intData.shopifySyncFrequency } : {}),
+                  ...(intData.shopifySyncTime ? { shopifySyncTime: intData.shopifySyncTime } : {}),
+                  ...(intData.shopifySyncDay ? { shopifySyncDay: intData.shopifySyncDay } : {}),
+                  ...(intData.shopifyScheduledDateTime ? { shopifyScheduledDateTime: intData.shopifyScheduledDateTime } : {}),
                 };
                 businessProfileRef.current = merged;
                 return merged;
               });
-            } else if (intData?.connectionStatus === 'Disconnected' || intData?.connectionStatus === 'Uninstalled' || !intData?.accessToken) {
+            } else if (intData?.connectionStatus === 'Disconnected' || intData?.connectionStatus === 'Uninstalled') {
               setBusinessProfile((prev) => {
                 if (!prev) return prev;
                 const merged: BusinessProfile = {
@@ -3898,13 +3904,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         err?.message?.includes('Invalid or revoked access token');
 
       if (isAuthError) {
-        console.warn('[Shopify AutoSync] Store authentication requires attention:', err?.message);
+        console.warn('[Shopify AutoSync] Store authentication requires re-authorization:', err?.message);
+        // Do NOT disconnect store or wipe credentials. Flag status as "Needs Reconnect" so UI guides user without losing settings.
         updateBusinessProfile({
-          shopifyConnected: false,
-          shopifyStatus: 'Disconnected',
-          shopifyAccessToken: '',
-          shopifyAutoSyncEnabled: false,
-          shopifyRealtimeSyncEnabled: false,
+          shopifyStatus: 'Needs Reconnect',
         }, true).catch(() => {});
       } else if (showToast) {
         console.error('[Shopify Sync Error]:', err);
@@ -3916,8 +3919,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       if (showToast) {
         toast({
           variant: 'destructive',
-          title: isAuthError ? 'Shopify Authentication Failed' : 'Shopify Sync Failed',
-          description: isTimeout
+          title: isAuthError ? 'Shopify Authentication Needed' : 'Shopify Sync Failed',
+          description: isAuthError
+            ? 'Shopify access token expired or invalid. Please click "Reconnect" to renew access.'
+            : isTimeout
             ? 'Shopify sync request timed out (25s). Please check your internet connection and try again.'
             : (err?.message || 'Could not fetch data from Shopify.'),
         });
@@ -3942,6 +3947,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       ...settings,
       shopifyScheduledDateTime: settings.shopifyScheduledDateTime ?? '',
       shopifyStatus: 'Connected',
+      shopifyConnected: true,
       updatedAt: new Date().toISOString(),
     });
 
@@ -3949,7 +3955,10 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
     if (user && firestore) {
       const connRef = doc(firestore, 'users', user.uid, 'integrations', 'shopify');
-      await setDoc(connRef, cleanedSettings, { merge: true }).catch(console.warn);
+      await setDoc(connRef, {
+        ...cleanedSettings,
+        connectionStatus: 'Connected',
+      }, { merge: true }).catch(console.warn);
     }
 
     const hasRealtime = Boolean(settings.shopifyRealtimeSyncEnabled);
@@ -3974,7 +3983,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (
       !businessProfile?.shopifyConnected ||
-      !businessProfile?.shopifyStoreUrl
+      !businessProfile?.shopifyStoreUrl ||
+      businessProfile?.shopifyStatus === 'Needs Reconnect'
     ) {
       return;
     }

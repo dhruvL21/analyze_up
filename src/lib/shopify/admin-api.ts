@@ -109,7 +109,8 @@ export async function getValidAccessToken(rawShop: string, forceRefresh = false)
 
       if (!refreshRes.ok) {
         const errText = await refreshRes.text();
-        throw new Error(`Shopify token refresh failed (${refreshRes.status}): ${errText.slice(0, 100)}`);
+        console.warn(`[Shopify OAuth] Refresh token exchange returned (${refreshRes.status}): ${errText.slice(0, 100)}. Falling back to existing token.`);
+        return decryptedToken;
       }
 
       const tokenData = await refreshRes.json();

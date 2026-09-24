@@ -137,7 +137,7 @@ export default function IntegrationsPage() {
 
   // Shopify integration states
   const isShopifyConnected = Boolean(
-    businessProfile?.shopifyConnected &&
+    (businessProfile?.shopifyConnected || businessProfile?.shopifyStoreUrl) &&
     businessProfile?.shopifyStatus !== 'Disconnected' &&
     businessProfile?.shopifyStatus !== 'Uninstalled' &&
     businessProfile?.shopifyStoreUrl
@@ -665,32 +665,23 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
             shopifyLastSyncedAt: data.lastSyncAt,
           }, true);
         } else if (data && data.connected === false) {
-          // Verify with client Firestore before resetting
+          // Verify with client Firestore before changing anything
           const cleanUid = user?.uid && String(user.uid).trim();
           if (firestore && cleanUid) {
             const clientDoc = await getDoc(doc(firestore, 'users', cleanUid, 'integrations', 'shopify'));
             if (clientDoc.exists()) {
               const cData = clientDoc.data();
-              if (cData?.connectionStatus === 'Connected' || cData?.accessToken) {
+              if (cData?.connectionStatus === 'Connected' || cData?.accessToken || cData?.shopDomain) {
                 updateBusinessProfile({
                   shopifyConnected: true,
-                  shopifyStatus: 'Connected',
+                  shopifyStatus: cData?.shopifyStatus || 'Connected',
                   shopifyStoreUrl: cData.shopDomain || businessProfile?.shopifyStoreUrl,
                   shopifyStoreName: cData.storeName || businessProfile?.shopifyStoreName,
-                  shopifyAccessToken: cData.accessToken,
+                  shopifyAccessToken: cData.accessToken || businessProfile?.shopifyAccessToken,
                 }, true);
                 return;
               }
             }
-          }
-          if (businessProfile?.shopifyConnected || businessProfile?.shopifyStoreUrl) {
-            updateBusinessProfile({
-              shopifyConnected: false,
-              shopifyStatus: 'Disconnected',
-              shopifyStoreUrl: '',
-              shopifyStoreName: '',
-              shopifyAccessToken: '',
-            }, true);
           }
         }
       } catch (err) {
@@ -1704,6 +1695,48 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
                         </button>
                       </div>
 
+                      {businessProfile?.shopifyStatus === 'Needs Reconnect' && (
+                        <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-2">
+                          <span className="text-[11px] text-amber-300 flex items-center gap-1.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                            <span>Authentication expired. Reconnect to resume sync.</span>
+                          </span>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => {
+                              const shop = businessProfile?.shopifyStoreUrl;
+                              if (!shop) {
+                                setShowShopifyModal(true);
+                                return;
+                              }
+                              user?.getIdToken().then(idToken => {
+                                fetch('/api/shopify/auth', {
+                                  method: 'POST',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+                                  },
+                                  body: JSON.stringify({ shop }),
+                                })
+                                  .then(r => r.json())
+                                  .then(d => {
+                                    if (d?.authUrl) {
+                                      window.location.href = d.authUrl;
+                                    } else {
+                                      setShowShopifyModal(true);
+                                    }
+                                  })
+                                  .catch(() => setShowShopifyModal(true));
+                              });
+                            }}
+                            className="h-6 px-2.5 text-[10px] rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold cursor-pointer shrink-0"
+                          >
+                            Reconnect
+                          </Button>
+                        </div>
+                      )}
+
                       {businessProfile?.shopifyRealtimeSyncEnabled === false && (
                         <div className="pt-2 border-t border-emerald-500/20 flex items-center justify-between gap-2">
                           <span className="text-[11px] text-amber-300/90 flex items-center gap-1.5">
@@ -1717,7 +1750,7 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
                               await updateShopifyScheduleSettings({
                                 shopifyRealtimeSyncEnabled: true,
                               });
-                              autoSyncShopifyNow(true);
+                              autoSyncShopifyNow(true).catch(console.warn);
                             }}
                             className="h-6 px-2.5 text-[10px] rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold cursor-pointer"
                           >

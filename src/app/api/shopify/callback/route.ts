@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // 5. Exchange authorization code for expiring offline access token
+    // 5. Exchange authorization code for permanent offline access token
     const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
       method: 'POST',
       headers: {
@@ -95,7 +95,6 @@ export async function GET(req: NextRequest) {
         client_id: clientId,
         client_secret: clientSecret,
         code,
-        expiring: 1,
       }),
     });
 
