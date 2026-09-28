@@ -6,6 +6,8 @@ import { sanitizeShopDomain } from '@/lib/shopify/config';
 /**
  * GET /api/shopify/status
  * Returns real-time connection and synchronization status for the current merchant/tenant.
+ * Strictly enforces cryptographic multi-tenant isolation:
+ * Under NO circumstance will status of another tenant's store be returned.
  */
 export async function GET(req: NextRequest) {
   try {
@@ -15,12 +17,31 @@ export async function GET(req: NextRequest) {
     const tenantId = tenant?.tenantId || queryTenantId;
     const shopParam = searchParams.get('shop');
 
+    if (!tenantId) {
+      return NextResponse.json(
+        { connected: false, error: 'Unauthorized. Tenant ID or authentication required.' },
+        { status: 401 }
+      );
+    }
+
     let connection = null;
 
     if (shopParam) {
       const sanitizedShop = sanitizeShopDomain(shopParam);
       if (sanitizedShop) {
-        connection = await getShopifyConnection(sanitizedShop);
+        const foundConn = await getShopifyConnection(sanitizedShop);
+        // STRICT MULTI-TENANT ISOLATION GUARD:
+        // Only accept if connection.tenantId matches the requesting tenantId!
+        if (foundConn) {
+          if (foundConn.tenantId && foundConn.tenantId !== tenantId) {
+            // Connection belongs to another account! Never expose across accounts.
+            return NextResponse.json({
+              connected: false,
+              connection: null,
+            });
+          }
+          connection = foundConn;
+        }
       }
     }
 
@@ -29,6 +50,14 @@ export async function GET(req: NextRequest) {
     }
 
     if (!connection) {
+      return NextResponse.json({
+        connected: false,
+        connection: null,
+      });
+    }
+
+    // Secondary multi-tenant verification check
+    if (connection.tenantId && connection.tenantId !== tenantId) {
       return NextResponse.json({
         connected: false,
         connection: null,

@@ -15,6 +15,7 @@ export const signUp = async (
   password: string,
   displayName: string
 ) => {
+  clearClientSessionCaches();
   const userCredential = await createUserWithEmailAndPassword(auth, email, password);
   await updateProfile(userCredential.user, { displayName });
   return userCredential;
@@ -41,9 +42,29 @@ export const clearClientSessionCaches = () => {
       'analyzeup_completed_tasks',
       'analyzeup_event_statuses',
       'analyzeup_audit_logs',
+      'analyzeup_profile',
     ];
     unscopedKeys.forEach((k) => localStorage.removeItem(k));
+    
+    // Clean any legacy shopify or drive session caches
+    const allKeys = Object.keys(localStorage);
+    allKeys.forEach((k) => {
+      if (
+        k.startsWith('analyzeup_shopify_') ||
+        k.includes('shopify_sync') ||
+        k.includes('shopify_store') ||
+        k.includes('oauth_state')
+      ) {
+        localStorage.removeItem(k);
+      }
+    });
+
     sessionStorage.clear();
+
+    // Broadcast reset events so all in-memory React contexts flush immediately
+    window.dispatchEvent(new CustomEvent('analyzeup_auth_logout'));
+    window.dispatchEvent(new CustomEvent('analyzeup_workspace_reset'));
+    window.dispatchEvent(new CustomEvent('analyzeup_integrations_reset'));
   } catch (e) {}
 };
 

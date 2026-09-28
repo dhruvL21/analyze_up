@@ -595,7 +595,19 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
   // Load business profile from localStorage & Cloud Firestore
   useEffect(() => {
-    if (!user) return;
+    // If not authenticated or on logout, immediately clear all profile memory state
+    if (!user) {
+      setBusinessProfile(null);
+      businessProfileRef.current = null;
+      setHasDemoData(false);
+      return;
+    }
+
+    // Switched user or fresh login: Reset previous in-memory profile immediately to avoid state bleeding
+    setBusinessProfile(null);
+    businessProfileRef.current = null;
+    setHasDemoData(false);
+
     const localProfile = localStorage.getItem(`analyzeup_profile_${user.uid}`);
     if (localProfile) {
       try {
@@ -689,6 +701,85 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                 businessProfileRef.current = merged;
                 return merged;
               });
+            }
+          } else {
+            // STRICT MULTI-TENANT ISOLATION GUARD:
+            // This user does NOT have an active integrations/shopify document in their own Firestore subcollection.
+            // Ensure businessProfile never displays another account's Shopify connection.
+            setBusinessProfile((prev) => {
+              if (!prev || (!prev.shopifyConnected && !prev.shopifyStoreUrl)) return prev;
+              const cleaned: BusinessProfile = {
+                ...prev,
+                shopifyConnected: false,
+                shopifyStatus: 'Disconnected',
+                shopifyStoreUrl: '',
+                shopifyStoreName: '',
+                shopifyAccessToken: '',
+                shopifyAutoSyncEnabled: false,
+                shopifyRealtimeSyncEnabled: false,
+              };
+              businessProfileRef.current = cleaned;
+              try {
+                if (user) {
+                  localStorage.setItem(`analyzeup_profile_${user.uid}`, JSON.stringify(cleaned));
+                }
+              } catch {}
+              return cleaned;
+            });
+
+            // Also clean Firestore settings/business_profile if cross-account leakage occurred earlier
+            if (firestore && user) {
+              const profileRef = doc(firestore, 'users', user.uid, 'settings', 'business_profile');
+              getDoc(profileRef).then((pSnap) => {
+                if (pSnap.exists()) {
+                  const pData = pSnap.data();
+                  if (pData?.shopifyConnected || pData?.shopifyStoreUrl || pData?.shopifyAccessToken) {
+                    updateDoc(profileRef, {
+                      shopifyConnected: false,
+                      shopifyStatus: 'Disconnected',
+                      shopifyStoreUrl: '',
+                      shopifyStoreName: '',
+                      shopifyAccessToken: deleteField(),
+                      shopifyLastSyncedAt: deleteField(),
+                      shopifyAutoSyncEnabled: false,
+                      shopifyRealtimeSyncEnabled: false,
+                    }).catch(console.warn);
+                  }
+                }
+              }).catch(console.warn);
+
+              // Auto-purge any leaked Shopify products/transactions if user has no Shopify connection
+              getDocs(collection(firestore, 'users', user.uid, 'products')).then((prodSnap) => {
+                const shopifyProds = prodSnap.docs.filter((d) => {
+                  const data = d.data();
+                  return (
+                    data?.source?.toUpperCase() === 'SHOPIFY' ||
+                    data?.importSource?.toLowerCase() === 'shopify' ||
+                    d.id.startsWith('shopify_')
+                  );
+                });
+                if (shopifyProds.length > 0) {
+                  const b = writeBatch(firestore);
+                  shopifyProds.forEach((docSnap) => b.delete(docSnap.ref));
+                  b.commit().catch(console.warn);
+                }
+              }).catch(console.warn);
+
+              getDocs(collection(firestore, 'users', user.uid, 'transactions')).then((txSnap) => {
+                const shopifyTxs = txSnap.docs.filter((d) => {
+                  const data = d.data();
+                  return (
+                    data?.source?.toUpperCase() === 'SHOPIFY' ||
+                    data?.importSource?.toLowerCase() === 'shopify' ||
+                    d.id.startsWith('tx_shopify_')
+                  );
+                });
+                if (shopifyTxs.length > 0) {
+                  const b = writeBatch(firestore);
+                  shopifyTxs.forEach((docSnap) => b.delete(docSnap.ref));
+                  b.commit().catch(console.warn);
+                }
+              }).catch(console.warn);
             }
           }
         },
@@ -3730,19 +3821,20 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     if (!shop && user) {
       try {
         const idToken = await user.getIdToken().catch(() => null);
-        const statusRes = await fetch('/api/shopify/status', {
+        const statusRes = await fetch(`/api/shopify/status?userId=${user.uid}`, {
           headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
         });
         const statusData = await statusRes.json().catch(() => ({}));
-        if (statusData.connected && statusData.store?.shopDomain) {
-          shop = statusData.store.shopDomain;
-          token = token || statusData.store.accessToken;
+        const resolvedShop = statusData.shop || statusData.store?.shopDomain;
+        if (statusData.connected && resolvedShop) {
+          shop = resolvedShop;
+          token = token || statusData.accessToken || statusData.store?.accessToken;
           await updateBusinessProfile({
             shopifyConnected: true,
-            shopifyStoreUrl: statusData.store.shopDomain,
-            shopifyStoreName: statusData.store.storeName,
+            shopifyStoreUrl: resolvedShop,
+            shopifyStoreName: statusData.storeName || statusData.store?.storeName || resolvedShop,
             shopifyStatus: 'Connected',
-            shopifyAccessToken: statusData.store.accessToken || token,
+            ...(token ? { shopifyAccessToken: token } : {}),
           }, true);
         }
       } catch (err) {

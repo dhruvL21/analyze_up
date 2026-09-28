@@ -531,7 +531,10 @@ export async function getShopifyConnectionByTenant(tenantId: string): Promise<Sh
       if (profileSnap.exists) {
         const profile = profileSnap.data();
         if (profile?.shopifyStoreUrl) {
-          return await getShopifyConnection(profile.shopifyStoreUrl);
+          const conn = await getShopifyConnection(profile.shopifyStoreUrl);
+          if (conn && conn.tenantId === tenantId) {
+            return conn;
+          }
         }
       }
     }

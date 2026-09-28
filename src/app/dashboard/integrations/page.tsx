@@ -642,17 +642,16 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
     }
   }, [user, firestore, toast, updateBusinessProfile]);
 
-  // 1.2 Fetch live Shopify connection status on mount (single check)
-  const hasFetchedShopifyStatusRef = useRef(false);
+  // 1.2 Fetch live Shopify connection status on mount (single check per user)
+  const lastFetchedUserIdRef = useRef<string | null>(null);
   useEffect(() => {
-    if (!user || hasFetchedShopifyStatusRef.current) return;
-    hasFetchedShopifyStatusRef.current = true;
+    if (!user || lastFetchedUserIdRef.current === user.uid) return;
+    lastFetchedUserIdRef.current = user.uid;
 
     const fetchShopifyStatus = async () => {
       try {
         const idToken = await user.getIdToken();
-        const shopQuery = businessProfile?.shopifyStoreUrl ? `&shop=${encodeURIComponent(businessProfile.shopifyStoreUrl)}` : '';
-        const res = await fetch(`/api/shopify/status?userId=${user.uid}${shopQuery}`, {
+        const res = await fetch(`/api/shopify/status?userId=${user.uid}`, {
           headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
         });
         const data = await res.json();
@@ -665,21 +664,32 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
             shopifyLastSyncedAt: data.lastSyncAt,
           }, true);
         } else if (data && data.connected === false) {
-          // Verify with client Firestore before changing anything
+          // Verify with client Firestore users/{uid}/integrations/shopify
           const cleanUid = user?.uid && String(user.uid).trim();
           if (firestore && cleanUid) {
             const clientDoc = await getDoc(doc(firestore, 'users', cleanUid, 'integrations', 'shopify'));
             if (clientDoc.exists()) {
               const cData = clientDoc.data();
-              if (cData?.connectionStatus === 'Connected' || cData?.accessToken || cData?.shopDomain) {
+              if (cData?.connectionStatus === 'Connected' && cData?.shopDomain) {
                 updateBusinessProfile({
                   shopifyConnected: true,
                   shopifyStatus: cData?.shopifyStatus || 'Connected',
-                  shopifyStoreUrl: cData.shopDomain || businessProfile?.shopifyStoreUrl,
-                  shopifyStoreName: cData.storeName || businessProfile?.shopifyStoreName,
-                  shopifyAccessToken: cData.accessToken || businessProfile?.shopifyAccessToken,
+                  shopifyStoreUrl: cData.shopDomain,
+                  shopifyStoreName: cData.storeName,
+                  shopifyAccessToken: cData.accessToken,
                 }, true);
                 return;
+              }
+            } else {
+              // No connection document for this user: clean any stale leaked profile data
+              if (businessProfile?.shopifyConnected || businessProfile?.shopifyStoreUrl) {
+                updateBusinessProfile({
+                  shopifyConnected: false,
+                  shopifyStatus: 'Disconnected',
+                  shopifyStoreUrl: '',
+                  shopifyStoreName: '',
+                  shopifyAccessToken: '',
+                }, true);
               }
             }
           }
@@ -689,7 +699,7 @@ INV-1005,ORD-5005,2026-08-24,CUST-105,Global Retail Co,SKU-ELEC-03,Ultra-Fast US
       }
     };
     fetchShopifyStatus();
-  }, [user?.uid]);
+  }, [user?.uid, firestore, businessProfile?.shopifyConnected, businessProfile?.shopifyStoreUrl, updateBusinessProfile]);
 
   // 2. Fetch scanned files list and stats on connection changes
   useEffect(() => {
