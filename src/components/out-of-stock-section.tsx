@@ -475,6 +475,12 @@ export function OutOfStockSection() {
                               <Badge variant="outline" className="text-[10px] text-muted-foreground border-border/50">
                                 {prod.category || 'General'}
                               </Badge>
+                              {(prod.companyName || prod.storeName || (prod.source === 'SHOPIFY' && businessProfile?.shopifyStoreName)) && (
+                                <Badge variant="outline" className="text-[10px] border-emerald-500/40 text-emerald-400 bg-emerald-500/10 font-semibold px-2 py-0 flex items-center gap-1" title="Linked Shopify Store">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 animate-pulse" />
+                                  {prod.companyName || prod.storeName || businessProfile?.shopifyStoreName}
+                                </Badge>
+                              )}
                             </div>
 
                             <div className="flex items-center gap-3 text-xs text-muted-foreground font-mono flex-wrap">

@@ -661,9 +661,16 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
             const intData = snap.data();
             if (intData?.connectionStatus === 'Connected' || Boolean(intData?.shopDomain) || Boolean(intData?.accessToken)) {
               setBusinessProfile((prev) => {
+                const connectedStoreName = intData.storeName || (intData.shopDomain ? intData.shopDomain.replace('.myshopify.com', '') : '');
+                const currentBizName = prev?.businessName;
+                const shouldUseStoreName = !currentBizName || currentBizName === 'My Business' || currentBizName === 'Founder' || !prev?.shopifyConnected;
+                const resolvedBizName = shouldUseStoreName && connectedStoreName ? connectedStoreName : (connectedStoreName || currentBizName || 'My Business');
+                const resolvedCompanyName = intData.companyName || connectedStoreName || prev?.companyName || resolvedBizName;
+
                 const merged: BusinessProfile = {
                   ...(prev || {}),
-                  businessName: prev?.businessName || 'My Business',
+                  businessName: resolvedBizName,
+                  companyName: resolvedCompanyName,
                   businessType: prev?.businessType || 'Retail',
                   industry: prev?.industry || 'General Retail Store',
                   businessSize: prev?.businessSize || '2-10 Employees',
@@ -673,7 +680,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                   shopifyConnected: true,
                   shopifyStatus: intData?.shopifyStatus || prev?.shopifyStatus || 'Connected',
                   shopifyStoreUrl: intData.shopDomain || prev?.shopifyStoreUrl,
-                  shopifyStoreName: intData.storeName || prev?.shopifyStoreName,
+                  shopifyStoreName: intData.storeName || prev?.shopifyStoreName || connectedStoreName,
                   shopifyAccessToken: intData.accessToken || prev?.shopifyAccessToken,
                   ...(intData.shopifyRealtimeSyncEnabled !== undefined ? { shopifyRealtimeSyncEnabled: intData.shopifyRealtimeSyncEnabled } : {}),
                   ...(intData.shopifyAutoSyncEnabled !== undefined ? { shopifyAutoSyncEnabled: intData.shopifyAutoSyncEnabled } : {}),
@@ -931,8 +938,17 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const updateBusinessProfile = useCallback(async (updates: Partial<BusinessProfile>, silent: boolean = false) => {
     if (!user) return;
     const current = businessProfileRef.current;
+
+    const targetStoreName = updates.shopifyStoreName || current?.shopifyStoreName;
+    const shouldAdoptBizName =
+      (!current?.businessName || current.businessName === 'My Business' || current.businessName === 'Founder' || current.businessName === current?.shopifyStoreName) ||
+      (!updates.businessName || updates.businessName === 'My Business' || updates.businessName === 'Founder');
+    const resolvedBizName = targetStoreName && (shouldAdoptBizName || updates.shopifyStoreName)
+      ? (updates.businessName && updates.businessName !== 'My Business' && updates.businessName !== 'Founder' ? updates.businessName : targetStoreName)
+      : (updates.businessName || current?.businessName || 'My Business');
+    const resolvedCompanyName = updates.companyName || targetStoreName || current?.companyName || resolvedBizName;
+
     const updatedProfile: BusinessProfile = {
-      businessName: 'My Business',
       businessType: 'Retail',
       industry: 'General Retail Store',
       businessSize: '2-10 Employees',
@@ -943,6 +959,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       isOnboardingCompleted: true,
       ...current,
       ...updates,
+      businessName: resolvedBizName,
+      companyName: resolvedCompanyName,
       updatedAt: new Date().toISOString(),
     };
 
@@ -953,6 +971,28 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     if (firestore) {
       const profileRef = doc(firestore, 'users', user.uid, 'settings', 'business_profile');
       await setDoc(profileRef, cleanObject(updatedProfile), { merge: true }).catch(console.error);
+
+      // If connected to Shopify, ensure the store index and integration doc link the company name & logo
+      const activeShop = updates.shopifyStoreUrl || current?.shopifyStoreUrl;
+      const isShopifyActive = updates.shopifyConnected ?? current?.shopifyConnected;
+      if (activeShop && isShopifyActive) {
+        const cleanShop = String(activeShop).trim();
+        const intRef = doc(firestore, 'users', user.uid, 'integrations', 'shopify');
+        setDoc(intRef, {
+          companyName: resolvedCompanyName,
+          storeName: targetStoreName || cleanShop.replace('.myshopify.com', ''),
+          ...(updatedProfile.logoUrl ? { logoUrl: updatedProfile.logoUrl } : {}),
+          updatedAt: new Date().toISOString(),
+        }, { merge: true }).catch(() => {});
+
+        const storeRef = doc(firestore, 'shopify_stores', cleanShop);
+        setDoc(storeRef, {
+          companyName: resolvedCompanyName,
+          storeName: targetStoreName || cleanShop.replace('.myshopify.com', ''),
+          ...(updatedProfile.logoUrl ? { logoUrl: updatedProfile.logoUrl } : {}),
+          updatedAt: new Date().toISOString(),
+        }, { merge: true }).catch(() => {});
+      }
     }
     if (!silent) {
       toast({ title: 'Business Profile Updated', description: 'Your business preferences have been saved.' });
@@ -3972,9 +4012,16 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       vectorizeAndSyncAiChatbot().catch(console.warn);
 
       const nowIso = new Date().toISOString();
+      const resolvedStoreName = data.storeName || businessProfile?.shopifyStoreName || businessProfileRef.current?.shopifyStoreName || (shop ? shop.replace('.myshopify.com', '') : '');
+      const resolvedCompanyName = data.companyName || resolvedStoreName;
       await updateBusinessProfile({
         shopifyLastSyncedAt: nowIso,
         shopifyStatus: 'Connected',
+        shopifyConnected: true,
+        shopifyStoreUrl: shop,
+        shopifyStoreName: resolvedStoreName,
+        companyName: resolvedCompanyName,
+        businessName: resolvedStoreName,
         ...(data.newAccessToken ? { shopifyAccessToken: data.newAccessToken } : {}),
         ...(!businessProfile?.firstImportedAt ? { firstImportedAt: nowIso } : {}),
       }, true);

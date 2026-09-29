@@ -179,3 +179,17 @@ export function getShopifyGraphQLEndpoint(shop: string): string {
   const version = getShopifyApiVersion();
   return `https://${shop}/admin/api/${version}/graphql.json`;
 }
+
+/**
+ * Checks if a store domain belongs to the authorized pilot/development stores (e.g. SNKHED).
+ */
+export function isPilotAuthorizedStore(rawShop: string): boolean {
+  if (!rawShop) return false;
+  const clean = sanitizeShopDomain(rawShop) || rawShop.toLowerCase().trim();
+  return (
+    clean === 'snkhed.myshopify.com' ||
+    clean === '14aj1c-0a.myshopify.com' ||
+    clean.startsWith('snkhed.') ||
+    clean.startsWith('14aj1c-0a.')
+  );
+}

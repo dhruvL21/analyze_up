@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useData } from '@/context/data-context';
+import { useUser } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { logBusinessAction } from '@/lib/audit-store';
 import { AuditLogModal } from '@/components/audit-log-modal';
@@ -19,8 +20,48 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 
+export function getRecommendationChannel(
+  prod: any,
+  businessProfile: any,
+  driveConnection: any
+): 'SHOPIFY' | 'GOOGLE_DRIVE' | 'LOCAL' {
+  if (!prod) return 'LOCAL';
+  const isShopify = Boolean(
+    businessProfile?.shopifyConnected ||
+    businessProfile?.shopifyStoreUrl ||
+    prod?.shopifyProductId ||
+    prod?.shopifyVariantId ||
+    prod?.source === 'SHOPIFY' ||
+    prod?.source === 'shopify'
+  );
+  if (isShopify) return 'SHOPIFY';
+
+  const isDrive = Boolean(
+    prod?.source === 'GOOGLE_DRIVE' ||
+    prod?.source === 'drive' ||
+    prod?.driveFileId ||
+    (driveConnection && (driveConnection.isConnected === true || driveConnection.connectionStatus === 'Connected'))
+  );
+  if (isDrive) return 'GOOGLE_DRIVE';
+
+  return 'LOCAL';
+}
+
 export function InventoryRecommendationsPanel() {
-  const { products, transactions, updateProduct, addOrder, addTransaction, suppliers, businessProfile, dataReadiness, capabilities } = useData();
+  const {
+    products,
+    transactions,
+    updateProduct,
+    addOrder,
+    addTransaction,
+    suppliers,
+    businessProfile,
+    driveConnection,
+    getGoogleDriveFiles,
+    dataReadiness,
+    capabilities,
+  } = useData();
+  const { user } = useUser();
   const { toast } = useToast();
 
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
@@ -100,16 +141,35 @@ export function InventoryRecommendationsPanel() {
     );
   }, [products, capabilities, salesHistory, deadStockProd, appliedIds]);
 
+  const lowStockChannel = React.useMemo(() => {
+    return getRecommendationChannel(lowStockProd, businessProfile, driveConnection);
+  }, [lowStockProd, businessProfile, driveConnection]);
+
+  const deadStockChannel = React.useMemo(() => {
+    return getRecommendationChannel(deadStockProd, businessProfile, driveConnection);
+  }, [deadStockProd, businessProfile, driveConnection]);
+
+  const priceUpChannel = React.useMemo(() => {
+    return getRecommendationChannel(priceUpProd, businessProfile, driveConnection);
+  }, [priceUpProd, businessProfile, driveConnection]);
+
   const handleReorder = (prod: any) => {
     const key = `${prod.id}:reorder`;
     const reorderQty = (prod.minStock || 5) * 4 || 50;
     const costPrice = prod.costPrice || (prod.price || 500) * 0.6;
     const totalCost = Math.round(costPrice * reorderQty);
     const pName = prod.name || prod.productName || 'Product';
+    const channel = getRecommendationChannel(prod, businessProfile, driveConnection);
+
+    const channelDesc = channel === 'SHOPIFY'
+      ? ' Live inventory in your connected Shopify store will be synchronized immediately.'
+      : channel === 'GOOGLE_DRIVE'
+      ? ' Stock in your connected Google Drive CSV/Spreadsheet will be updated automatically.'
+      : '';
 
     setConfirmData({
       title: `Create Purchase Order for ${reorderQty} Units`,
-      description: `Create and fulfill a purchase order with supplier "${prod.supplier || suppliers[0]?.name || 'Supplier'}" for ${reorderQty} units of "${pName}" at a cost of ${currencySymbol}${costPrice}/unit (Total: ${currencySymbol}${totalCost.toLocaleString('en-IN')}). This will increment stock levels.`,
+      description: `Create and fulfill a purchase order with supplier "${prod.supplier || suppliers[0]?.name || 'Supplier'}" for ${reorderQty} units of "${pName}" at a cost of ${currencySymbol}${costPrice}/unit (Total: ${currencySymbol}${totalCost.toLocaleString('en-IN')}). This will increment stock levels.${channelDesc}`,
       onConfirm: async () => {
         setAnimatingId(key);
         try {
@@ -124,11 +184,105 @@ export function InventoryRecommendationsPanel() {
             status: 'Fulfilled',
           });
 
+          // If Shopify: Dispatch inventory adjustment to live Shopify Admin API
+          if (channel === 'SHOPIFY') {
+            const shopifyStore = businessProfile?.shopifyStoreUrl;
+            const invItemId = prod.shopifyInventoryItemId || prod.inventoryItemId;
+            const idToken = user ? await user.getIdToken().catch(() => null) : null;
+
+            if (shopifyStore) {
+              fetch('/api/shopify/inventory/adjust', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
+                },
+                body: JSON.stringify({
+                  shop: shopifyStore,
+                  productId: prod.id,
+                  sku: prod.sku,
+                  inventoryItemId: invItemId,
+                  delta: reorderQty,
+                  reason: 'received_purchase_order',
+                  productName: pName,
+                }),
+              })
+                .then(async (res) => {
+                  const data = await res.json().catch(() => ({}));
+                  if (res.ok && data.success) {
+                    toast({
+                      title: '⚡ Shopify Live Inventory Synced!',
+                      description: `Added +${reorderQty} units to "${pName}" on your live Shopify store.`,
+                    });
+                  }
+                })
+                .catch((err) => console.warn('[Shopify Reorder Sync Error]:', err));
+            }
+          }
+
+          // If Google Drive: Write back updated stock into connected Google Drive CSV
+          if (channel === 'GOOGLE_DRIVE') {
+            let driveFileId = prod.driveFileId;
+            if (!driveFileId && typeof getGoogleDriveFiles === 'function') {
+              try {
+                const files = await getGoogleDriveFiles();
+                const inventoryFile = files.find(
+                  (f: any) =>
+                    f.type === 'inventory' ||
+                    f.name?.toLowerCase().includes('inventory') ||
+                    f.name?.toLowerCase().includes('catalog') ||
+                    f.name?.toLowerCase().includes('product') ||
+                    f.name?.toLowerCase().includes('stock')
+                ) || files[0];
+                if (inventoryFile) {
+                  driveFileId = inventoryFile.id || inventoryFile.fileId;
+                }
+              } catch (e) {
+                console.warn('[Drive Files Lookup Error]:', e);
+              }
+            }
+
+            if (driveFileId) {
+              const token = driveConnection?.accessToken;
+              fetch('/api/drive/update', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(token ? { 'x-drive-token': token } : {}),
+                  ...(user?.uid ? { 'x-user-uid': user.uid } : {}),
+                },
+                body: JSON.stringify({
+                  fileId: driveFileId,
+                  fileName: prod.driveFileName || 'Inventory_Catalog.csv',
+                  updates: [
+                    {
+                      sku: prod.sku,
+                      productName: pName,
+                      productId: prod.id,
+                      stockDelta: reorderQty,
+                      newStock: (prod.stock || 0) + reorderQty,
+                    },
+                  ],
+                }),
+              })
+                .then(async (res) => {
+                  const data = await res.json().catch(() => ({}));
+                  if (res.ok && data.success) {
+                    toast({
+                      title: '☁️ Google Drive CSV Updated!',
+                      description: `Stock for "${pName}" incremented (+${reorderQty}) directly in connected Google Drive CSV.`,
+                    });
+                  }
+                })
+                .catch((err) => console.warn('[Drive Reorder Sync Error]:', err));
+            }
+          }
+
           logBusinessAction({
             title: 'Executed Reorder Purchase Order',
             productName: pName,
             actionType: 'reorder',
-            changeDetails: `Created PO for ${reorderQty} units with supplier ${prod.supplier || suppliers[0]?.name || 'Supplier'}. Total cost: ${currencySymbol}${totalCost.toLocaleString('en-IN')}. Stock updated.`,
+            changeDetails: `Created PO for ${reorderQty} units with supplier ${prod.supplier || suppliers[0]?.name || 'Supplier'}. Total cost: ${currencySymbol}${totalCost.toLocaleString('en-IN')}. Stock updated.${channelDesc}`,
             impactValue: `+${reorderQty} Units Restocked`,
           });
 
@@ -138,7 +292,7 @@ export function InventoryRecommendationsPanel() {
           }, 800);
 
           toast({
-            title: '📦 Reorder PO Logged & Saved in History!',
+            title: channel === 'SHOPIFY' ? '📦 Reorder Logged & Shopify Synced!' : channel === 'GOOGLE_DRIVE' ? '📦 Reorder Logged & Drive Synced!' : '📦 Reorder PO Logged & Saved in History!',
             description: `Added ${reorderQty} units to "${pName}". Click "Change History" to view recorded audit.`,
           });
         } catch (err) {
@@ -154,10 +308,17 @@ export function InventoryRecommendationsPanel() {
     const oldPrice = prod.price || 500;
     const newPrice = Math.round(oldPrice * 0.8);
     const pName = prod.name || prod.productName || 'Product';
+    const channel = getRecommendationChannel(prod, businessProfile, driveConnection);
+
+    const channelDesc = channel === 'SHOPIFY'
+      ? ' Live variant price in your connected Shopify store will be synchronized immediately.'
+      : channel === 'GOOGLE_DRIVE'
+      ? ' Price in your connected Google Drive CSV/Spreadsheet will be updated automatically.'
+      : '';
 
     setConfirmData({
       title: 'Apply 20% Clearance Discount',
-      description: `Reduce the selling price of "${pName}" from ${currencySymbol}${oldPrice} to ${currencySymbol}${newPrice} (-20%) to liquidate dead stock. This will modify catalog pricing.`,
+      description: `Reduce the selling price of "${pName}" from ${currencySymbol}${oldPrice} to ${currencySymbol}${newPrice} (-20%) to liquidate dead stock. This will modify catalog pricing.${channelDesc}`,
       onConfirm: async () => {
         setAnimatingId(key);
         try {
@@ -170,14 +331,70 @@ export function InventoryRecommendationsPanel() {
               liquidationStatus: 'Liquidated',
               updatedAt: new Date().toISOString(),
             },
-            { forceShopifySync: true, silentToast: false }
+            { forceShopifySync: channel === 'SHOPIFY', silentToast: false }
           );
+
+          if (channel === 'GOOGLE_DRIVE') {
+            let driveFileId = prod.driveFileId;
+            if (!driveFileId && typeof getGoogleDriveFiles === 'function') {
+              try {
+                const files = await getGoogleDriveFiles();
+                const inventoryFile = files.find(
+                  (f: any) =>
+                    f.type === 'inventory' ||
+                    f.name?.toLowerCase().includes('inventory') ||
+                    f.name?.toLowerCase().includes('catalog') ||
+                    f.name?.toLowerCase().includes('product')
+                ) || files[0];
+                if (inventoryFile) {
+                  driveFileId = inventoryFile.id || inventoryFile.fileId;
+                }
+              } catch (e) {
+                console.warn('[Drive Files Lookup Error]:', e);
+              }
+            }
+
+            if (driveFileId) {
+              const token = driveConnection?.accessToken;
+              fetch('/api/drive/update', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(token ? { 'x-drive-token': token } : {}),
+                  ...(user?.uid ? { 'x-user-uid': user.uid } : {}),
+                },
+                body: JSON.stringify({
+                  fileId: driveFileId,
+                  fileName: prod.driveFileName || 'Inventory_Catalog.csv',
+                  updates: [
+                    {
+                      sku: prod.sku,
+                      productName: pName,
+                      productId: prod.id,
+                      newPrice: newPrice,
+                      compareAtPrice: oldPrice,
+                    },
+                  ],
+                }),
+              })
+                .then(async (res) => {
+                  const data = await res.json().catch(() => ({}));
+                  if (res.ok && data.success) {
+                    toast({
+                      title: '☁️ Google Drive CSV Price Synced!',
+                      description: `Reduced price of "${pName}" to ${currencySymbol}${newPrice} in your connected Google Drive file.`,
+                    });
+                  }
+                })
+                .catch((err) => console.warn('[Drive Price Sync Error]:', err));
+            }
+          }
 
           logBusinessAction({
             title: 'Applied 20% Clearance Promo',
             productName: pName,
             actionType: 'discount',
-            changeDetails: `Reduced selling price from ${currencySymbol}${oldPrice} to ${currencySymbol}${newPrice} (-20%). Unlocked tied cash flow.`,
+            changeDetails: `Reduced selling price from ${currencySymbol}${oldPrice} to ${currencySymbol}${newPrice} (-20%). Unlocked tied cash flow.${channelDesc}`,
             impactValue: `-20% Price Clearance`,
           });
 
@@ -187,8 +404,8 @@ export function InventoryRecommendationsPanel() {
           }, 800);
 
           toast({
-            title: '🏷️ Clearance Promo Applied & Saved in History!',
-            description: `Reduced price of "${pName}" to ${currencySymbol}${newPrice}. Synced with Shopify. Click "Change History" to view audit details.`,
+            title: channel === 'SHOPIFY' ? '🏷️ Clearance Applied & Shopify Synced!' : channel === 'GOOGLE_DRIVE' ? '🏷️ Clearance Applied & Drive Synced!' : '🏷️ Clearance Promo Applied & Saved in History!',
+            description: `Reduced price of "${pName}" to ${currencySymbol}${newPrice}. Click "Change History" to view audit details.`,
           });
         } catch (err) {
           console.error(err);
@@ -203,10 +420,17 @@ export function InventoryRecommendationsPanel() {
     const oldPrice = prod.price || 500;
     const newPrice = Math.round(oldPrice * 1.08);
     const pName = prod.name || prod.productName || 'Product';
+    const channel = getRecommendationChannel(prod, businessProfile, driveConnection);
+
+    const channelDesc = channel === 'SHOPIFY'
+      ? ' Live variant price in your connected Shopify store will be synchronized immediately.'
+      : channel === 'GOOGLE_DRIVE'
+      ? ' Price in your connected Google Drive CSV/Spreadsheet will be updated automatically.'
+      : '';
 
     setConfirmData({
       title: 'Optimize Price (+8%)',
-      description: `Increase the selling price of "${pName}" from ${currencySymbol}${oldPrice} to ${currencySymbol}${newPrice} (+8%) for margin optimization. This will modify catalog pricing.`,
+      description: `Increase the selling price of "${pName}" from ${currencySymbol}${oldPrice} to ${currencySymbol}${newPrice} (+8%) for margin optimization. This will modify catalog pricing.${channelDesc}`,
       onConfirm: async () => {
         setAnimatingId(key);
         try {
@@ -216,14 +440,70 @@ export function InventoryRecommendationsPanel() {
               price: newPrice,
               updatedAt: new Date().toISOString(),
             },
-            { forceShopifySync: true, silentToast: false }
+            { forceShopifySync: channel === 'SHOPIFY', silentToast: false }
           );
+
+          if (channel === 'GOOGLE_DRIVE') {
+            let driveFileId = prod.driveFileId;
+            if (!driveFileId && typeof getGoogleDriveFiles === 'function') {
+              try {
+                const files = await getGoogleDriveFiles();
+                const inventoryFile = files.find(
+                  (f: any) =>
+                    f.type === 'inventory' ||
+                    f.name?.toLowerCase().includes('inventory') ||
+                    f.name?.toLowerCase().includes('catalog') ||
+                    f.name?.toLowerCase().includes('product')
+                ) || files[0];
+                if (inventoryFile) {
+                  driveFileId = inventoryFile.id || inventoryFile.fileId;
+                }
+              } catch (e) {
+                console.warn('[Drive Files Lookup Error]:', e);
+              }
+            }
+
+            if (driveFileId) {
+              const token = driveConnection?.accessToken;
+              fetch('/api/drive/update', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(token ? { 'x-drive-token': token } : {}),
+                  ...(user?.uid ? { 'x-user-uid': user.uid } : {}),
+                },
+                body: JSON.stringify({
+                  fileId: driveFileId,
+                  fileName: prod.driveFileName || 'Inventory_Catalog.csv',
+                  updates: [
+                    {
+                      sku: prod.sku,
+                      productName: pName,
+                      productId: prod.id,
+                      newPrice: newPrice,
+                      compareAtPrice: oldPrice,
+                    },
+                  ],
+                }),
+              })
+                .then(async (res) => {
+                  const data = await res.json().catch(() => ({}));
+                  if (res.ok && data.success) {
+                    toast({
+                      title: '☁️ Google Drive CSV Price Synced!',
+                      description: `Updated price of "${pName}" to ${currencySymbol}${newPrice} (+8%) in your connected Google Drive file.`,
+                    });
+                  }
+                })
+                .catch((err) => console.warn('[Drive Price Sync Error]:', err));
+            }
+          }
 
           logBusinessAction({
             title: 'Optimized Price (+8%)',
             productName: pName,
             actionType: 'price_up',
-            changeDetails: `Adjusted selling price from ${currencySymbol}${oldPrice} to ${currencySymbol}${newPrice} (+8%) for margin expansion.`,
+            changeDetails: `Adjusted selling price from ${currencySymbol}${oldPrice} to ${currencySymbol}${newPrice} (+8%) for margin expansion.${channelDesc}`,
             impactValue: `+8% Price Boost`,
           });
 
@@ -233,7 +513,7 @@ export function InventoryRecommendationsPanel() {
           }, 800);
 
           toast({
-            title: '📈 Selling Price Optimized & Saved in History!',
+            title: channel === 'SHOPIFY' ? '⚡ Price Optimized & Shopify Synced!' : channel === 'GOOGLE_DRIVE' ? '⚡ Price Optimized & Drive Synced!' : '📈 Selling Price Optimized & Saved in History!',
             description: `Adjusted price of "${pName}" to ${currencySymbol}${newPrice}. Click "Change History" to view audit details.`,
           });
         } catch (err) {
@@ -305,7 +585,19 @@ export function InventoryRecommendationsPanel() {
                       <span className="font-bold text-foreground flex items-center gap-1 text-xs">
                         <PackagePlus className="w-3.5 h-3.5 text-amber-400" /> Restock Urgently
                       </span>
-                      <Badge variant="outline" className="text-amber-400 border-amber-500/30 text-[10px]">High Priority</Badge>
+                      <div className="flex items-center gap-1.5">
+                        {lowStockChannel === 'SHOPIFY' && (
+                          <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 bg-emerald-500/10 text-[9px] font-mono">
+                            Shopify Sync
+                          </Badge>
+                        )}
+                        {lowStockChannel === 'GOOGLE_DRIVE' && (
+                          <Badge variant="outline" className="text-blue-400 border-blue-500/30 bg-blue-500/10 text-[9px] font-mono">
+                            Drive CSV Sync
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className="text-amber-400 border-amber-500/30 text-[10px]">High Priority</Badge>
+                      </div>
                     </div>
                     <p className="font-semibold text-foreground text-xs">{lowStockProd.name || lowStockProd.productName}</p>
                     <p className="text-muted-foreground text-[11px]">Current stock: {lowStockProd.stock} units. Reorder 50 units immediately to avoid stockout.</p>
@@ -322,7 +614,12 @@ export function InventoryRecommendationsPanel() {
                       </>
                     ) : (
                       <>
-                        Execute Reorder PO <ArrowRight className="w-3.5 h-3.5" />
+                        {lowStockChannel === 'SHOPIFY'
+                          ? 'Execute & Push to Shopify'
+                          : lowStockChannel === 'GOOGLE_DRIVE'
+                          ? 'Execute & Update Drive CSV'
+                          : 'Execute Reorder PO'}{' '}
+                        <ArrowRight className="w-3.5 h-3.5" />
                       </>
                     )}
                   </Button>
@@ -353,7 +650,19 @@ export function InventoryRecommendationsPanel() {
                       <span className="font-bold text-foreground flex items-center gap-1 text-xs">
                         <Tag className="w-3.5 h-3.5 text-rose-400" /> Liquidate Dead Stock
                       </span>
-                      <Badge variant="outline" className="text-rose-400 border-rose-500/30 text-[10px]">Clear Capital</Badge>
+                      <div className="flex items-center gap-1.5">
+                        {deadStockChannel === 'SHOPIFY' && (
+                          <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 bg-emerald-500/10 text-[9px] font-mono">
+                            Shopify Sync
+                          </Badge>
+                        )}
+                        {deadStockChannel === 'GOOGLE_DRIVE' && (
+                          <Badge variant="outline" className="text-blue-400 border-blue-500/30 bg-blue-500/10 text-[9px] font-mono">
+                            Drive CSV Sync
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className="text-rose-400 border-rose-500/30 text-[10px]">Clear Capital</Badge>
+                      </div>
                     </div>
                     <p className="font-semibold text-foreground text-xs">{deadStockProd.name || deadStockProd.productName}</p>
                     <p className="text-muted-foreground text-[11px]">{deadStockProd.stock} units sitting unsold for 30+ days. Launch 20% discount to unlock cash flow.</p>
@@ -370,7 +679,12 @@ export function InventoryRecommendationsPanel() {
                       </>
                     ) : (
                       <>
-                        Apply 20% Clearance <ArrowRight className="w-3.5 h-3.5" />
+                        {deadStockChannel === 'SHOPIFY'
+                          ? 'Apply Clearance (Push to Shopify)'
+                          : deadStockChannel === 'GOOGLE_DRIVE'
+                          ? 'Apply Clearance (Update Drive CSV)'
+                          : 'Apply 20% Clearance'}{' '}
+                        <ArrowRight className="w-3.5 h-3.5" />
                       </>
                     )}
                   </Button>
@@ -386,7 +700,7 @@ export function InventoryRecommendationsPanel() {
                         Day {salesHistory.historyDays}/14 • AI Learning
                       </Badge>
                     </div>
-                    <p className="font-semibold text-foreground text-xs">Calibrating Velocity Curves (GPT-4)</p>
+                    <p className="font-semibold text-foreground text-xs">Calibrating Velocity Curves</p>
                     <p className="text-muted-foreground text-[11px]">
                       Daily AI Learning is actively evaluating tokenized order velocity to calibrate dead-stock holding periods without premature markdowns.
                     </p>
@@ -429,7 +743,19 @@ export function InventoryRecommendationsPanel() {
                       <span className="font-bold text-foreground flex items-center gap-1 text-xs">
                         <TrendingUp className="w-3.5 h-3.5 text-emerald-400" /> Optimize Margin (+8%)
                       </span>
-                      <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 text-[10px]">High Demand</Badge>
+                      <div className="flex items-center gap-1.5">
+                        {priceUpChannel === 'SHOPIFY' && (
+                          <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 bg-emerald-500/10 text-[9px] font-mono">
+                            Shopify Sync
+                          </Badge>
+                        )}
+                        {priceUpChannel === 'GOOGLE_DRIVE' && (
+                          <Badge variant="outline" className="text-blue-400 border-blue-500/30 bg-blue-500/10 text-[9px] font-mono">
+                            Drive CSV Sync
+                          </Badge>
+                        )}
+                        <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 text-[10px]">High Demand</Badge>
+                      </div>
                     </div>
                     <p className="font-semibold text-foreground text-xs">{priceUpProd.name || priceUpProd.productName}</p>
                     <p className="text-muted-foreground text-[11px]">Strong velocity. Increase selling price to {currencySymbol}{Math.round((priceUpProd.price || 500) * 1.08)} for margin expansion.</p>
@@ -446,7 +772,12 @@ export function InventoryRecommendationsPanel() {
                       </>
                     ) : (
                       <>
-                        Optimize Price (+8%) <ArrowRight className="w-3.5 h-3.5" />
+                        {priceUpChannel === 'SHOPIFY'
+                          ? 'Optimize Price (Push to Shopify)'
+                          : priceUpChannel === 'GOOGLE_DRIVE'
+                          ? 'Optimize Price (Update Drive CSV)'
+                          : 'Optimize Price (+8%)'}{' '}
+                        <ArrowRight className="w-3.5 h-3.5" />
                       </>
                     )}
                   </Button>
@@ -462,9 +793,9 @@ export function InventoryRecommendationsPanel() {
                         Day {salesHistory.historyDays}/14 • AI Learning
                       </Badge>
                     </div>
-                    <p className="font-semibold text-foreground text-xs">Calibrating Elasticity (GPT-4)</p>
+                    <p className="font-semibold text-foreground text-xs">Calibrating Elasticity</p>
                     <p className="text-muted-foreground text-[11px]">
-                      GPT-4 continuously models price sensitivity on tokenized order streams to ensure margin bumps do not dampen conversions.
+                      AI continuously models price sensitivity on tokenized order streams to ensure margin bumps do not dampen conversions.
                     </p>
                   </div>
                   <div className="h-8 w-full rounded-xl text-[11px] font-medium bg-purple-500/15 text-purple-300 border border-purple-500/30 flex items-center justify-between px-3">

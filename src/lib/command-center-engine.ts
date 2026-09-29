@@ -702,14 +702,56 @@ export function computeExecutiveKPIs(
     return !isFulf && qty > 0 && rev > 0;
   });
 
-  // Unique pending order count deduplicated by order number/id
-  const pendingOrderIds = new Set<string>();
-  pendingSalesTx.forEach(t => {
-    const id = t.orderNumber || t.orderId || t.id;
-    if (id) pendingOrderIds.add(String(id));
+  // 2. Pending Orders = Sum of final order totals
+  // Formula: Subtotal + Delivery/Shipping + Tax - Discounts = Final Order Total
+  const pendingOrdersMap = new Map<string, {
+    subtotal: number;
+    shipping: number;
+    tax: number;
+    discount: number;
+    finalOrderTotal?: number;
+    lineItemSum: number;
+  }>();
+
+  pendingSalesTx.forEach((t) => {
+    const ordId = String(t.orderNumber || t.orderId || t.id);
+    const lineRev = Number(t.totalRevenue ?? ((t.price || 0) * (t.quantity || 1)));
+
+    if (!pendingOrdersMap.has(ordId)) {
+      const finalTotal = t.finalOrderTotal ?? t.orderTotal;
+      const subtotal = t.subtotal !== undefined ? Number(t.subtotal) : lineRev;
+      const shipping = Number(t.shipping ?? t.deliveryFee ?? 0);
+      const tax = Number(t.tax ?? 0);
+      const discount = Number(t.discount ?? t.discounts ?? 0);
+
+      pendingOrdersMap.set(ordId, {
+        subtotal,
+        shipping,
+        tax,
+        discount,
+        finalOrderTotal: finalTotal !== undefined && Number(finalTotal) > 0 ? Number(finalTotal) : undefined,
+        lineItemSum: lineRev,
+      });
+    } else {
+      const existing = pendingOrdersMap.get(ordId)!;
+      existing.lineItemSum += lineRev;
+      if (t.subtotal === undefined) {
+        existing.subtotal += lineRev;
+      }
+    }
   });
-  const pendingOrderCount = pendingOrderIds.size || pendingSalesTx.length;
-  const pendingOrderVal = pendingSalesTx.reduce((sum, t) => sum + Number(t.totalRevenue ?? ((t.price || 0) * (t.quantity || 1))), 0);
+
+  const pendingOrderCount = pendingOrdersMap.size || pendingSalesTx.length;
+  let pendingOrderVal = 0;
+  for (const o of pendingOrdersMap.values()) {
+    if (o.finalOrderTotal !== undefined && o.finalOrderTotal > 0) {
+      pendingOrderVal += o.finalOrderTotal;
+    } else {
+      // Subtotal + Delivery/Shipping + Tax - Discounts = Pending Order Value
+      const computedTotal = o.subtotal + o.shipping + o.tax - o.discount;
+      pendingOrderVal += computedTotal > 0 ? computedTotal : o.lineItemSum;
+    }
+  }
 
   // 3. Total Sales Orders (deduplicated by orderNumber or id)
   const totalOrderIds = new Set<string>();
@@ -806,7 +848,7 @@ export function computeExecutiveKPIs(
     },
     {
       key: 'pending_orders',
-      title: 'Pending Orders (Pipeline)',
+      title: 'Pending Order Total',
       value: `${currencySymbol}${Math.round(pendingOrderVal).toLocaleString('en-IN')}`,
       rawValue: pendingOrderVal,
       count: pendingOrderCount,

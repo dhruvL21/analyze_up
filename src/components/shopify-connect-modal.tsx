@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Dialog,
   DialogContent,
@@ -68,10 +69,12 @@ export function ShopifyConnectModal() {
     disconnectShopify,
     purgeDemoDataOnly,
     hasDemoData,
+    loadDemoBusiness,
   } = useData();
   const { user } = useUser();
   const firestore = useFirestore();
   const { toast } = useToast();
+  const router = useRouter();
 
   const isConnected = Boolean(
     businessProfile?.shopifyConnected || businessProfile?.shopifyStatus === 'Connected'
@@ -88,6 +91,18 @@ export function ShopifyConnectModal() {
   const [scopeCheckResult, setScopeCheckResult] = useState<any>(null);
   const [isEditingToken, setIsEditingToken] = useState(false);
   const [newTokenInput, setNewTokenInput] = useState('');
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [attemptedShop, setAttemptedShop] = useState('');
+
+  const isPilotAuthorizedStore = (input: string): boolean => {
+    const clean = cleanShopDomain(input);
+    return (
+      clean === 'snkhed.myshopify.com' ||
+      clean === '14aj1c-0a.myshopify.com' ||
+      clean.startsWith('snkhed.') ||
+      clean.startsWith('14aj1c-0a.')
+    );
+  };
 
   // Keep modal inputs synchronized: when disconnected, always reset inputs to blank
   React.useEffect(() => {
@@ -137,6 +152,11 @@ export function ShopifyConnectModal() {
     }
 
     const shop = cleanShopDomain(storeUrl);
+    if (!isPilotAuthorizedStore(shop)) {
+      setAttemptedShop(shop);
+      setShowReviewModal(true);
+      return;
+    }
     setIsSubmitting(true);
 
     try {
@@ -187,6 +207,11 @@ export function ShopifyConnectModal() {
     }
 
     const shop = cleanShopDomain(storeUrl);
+    if (!isPilotAuthorizedStore(shop)) {
+      setAttemptedShop(shop);
+      setShowReviewModal(true);
+      return;
+    }
     setIsSubmitting(true);
 
     try {
@@ -217,6 +242,8 @@ export function ShopifyConnectModal() {
             provider: 'shopify',
             shopDomain: shop,
             storeName,
+            companyName: storeName,
+            ...(businessProfile?.logoUrl ? { logoUrl: businessProfile.logoUrl } : {}),
             storeEmail: shopData.email || '',
             currency: shopData.currency || 'USD',
             accessToken: accessToken.trim(),
@@ -232,6 +259,8 @@ export function ShopifyConnectModal() {
           userId: user.uid,
           shopDomain: shop,
           storeName,
+          companyName: storeName,
+          ...(businessProfile?.logoUrl ? { logoUrl: businessProfile.logoUrl } : {}),
           updatedAt: new Date().toISOString(),
         }, { merge: true }).catch(console.warn);
 
@@ -244,12 +273,20 @@ export function ShopifyConnectModal() {
       }
 
       // Update business profile state
+      const shouldAdoptBizName =
+        !businessProfile?.businessName ||
+        businessProfile.businessName === 'My Business' ||
+        businessProfile.businessName === 'Founder';
+
       await updateBusinessProfile({
         shopifyConnected: true,
         shopifyStoreUrl: shop,
         shopifyStoreName: storeName,
+        companyName: storeName,
+        businessName: storeName,
         shopifyStatus: 'Connected',
         shopifyAccessToken: accessToken.trim(),
+        ...(businessProfile?.logoUrl ? { logoUrl: businessProfile.logoUrl } : {}),
       });
 
       toast({
@@ -720,31 +757,33 @@ export function ShopifyConnectModal() {
                       Disconnect Shopify Store?
                     </AlertDialogTitle>
                   </div>
-                  <AlertDialogDescription className="text-sm text-muted-foreground leading-relaxed space-y-3">
-                    <p>
-                      You are about to disconnect{' '}
-                      <span className="font-medium text-foreground">
-                        {businessProfile?.shopifyStoreName
-                          ? `${businessProfile.shopifyStoreName} (${businessProfile?.shopifyStoreUrl || storeUrl})`
-                          : (businessProfile?.shopifyStoreUrl || storeUrl)}
-                      </span>{' '}
-                      from AnalyzeUp.
-                    </p>
-                    <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-rose-300 text-xs space-y-1.5">
-                      <p className="font-semibold text-rose-400 flex items-center gap-1.5">
-                        <AlertTriangle className="w-3.5 h-3.5" /> This action will permanently delete:
+                  <AlertDialogDescription asChild>
+                    <div className="text-sm text-muted-foreground leading-relaxed space-y-3">
+                      <p>
+                        You are about to disconnect{' '}
+                        <span className="font-medium text-foreground">
+                          {businessProfile?.shopifyStoreName
+                            ? `${businessProfile.shopifyStoreName} (${businessProfile?.shopifyStoreUrl || storeUrl})`
+                            : (businessProfile?.shopifyStoreUrl || storeUrl)}
+                        </span>{' '}
+                        from AnalyzeUp.
                       </p>
-                      <ul className="pl-4 space-y-1 list-disc">
-                        <li>All products synced from this Shopify store</li>
-                        <li>All orders &amp; transactions imported via Shopify</li>
-                        <li>All return records synced from Shopify</li>
-                        <li>Webhook registrations &amp; access credentials</li>
-                      </ul>
+                      <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-3 text-rose-300 text-xs space-y-1.5">
+                        <p className="font-semibold text-rose-400 flex items-center gap-1.5">
+                          <AlertTriangle className="w-3.5 h-3.5" /> This action will permanently delete:
+                        </p>
+                        <ul className="pl-4 space-y-1 list-disc">
+                          <li>All products synced from this Shopify store</li>
+                          <li>All orders &amp; transactions imported via Shopify</li>
+                          <li>All return records synced from Shopify</li>
+                          <li>Webhook registrations &amp; access credentials</li>
+                        </ul>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Data from Google Drive or manual CSV/Excel imports will{' '}
+                        <span className="text-foreground font-medium">not</span> be affected.
+                      </p>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Data from Google Drive or manual CSV/Excel imports will{' '}
-                      <span className="text-foreground font-medium">not</span> be affected.
-                    </p>
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter className="gap-2 mt-2">
@@ -932,6 +971,97 @@ export function ShopifyConnectModal() {
         onOpenChange={setShowScheduleModal}
       />
     )}
+
+    {/* Pre-Production Early Access / Shopify App Store Partner Review Dialog */}
+    <Dialog open={showReviewModal} onOpenChange={setShowReviewModal}>
+      <DialogContent className="sm:max-w-md p-6 bg-card/95 backdrop-blur-xl border border-border/60 shadow-2xl rounded-2xl text-left">
+        <DialogHeader className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 shrink-0">
+              <Store className="w-5 h-5 text-amber-500" />
+            </div>
+            <Badge className="bg-amber-500/15 text-amber-400 border border-amber-500/30 text-[10px] px-2.5 py-0.5 font-bold uppercase tracking-wider">
+              Partner Review Underway
+            </Badge>
+          </div>
+          <div>
+            <DialogTitle className="text-lg font-bold text-foreground">
+              Shopify App Store Review in Progress
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground mt-1 leading-relaxed">
+              Direct OAuth connection for <span className="font-semibold text-foreground underline decoration-amber-500/40">{attemptedShop}</span> is queued for public release.
+            </DialogDescription>
+          </div>
+        </DialogHeader>
+
+        <div className="space-y-3 text-xs text-muted-foreground my-2">
+          <div className="p-3.5 rounded-xl bg-secondary/50 border border-border/50 space-y-2">
+            <div className="flex items-start gap-2 text-foreground font-medium">
+              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+              <span>Integration Engine Built & Tested</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed pl-6">
+              Our native Shopify synchronization engine is completely architected and currently undergoing compliance review with Shopify Partner Engineering for public App Store release.
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-1.5">
+            <div className="flex items-center gap-2 text-amber-400 font-semibold text-[11px]">
+              <Clock className="w-3.5 h-3.5" />
+              <span>Restricted Beta Access</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              During this pre-production verification stage, live API connectivity is exclusively enabled for our verified developer pilot store (<code className="text-amber-300 font-mono text-[10px] bg-amber-500/20 px-1 py-0.5 rounded">snkhed.myshopify.com</code>).
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-primary/10 border border-primary/20 space-y-1.5">
+            <p className="font-semibold text-primary text-[11px] flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5" />
+              Explore features right now:
+            </p>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              You can immediately test all AI intelligence tools, reorder forecasting, profit diagnostics, and demand predictions using our <strong>1-Click Demo Business</strong> or by importing your data via <strong>CSV / Excel</strong>.
+            </p>
+          </div>
+        </div>
+
+        <DialogFooter className="flex flex-col sm:flex-row gap-2 pt-2 sm:justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setShowReviewModal(false)}
+            className="rounded-xl text-xs font-semibold h-9 cursor-pointer"
+          >
+            Close
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              setShowReviewModal(false);
+              setShowShopifyModal(false);
+              router.push('/dashboard/inventory?action=import');
+            }}
+            className="rounded-xl text-xs font-semibold h-9 border-primary/30 text-primary hover:bg-primary/10 cursor-pointer"
+          >
+            Import CSV Instead
+          </Button>
+          <Button
+            type="button"
+            onClick={() => {
+              setShowReviewModal(false);
+              setShowShopifyModal(false);
+              loadDemoBusiness(businessProfile?.businessType || 'Retail');
+            }}
+            className="rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-black h-9 gap-1.5 shadow-sm cursor-pointer"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-black" />
+            Explore Demo Business
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </>
   );
 }

@@ -172,8 +172,10 @@ export function SmartOnboardingWizard() {
     try {
       const dataUrl = await processImageFile(file);
       setLogoUrl(dataUrl);
+      const resolvedName = businessName || businessProfile?.shopifyStoreName || 'My Business';
       await updateBusinessProfile({
-        businessName: businessName || 'My Business',
+        businessName: resolvedName,
+        companyName: resolvedName,
         businessType,
         industry,
         businessSize,
@@ -221,8 +223,10 @@ export function SmartOnboardingWizard() {
 
   const handleAutoSave = async () => {
     try {
+      const resolvedName = businessName || businessProfile?.shopifyStoreName || 'My Business';
       await updateBusinessProfile({
-        businessName: businessName || 'My Business',
+        businessName: resolvedName,
+        companyName: resolvedName,
         businessType,
         industry,
         businessSize,
@@ -250,8 +254,10 @@ export function SmartOnboardingWizard() {
   const handleSelectSetupMethod = async (method: 'manual' | 'csv' | 'shopify' | 'demo') => {
     setLoading(true);
     try {
+      const resolvedName = businessName || businessProfile?.shopifyStoreName || 'My Business';
       await updateBusinessProfile({
-        businessName: businessName || 'My Business',
+        businessName: resolvedName,
+        companyName: resolvedName,
         businessType,
         industry,
         businessSize,

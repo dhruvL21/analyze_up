@@ -176,7 +176,14 @@ export async function recalculateAndSaveAnalyticsSummary(
 
   const soldProductIds = new Set<string>();
   const soldProductNames = new Set<string>();
-  const pendingOrderIds = new Set<string>();
+  const pendingOrdersMap = new Map<string, {
+    subtotal: number;
+    shipping: number;
+    tax: number;
+    discount: number;
+    finalOrderTotal?: number;
+    lineItemSum: number;
+  }>();
 
   transactions.forEach((t: any) => {
     const txType = String(t.type || '').toLowerCase();
@@ -221,9 +228,29 @@ export async function recalculateAndSaveAnalyticsSummary(
         if (t.productName || t.product_name || t.name) soldProductNames.add(String(t.productName || t.product_name || t.name).toLowerCase());
         if (t.sku) soldProductNames.add(String(t.sku).toLowerCase());
       } else if (qty > 0 && rev > 0) {
-        pendingOrderValue += rev;
-        const ordId = t.orderNumber || t.orderId || t.id;
-        if (ordId) pendingOrderIds.add(String(ordId));
+        const ordId = String(t.orderNumber || t.orderId || t.id);
+        if (!pendingOrdersMap.has(ordId)) {
+          const finalTotal = t.finalOrderTotal ?? t.orderTotal;
+          const subtotal = t.subtotal !== undefined ? Number(t.subtotal) : rev;
+          const shipping = Number(t.shipping ?? t.deliveryFee ?? 0);
+          const tax = Number(t.tax ?? 0);
+          const discount = Number(t.discount ?? t.discounts ?? 0);
+
+          pendingOrdersMap.set(ordId, {
+            subtotal,
+            shipping,
+            tax,
+            discount,
+            finalOrderTotal: finalTotal !== undefined && Number(finalTotal) > 0 ? Number(finalTotal) : undefined,
+            lineItemSum: rev,
+          });
+        } else {
+          const existing = pendingOrdersMap.get(ordId)!;
+          existing.lineItemSum += rev;
+          if (t.subtotal === undefined) {
+            existing.subtotal += rev;
+          }
+        }
       }
 
       if (isPaid) {
@@ -234,7 +261,17 @@ export async function recalculateAndSaveAnalyticsSummary(
     }
   });
 
-  pendingOrderCount = pendingOrderIds.size || (pendingOrderValue > 0 ? 1 : 0);
+  pendingOrderCount = pendingOrdersMap.size;
+  pendingOrderValue = 0;
+  for (const o of pendingOrdersMap.values()) {
+    if (o.finalOrderTotal !== undefined && o.finalOrderTotal > 0) {
+      pendingOrderValue += o.finalOrderTotal;
+    } else {
+      // Subtotal + Delivery/Shipping + Tax - Discounts = Pending Order Value
+      const computedTotal = o.subtotal + o.shipping + o.tax - o.discount;
+      pendingOrderValue += computedTotal > 0 ? computedTotal : o.lineItemSum;
+    }
+  }
 
   // Returns and refunds deduct from recognized revenue
   let totalRefunds = 0;

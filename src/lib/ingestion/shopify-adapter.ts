@@ -89,11 +89,28 @@ export function parseShopifyOrders(shopifyOrders: any[]): ParsedTabularData {
 
 import type { Product, Transaction, ProductReturn } from '@/lib/types';
 
+export interface ShopifyAdapterOptions {
+  shop?: string;
+  storeName?: string;
+  companyName?: string;
+}
+
 /**
  * Converts Shopify raw products into AnalyzeUp canonical Product objects.
  */
-export function convertShopifyToCanonicalProducts(shopifyProducts: any[]): Product[] {
+export function convertShopifyToCanonicalProducts(
+  shopifyProducts: any[],
+  options?: ShopifyAdapterOptions
+): Product[] {
   const products: Product[] = [];
+  const companyName =
+    options?.companyName ||
+    options?.storeName ||
+    (options?.shop ? options.shop.replace('.myshopify.com', '') : undefined);
+  const storeName =
+    options?.storeName ||
+    (options?.shop ? options.shop.replace('.myshopify.com', '') : undefined);
+  const shopDomain = options?.shop || undefined;
 
   shopifyProducts.forEach((p) => {
     const title = p.title || p.name || 'Untitled Product';
@@ -140,6 +157,9 @@ export function convertShopifyToCanonicalProducts(shopifyProducts: any[]): Produ
         shopifyVariantId: v.id ? String(v.id) : undefined,
         compareAtPrice: v.compare_at_price ? Number(v.compare_at_price) : undefined,
         imageUrl: imageUrl || undefined,
+        companyName,
+        storeName,
+        shopDomain,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       });
@@ -152,8 +172,19 @@ export function convertShopifyToCanonicalProducts(shopifyProducts: any[]): Produ
 /**
  * Converts Shopify raw orders into AnalyzeUp canonical Transaction objects.
  */
-export function convertShopifyToCanonicalTransactions(shopifyOrders: any[]): Transaction[] {
+export function convertShopifyToCanonicalTransactions(
+  shopifyOrders: any[],
+  options?: ShopifyAdapterOptions
+): Transaction[] {
   const transactions: Transaction[] = [];
+  const companyName =
+    options?.companyName ||
+    options?.storeName ||
+    (options?.shop ? options.shop.replace('.myshopify.com', '') : undefined);
+  const storeName =
+    options?.storeName ||
+    (options?.shop ? options.shop.replace('.myshopify.com', '') : undefined);
+  const shopDomain = options?.shop || undefined;
 
   shopifyOrders.forEach((order) => {
     const orderId = String(order.name || order.order_number || `ORD-${order.id}`);
@@ -193,6 +224,39 @@ export function convertShopifyToCanonicalTransactions(shopifyOrders: any[]): Tra
     const deliveryStatus = isFulfilled ? 'DELIVERED' : 'PENDING';
     const status = isFulfilled ? 'Delivered' : 'Pending';
 
+    // Order-level financial components: Subtotal + Delivery/Shipping + Tax - Discounts = Final Order Total
+    const subtotal = Number(
+      order.current_subtotal_price ||
+      order.subtotal_price ||
+      order.subtotalPriceSet?.shopMoney?.amount ||
+      lineItems.reduce((acc: number, it: any) => acc + (Number(it.price || 0) * Math.max(1, Number(it.quantity || 1))), 0)
+    );
+    const shipping = Number(
+      order.total_shipping_price_set?.shop_money?.amount ||
+      order.totalShippingPriceSet?.shopMoney?.amount ||
+      order.shipping_lines?.reduce((acc: number, l: any) => acc + Number(l.price || 0), 0) ||
+      0
+    );
+    const tax = Number(
+      order.current_total_tax ||
+      order.total_tax ||
+      order.totalTaxSet?.shopMoney?.amount ||
+      order.total_tax_set?.shop_money?.amount ||
+      0
+    );
+    const discount = Number(
+      order.current_total_discounts ||
+      order.total_discounts ||
+      order.totalDiscountsSet?.shopMoney?.amount ||
+      order.total_discounts_set?.shop_money?.amount ||
+      0
+    );
+
+    const rawTotal = order.current_total_price || order.total_price || order.totalPriceSet?.shopMoney?.amount;
+    const finalOrderTotal = rawTotal !== undefined && Number(rawTotal) > 0
+      ? Number(rawTotal)
+      : Math.max(0, subtotal + shipping + tax - discount);
+
     lineItems.forEach((item: any, idx: number) => {
       const qty = Math.max(1, Number(item.quantity || 1));
       const unitPrice = Number(item.price || 0);
@@ -215,9 +279,20 @@ export function convertShopifyToCanonicalTransactions(shopifyOrders: any[]): Tra
         costPrice: costPerUnit,
         costPerUnit,
         totalCost,
+        subtotal,
+        shipping,
+        deliveryFee: shipping,
+        tax,
+        discount,
+        discounts: discount,
+        orderTotal: finalOrderTotal,
+        finalOrderTotal,
         customerName: customer,
         paymentMethod,
         source: 'SHOPIFY',
+        companyName,
+        storeName,
+        shopDomain,
         status,
         fulfillmentStatus,
         financialStatus,

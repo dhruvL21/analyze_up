@@ -118,11 +118,14 @@ export function evaluateSalesHistory(
     if (!p || (p.stock || 0) <= 0) return false;
 
     // If product was created in the system less than 30 days ago, it's newly added, not dead stock
-    if (typeof p.createdAt === 'string') {
-      const createdTs = new Date(p.createdAt).getTime();
-      if (!isNaN(createdTs) && now - createdTs < 30 * MS_PER_DAY && !productSaleMetrics.has(p.id)) {
-        return false;
-      }
+    const createdTs =
+      typeof p.createdAt === 'string'
+        ? new Date(p.createdAt).getTime()
+        : (p.createdAt as any)?.seconds
+        ? (p.createdAt as any).seconds * 1000
+        : NaN;
+    if (!isNaN(createdTs) && createdTs > 0 && now - createdTs < 30 * MS_PER_DAY && !productSaleMetrics.has(p.id)) {
+      return false;
     }
 
     // Must have 0 recorded sales over the minimum 30-day period

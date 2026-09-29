@@ -53,6 +53,9 @@ export interface Product {
   brand?: string;
   barcode?: string;
   imageUrl?: string;
+  companyName?: string;
+  storeName?: string;
+  shopDomain?: string;
   status?: string;
   source?: 'CSV' | 'SHOPIFY' | 'GOOGLE_DRIVE' | 'GDRIVE' | 'MANUAL' | string;
   importSource?: 'shopify' | 'drive' | 'csv' | string;
@@ -112,11 +115,23 @@ export interface Transaction {
   paymentMethod?: string;
   customerName?: string;
   notes?: string;
+  companyName?: string;
+  storeName?: string;
+  shopDomain?: string;
+  subtotal?: number;
+  shipping?: number;
+  deliveryFee?: number;
+  tax?: number;
+  discount?: number;
+  discounts?: number;
+  orderTotal?: number;
+  finalOrderTotal?: number;
   isDemo?: boolean;
 }
 
 export interface BusinessProfile {
   businessName: string;
+  companyName?: string;
   businessType: BusinessType;
   businessSize: BusinessSize;
   currency: string;
@@ -301,6 +316,8 @@ export interface BusinessEvent {
     targetRoute?: string;
     targetId?: string;
     reorderQty?: number;
+    discountPercent?: number;
+    targetPrice?: number;
   };
 }
 

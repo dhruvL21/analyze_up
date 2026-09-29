@@ -372,6 +372,7 @@ export async function getShopifyGrantedScopes(shop: string): Promise<{
  */
 export async function queryShopDetails(shop: string): Promise<{
   name: string;
+  companyName: string;
   currencyCode: string;
   myshopifyDomain?: string;
   email?: string;
@@ -400,16 +401,21 @@ export async function queryShopDetails(shop: string): Promise<{
       query,
     });
 
+    const resolvedName = data?.shop?.name || shop.replace('.myshopify.com', '');
+
     return {
-      name: data?.shop?.name || shop.replace('.myshopify.com', ''),
+      name: resolvedName,
+      companyName: resolvedName,
       currencyCode: data?.shop?.currencyCode || 'USD',
       myshopifyDomain: data?.shop?.myshopifyDomain,
       email: data?.shop?.email,
     };
   } catch (err) {
     console.warn('[Shopify Admin API] queryShopDetails fallback notice:', err);
+    const fallbackName = shop.replace('.myshopify.com', '');
     return {
-      name: shop.replace('.myshopify.com', ''),
+      name: fallbackName,
+      companyName: fallbackName,
       currencyCode: 'USD',
     };
   }

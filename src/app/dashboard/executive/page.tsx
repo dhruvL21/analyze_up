@@ -880,7 +880,7 @@ function ExecutiveIntelligencePageContent() {
       {activeTab === 'forecasting' && (
         (dataReadiness?.level === 'LEARNING' || !capabilities?.demandForecasting) ? (
           <div className="space-y-6">
-            {/* Live Daily Adaptive AI Learning Engine with GPT-4 and Tokenized Privacy Shield */}
+            {/* Live Daily Adaptive AI Learning Engine with Tokenized Privacy Shield */}
             <DailyAILearningBanner />
 
             <Card className="p-6 md:p-8 rounded-3xl ios-glass border border-amber-500/30 bg-gradient-to-br from-amber-500/10 via-background/60 to-background shadow-xl relative overflow-hidden">
@@ -894,7 +894,7 @@ function ExecutiveIntelligencePageContent() {
                     Observing Your Catalog's Sales Rhythm
                   </h2>
                   <p className="text-xs md:text-sm text-muted-foreground leading-relaxed">
-                    AnalyzeUp enforces strict statistical sufficiency standards to protect your business. Full macro 30-day forecast curves calibrate as sales history accumulates. Daily velocity learning is actively executed by GPT-4 using tokenized zero-PII data to observe demand rhythm.
+                    AnalyzeUp enforces strict statistical sufficiency standards to protect your business. Full macro 30-day forecast curves calibrate as sales history accumulates. Daily velocity learning is actively executed using tokenized zero-PII data to observe demand rhythm.
                   </p>
                 </div>
 

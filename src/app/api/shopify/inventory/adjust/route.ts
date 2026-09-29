@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { resolveServerTenant } from '@/lib/shopify/auth-guard';
 import { sanitizeShopDomain } from '@/lib/shopify/config';
 import { getShopifyConnection } from '@/lib/shopify/connection-store';
-import { adjustShopifyInventory } from '@/lib/shopify/admin-api';
+import { adjustShopifyInventory, queryShopLocations } from '@/lib/shopify/admin-api';
 import { recordOutgoingOperation, completeOutgoingOperation } from '@/lib/shopify/loop-prevention';
 import { getAdminFirestore } from '@/lib/firebase/admin';
 
@@ -29,13 +29,6 @@ export async function POST(req: NextRequest) {
       purchaseOrderId,
     } = body;
 
-    if (!rawInvItemId || !rawLocId || typeof delta !== 'number' || delta === 0) {
-      return NextResponse.json(
-        { error: 'Missing required parameters: inventoryItemId, locationId, and non-zero numeric delta.' },
-        { status: 400 }
-      );
-    }
-
     const shop = sanitizeShopDomain(rawShop);
     if (!shop) {
       return NextResponse.json({ error: 'Invalid or missing shop parameter.' }, { status: 400 });
@@ -50,9 +43,54 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Access denied: Store belongs to a different tenant.' }, { status: 403 });
     }
 
-    const cleanInvItemId = String(rawInvItemId).replace('gid://shopify/InventoryItem/', '');
-    const cleanLocId = String(rawLocId).replace('gid://shopify/Location/', '');
     const db = getAdminFirestore();
+
+    // Auto-resolve locationId if omitted
+    let cleanLocId = rawLocId ? String(rawLocId).replace('gid://shopify/Location/', '') : null;
+    if (!cleanLocId) {
+      if (connection.primaryLocationId) {
+        cleanLocId = String(connection.primaryLocationId).replace('gid://shopify/Location/', '');
+      } else {
+        try {
+          const locRes = await queryShopLocations(shop);
+          if (locRes.primaryLocationId) {
+            cleanLocId = String(locRes.primaryLocationId).replace('gid://shopify/Location/', '');
+          }
+        } catch (e) {
+          console.warn('[Shopify Inventory Adjust] Failed to auto-resolve primary location:', e);
+        }
+      }
+    }
+
+    // Auto-resolve inventoryItemId if omitted
+    let cleanInvItemId = rawInvItemId ? String(rawInvItemId).replace('gid://shopify/InventoryItem/', '') : null;
+    if (!cleanInvItemId && db) {
+      try {
+        if (body.productId) {
+          const prodDoc = await db.collection('users').doc(tenant.tenantId).collection('products').doc(String(body.productId)).get();
+          if (prodDoc.exists) {
+            const p = prodDoc.data();
+            cleanInvItemId = p?.shopifyInventoryItemId || p?.inventoryItemId || (p?.variants?.[0]?.inventoryItemId) || null;
+          }
+        }
+        if (!cleanInvItemId && body.sku) {
+          const skuSnap = await db.collection('users').doc(tenant.tenantId).collection('products').where('sku', '==', String(body.sku)).limit(1).get();
+          if (!skuSnap.empty) {
+            const p = skuSnap.docs[0].data();
+            cleanInvItemId = p?.shopifyInventoryItemId || p?.inventoryItemId || (p?.variants?.[0]?.inventoryItemId) || null;
+          }
+        }
+      } catch (e) {
+        console.warn('[Shopify Inventory Adjust] Failed to auto-resolve inventoryItemId:', e);
+      }
+    }
+
+    if (!cleanInvItemId || !cleanLocId || typeof delta !== 'number' || delta === 0) {
+      return NextResponse.json(
+        { error: 'Missing required parameters: inventoryItemId, locationId, and non-zero numeric delta.' },
+        { status: 400 }
+      );
+    }
 
     // 1. Duplicate receiving protection: Check if this receiving event was already processed
     if (receivingEventId && db) {

@@ -41,27 +41,34 @@ export function QuickActionsBar() {
     driveConnection,
   } = useData();
 
-  // Determine whether Shopify is actively connected
+  // Determine whether Shopify is actively connected or configured
   const isShopifyConnected = Boolean(
-    businessProfile?.shopifyConnected &&
-    businessProfile?.shopifyStatus === 'Connected' &&
-    businessProfile?.shopifyStoreUrl
+    (businessProfile?.shopifyConnected === true || businessProfile?.shopifyStatus === 'Connected') ||
+    (Boolean(businessProfile?.shopifyStoreUrl) && businessProfile?.shopifyConnected !== false && businessProfile?.shopifyStatus !== 'Disconnected')
   );
 
   // Determine whether Google Drive is actively connected
   const isDriveConnected = Boolean(
     driveConnection &&
-    (driveConnection.connectionStatus === 'Connected' || driveConnection.isConnected === true)
+    (driveConnection.connectionStatus === 'Connected' || driveConnection.isConnected === true || Boolean(driveConnection.selectedFolderId)) &&
+    driveConnection.connectionStatus !== 'Disconnected'
   );
 
-  // Determine whether any real (non-demo) catalog products or sales transactions are currently present
+  // Determine whether demo data is currently loaded in the workspace
+  const isDemoLoaded = Boolean(
+    hasDemoData ||
+    (products.length > 0 && products.every((p: any) => p?.isDemo === true || p?.source === 'DEMO' || p?.source === 'demo' || String(p?.id || '').startsWith('prod-'))) ||
+    products.some((p: any) => p?.isDemo === true || p?.source === 'DEMO' || p?.source === 'demo')
+  );
+
+  // Determine whether any real (non-demo) catalog products or sales transactions are currently present (e.g. CSV upload, manual entry, or integration)
   const hasRealCatalog = React.useMemo(() => {
     const hasRealProd = products.some((p: any) => {
       if (!p) return false;
       if (p.isDemo === true || p.source === 'DEMO' || p.source === 'demo') return false;
       const pid = String(p.id || '');
       if (
-        pid.startsWith('prod-') ||
+        /^prod-\d+$/.test(pid) ||
         pid.startsWith('demo_') ||
         pid.startsWith('prod-fashion-') ||
         pid.startsWith('prod-electronics-') ||
@@ -81,19 +88,14 @@ export function QuickActionsBar() {
       return true;
     });
 
-    return hasRealProd || hasRealTx;
-  }, [products, transactions]);
+    const hasRealNonDemoData = (products.length > 0 || transactions.length > 0) && !isDemoLoaded;
 
-  // Determine whether demo data is currently loaded in the workspace
-  const isDemoLoaded = Boolean(
-    hasDemoData ||
-    products.some((p: any) => p?.isDemo === true || p?.source === 'DEMO' || p?.source === 'demo' || String(p?.id || '').startsWith('prod-') || String(p?.id || '').startsWith('demo_')) ||
-    transactions.some((t: any) => t?.isDemo === true || t?.source === 'DEMO' || t?.source === 'demo' || String(t?.id || '').startsWith('tx-') || String(t?.id || '').startsWith('demo_'))
-  );
+    return hasRealProd || hasRealTx || hasRealNonDemoData;
+  }, [products, transactions, isDemoLoaded]);
 
-  // Dynamically hide "Load Demo" / "Delete Demo" as soon as Shopify, Google Drive, or real CSV data is connected/uploaded.
-  // As soon as the user disconnects or clears these, it dynamically reappears.
-  const shouldHideLoadDemo = isShopifyConnected || isDriveConnected || hasRealCatalog;
+  // Dynamically hide "Load Demo" / "Delete Demo" whenever Shopify, Google Drive, or real CSV data is connected/uploaded.
+  // As soon as the user disconnects or deletes all data, it immediately reappears.
+  const shouldHideDemoActions = isShopifyConnected || isDriveConnected || hasRealCatalog;
 
   const isRestockUnlocked = Boolean(
     businessBuddyCalibration?.isOverridden ||
@@ -147,7 +149,7 @@ export function QuickActionsBar() {
             ref={scrollRef}
             className="flex items-center gap-2.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden flex-1"
           >
-            {!shouldHideLoadDemo && (
+            {!shouldHideDemoActions && (
               isDemoLoaded ? (
                 <Button
                   size="sm"

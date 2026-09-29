@@ -605,7 +605,15 @@ function InventoryPageContent() {
                           <TableCell>
                             <div className="space-y-0.5">
                               <p className="font-bold text-foreground hover:text-emerald-400 transition-colors text-xs">{product.name || product.productName}</p>
-                              <p className="font-mono text-[10px] text-muted-foreground">{product.sku || 'N/A'}</p>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="font-mono text-[10px] text-muted-foreground">{product.sku || 'N/A'}</p>
+                                {(product.companyName || product.storeName || (product.source === 'SHOPIFY' && businessProfile?.shopifyStoreName)) && (
+                                  <span className="text-[9px] px-1.5 py-0.2 rounded-md font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 inline-flex items-center gap-1" title="Linked Shopify Store">
+                                    <span className="w-1 h-1 rounded-full bg-emerald-400" />
+                                    {product.companyName || product.storeName || businessProfile?.shopifyStoreName}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </TableCell>
 

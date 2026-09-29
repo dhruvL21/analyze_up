@@ -342,6 +342,15 @@ export function ProductIntelligenceDrawer({ product, open, onOpenChange }: Produ
                   <span>{liveProduct.category || liveProduct.categoryId || 'General Category'}</span>
                   <span>•</span>
                   <span>{liveProduct.brand || liveProduct.supplier || 'Brand'}</span>
+                  {(liveProduct.companyName || liveProduct.storeName || (liveProduct.source === 'SHOPIFY' && businessProfile?.shopifyStoreName)) && (
+                    <>
+                      <span>•</span>
+                      <span className="inline-flex items-center gap-1 font-semibold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 text-[10px]" title="Linked Shopify Store">
+                        <span className="w-1 h-1 rounded-full bg-emerald-400" />
+                        {liveProduct.companyName || liveProduct.storeName || businessProfile?.shopifyStoreName}
+                      </span>
+                    </>
+                  )}
                 </DialogDescription>
                 <div className="flex items-center gap-2 pt-0.5">
                   <span className="text-sm font-bold text-foreground">

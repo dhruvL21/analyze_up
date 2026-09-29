@@ -32,6 +32,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const isPilotAuthorizedStore =
+      shop === 'snkhed.myshopify.com' ||
+      shop === '14aj1c-0a.myshopify.com' ||
+      shop.startsWith('snkhed.') ||
+      shop.startsWith('14aj1c-0a.');
+
+    if (process.env.NODE_ENV !== 'test' && !isPilotAuthorizedStore) {
+      return NextResponse.json(
+        {
+          success: false,
+          error:
+            'Shopify App Store Partner Review in progress. Direct API token verification is currently reserved for the developer pilot store (snkhed.myshopify.com) awaiting general release.',
+          isPilotRestricted: true,
+        },
+        { status: 403 }
+      );
+    }
+
     const apiVersion = getShopifyApiVersion();
     const shopRes = await fetch(`https://${shop}/admin/api/${apiVersion}/shop.json`, {
       method: 'GET',

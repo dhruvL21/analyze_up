@@ -12,7 +12,6 @@ import { InventoryRecommendationsPanel } from '@/components/inventory-recommenda
 import { RevenueProfitIntelligence } from '@/components/revenue-profit-intelligence';
 import { DeadStockSection } from '@/components/dead-stock-section';
 import { InventoryQualitySnapshot } from '@/components/inventory-quality-snapshot';
-import { BusinessActivityTimeline } from '@/components/business-activity-timeline';
 import { DataReadinessModal } from '@/components/data-readiness-modal';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -44,7 +43,7 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl font-extrabold tracking-tight md:text-3xl text-foreground">
-                {businessProfile?.businessName || 'Business Copilot'}
+                {businessProfile?.companyName || businessProfile?.shopifyStoreName || businessProfile?.businessName || 'Business Copilot'}
               </h1>
               {businessProfile?.businessType && (
                 <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-wider py-0.5 px-2 bg-secondary/40 border-border/60 text-muted-foreground">
@@ -53,7 +52,7 @@ export default function DashboardPage() {
               )}
             </div>
             <p className="text-xs md:text-sm text-muted-foreground mt-1 font-medium">
-              Welcome back, <span className="font-semibold text-foreground">{businessProfile?.businessName || 'Founder'}</span> — Know what&apos;s happening. Decide what matters.
+              Welcome back, <span className="font-semibold text-foreground">{businessProfile?.companyName || businessProfile?.shopifyStoreName || businessProfile?.businessName || 'Founder'}</span> — Know what&apos;s happening. Decide what matters.
             </p>
           </div>
         </div>
@@ -180,14 +179,9 @@ export default function DashboardPage() {
       {/* Out of Stock & Urgent Restock Hub */}
       <OutOfStockSection />
 
-      {/* FEATURE 6 & 11: Inventory Quality Snapshot & Activity Timeline */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-        <div className="flex flex-col min-w-0">
-          <InventoryQualitySnapshot />
-        </div>
-        <div className="flex flex-col min-w-0">
-          <BusinessActivityTimeline />
-        </div>
+      {/* FEATURE 6: Inventory Quality Snapshot */}
+      <div>
+        <InventoryQualitySnapshot />
       </div>
     </div>
   );

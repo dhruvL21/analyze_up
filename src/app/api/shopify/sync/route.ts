@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getShopifyApiVersion, sanitizeShopDomain } from '@/lib/shopify/config';
+import { getShopifyApiVersion, sanitizeShopDomain, isPilotAuthorizedStore } from '@/lib/shopify/config';
 import { getValidAccessToken } from '@/lib/shopify/admin-api';
 import { resolveServerTenant } from '@/lib/shopify/auth-guard';
-import { getShopifyConnection } from '@/lib/shopify/connection-store';
+import { getShopifyConnection, saveShopifyConnection, getShopifyConnectionByTenant } from '@/lib/shopify/connection-store';
+import { encryptShopifyToken } from '@/lib/shopify/crypto';
 import {
   convertShopifyToCanonicalProducts,
   convertShopifyToCanonicalTransactions,
@@ -42,17 +43,39 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Validate tenant ownership if server connection is registered
-    if (tenant) {
-      try {
-        const connection = await getShopifyConnection(shop);
-        if (connection && connection.tenantId && connection.tenantId !== tenant.tenantId) {
+    let existingConnection: any = null;
+    try {
+      existingConnection = await getShopifyConnection(shop);
+    } catch (connErr) {
+      console.warn('[Shopify Sync] Connection check note:', connErr);
+    }
+
+    if (tenant && existingConnection) {
+      if (existingConnection.tenantId && existingConnection.tenantId !== tenant.tenantId) {
+        const isPilot = isPilotAuthorizedStore(shop);
+        const hasProvidedToken = Boolean(accessToken && String(accessToken).trim());
+        let tenantHasStore = false;
+        try {
+          const tenantConn = await getShopifyConnectionByTenant(tenant.tenantId);
+          if (tenantConn && tenantConn.shopDomain === shop) {
+            tenantHasStore = true;
+          }
+        } catch {}
+
+        if (isPilot || hasProvidedToken || tenantHasStore) {
+          console.log(`[Shopify Sync] Reassigning store connection ${shop} to authenticated tenant ${tenant.tenantId}`);
+          existingConnection.tenantId = tenant.tenantId;
+          existingConnection.id = `conn_${tenant.tenantId}_${shop}`;
+          if (hasProvidedToken) {
+            existingConnection.encryptedAccessToken = encryptShopifyToken(String(accessToken).trim());
+          }
+          await saveShopifyConnection(existingConnection);
+        } else {
           return NextResponse.json(
             { success: false, error: 'Forbidden. You do not have permission to sync this store.' },
             { status: 403 }
           );
         }
-      } catch (connErr) {
-        console.warn('[Shopify Sync] Connection check note:', connErr);
       }
     }
 
@@ -271,8 +294,11 @@ export async function POST(req: NextRequest) {
     }
 
     // 4. Transform to Canonical Models
-    const canonicalProducts = convertShopifyToCanonicalProducts(rawProducts);
-    const canonicalTransactions = convertShopifyToCanonicalTransactions(rawOrders);
+    const storeName = existingConnection?.storeName || shop.replace('.myshopify.com', '');
+    const companyName = existingConnection?.companyName || storeName;
+
+    const canonicalProducts = convertShopifyToCanonicalProducts(rawProducts, { shop, storeName, companyName });
+    const canonicalTransactions = convertShopifyToCanonicalTransactions(rawOrders, { shop, storeName, companyName });
     const orderReturns = convertShopifyToCanonicalReturns(rawOrders);
     const graphQLReturns = convertShopifyGraphQLReturnsToCanonical(rawGraphQLReturns);
     const canonicalReturns = mergeAndDeduplicateReturns(orderReturns, graphQLReturns);
@@ -280,6 +306,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       shop,
+      storeName,
+      companyName,
       products: canonicalProducts,
       transactions: canonicalTransactions,
       returns: canonicalReturns,

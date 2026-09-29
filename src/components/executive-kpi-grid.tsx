@@ -41,7 +41,7 @@ export function ExecutiveKPIGrid() {
         },
         {
           key: 'pending_orders',
-          title: 'Pending Orders (Pipeline)',
+          title: 'Pending Order Total',
           value: `${currencySymbol}${Math.round(pendingVal).toLocaleString('en-IN')}`,
           rawValue: pendingVal,
           count: pendingCount,

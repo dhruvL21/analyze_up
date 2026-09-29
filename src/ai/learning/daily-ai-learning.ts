@@ -175,7 +175,7 @@ Respond strictly in JSON matching this schema:
           actionableAdvice: session.detokenizeText(detokenized.actionableAdvice || 'Maintain inventory replenishment schedule.'),
         },
         privacySanitizationVerified: true,
-        aiModelUsed: `${AI_MODELS.FLAGSHIP} (Tokenized Privacy Gateway)`,
+        aiModelUsed: 'Tokenized Privacy Gateway',
       };
     } catch (err: any) {
       console.warn('[Daily AI Learning] OpenAI call encountered error, using local fallback:', err?.message);

@@ -60,6 +60,14 @@ export interface DomainTransaction {
   deliveryStatus?: string;
   isRevenueRecognized?: boolean;
   paymentReceived?: boolean;
+  subtotal?: number;
+  shipping?: number;
+  deliveryFee?: number;
+  tax?: number;
+  discount?: number;
+  discounts?: number;
+  orderTotal?: number;
+  finalOrderTotal?: number;
   createdAt: string;
 }
 
@@ -228,6 +236,14 @@ export function toDomainTransaction(t: any): DomainTransaction {
     deliveryStatus: t.deliveryStatus,
     isRevenueRecognized: t.isRevenueRecognized,
     paymentReceived: t.paymentReceived,
+    subtotal: t.subtotal !== undefined ? normalizeNumber(t.subtotal) : undefined,
+    shipping: t.shipping !== undefined ? normalizeNumber(t.shipping) : undefined,
+    deliveryFee: t.deliveryFee !== undefined ? normalizeNumber(t.deliveryFee) : undefined,
+    tax: t.tax !== undefined ? normalizeNumber(t.tax) : undefined,
+    discount: t.discount !== undefined ? normalizeNumber(t.discount) : undefined,
+    discounts: t.discounts !== undefined ? normalizeNumber(t.discounts) : undefined,
+    orderTotal: t.orderTotal !== undefined ? normalizeNumber(t.orderTotal) : undefined,
+    finalOrderTotal: t.finalOrderTotal !== undefined ? normalizeNumber(t.finalOrderTotal) : undefined,
     createdAt: normalizeDate(t.createdAt || t.created_at),
   };
 }

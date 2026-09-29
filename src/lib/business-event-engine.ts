@@ -14,6 +14,7 @@ import { computeBusinessHealth } from './command-center-engine';
 import { detectProcurementRisks } from './supplier-intelligence-engine';
 import { generateBusinessForecastingReport } from './forecasting-engine';
 import { computeCustomerGrowthIntelligence } from './customer-growth-engine';
+import { evaluateSalesHistory } from './sales-history-helper';
 import { formatCur } from './utils';
 
 const getSlug = (str: string) => (str || 'item').toLowerCase().replace(/[^a-z0-9]/g, '-');
@@ -143,6 +144,7 @@ export function detectBusinessEvents(
 
     if (price > 0 && margin < 15) {
       const isLoss = margin < 0;
+      const targetPrice = Math.round(cost * 1.25);
       addEvent({
         id: `event-margin-${getSlug(product.id)}`,
         type: 'MARGIN_EROSION',
@@ -158,7 +160,7 @@ export function detectBusinessEvents(
           : `${product.name} profit margin is currently ${Math.round(margin)}%, which is below the 15% minimum margin benchmark.`,
         impactFormatted: `Margin reduction of ${Math.round(15 - margin)} percentage points`,
         recommendation: isLoss
-          ? `Increase retail price above ${formatCur(cost * 1.25)} or renegotiate vendor unit cost.`
+          ? `Increase retail price above ${formatCur(targetPrice)} or renegotiate vendor unit cost.`
           : `Review unit price or negotiate volume discount with supplier.`,
         firstDetected: nowIso,
         lastUpdated: nowIso,
@@ -166,10 +168,67 @@ export function detectBusinessEvents(
           actionType: 'price_up',
           targetRoute: '/dashboard/inventory',
           targetId: product.id,
+          targetPrice,
         },
       });
     }
   });
+
+  // --- CATEGORY 3B: DEAD STOCK & CLEARANCE EVENTS ---
+  // Strictly validated against sales history: requires minimum 30 days of sales history (or 14+ days with 40+ sales)
+  // so new stores and newly launched catalog items are never prematurely flagged for clearance discounts.
+  const salesHistory = evaluateSalesHistory(products, transactions);
+
+  if (salesHistory.hasMinimumHistory) {
+    const deadStockProducts = products
+      .filter(p => {
+        const stock = Number(p.stock) || 0;
+        const isLiquidated =
+          p.liquidationStatus === 'Liquidated' ||
+          ((p.discountPercent || 0) >= 15) ||
+          (Boolean(p.compareAtPrice) && (p.compareAtPrice || 0) > (p.price || 0));
+        return (
+          stock >= 5 &&
+          !isLiquidated &&
+          salesHistory.isProductEligibleForDeadStock(p)
+        );
+      })
+      .map(p => {
+        const stock = Number(p.stock) || 0;
+        const cost = p.costPrice || ((p.price || 0) * 0.6);
+        const tiedUpCapital = Math.round(stock * cost);
+        return { product: p, tiedUpCapital, stock };
+      })
+      .sort((a, b) => b.tiedUpCapital - a.tiedUpCapital);
+
+    deadStockProducts.slice(0, 2).forEach(({ product, tiedUpCapital, stock }) => {
+      const severity: EventSeverity = tiedUpCapital > 10000 ? 'HIGH' : 'MEDIUM';
+      const impactScore = tiedUpCapital > 10000 ? 84 : 70;
+
+      addEvent({
+        id: `event-deadstock-${getSlug(product.id)}`,
+        type: 'DEAD_STOCK_SURGE',
+        category: 'inventory',
+        severity,
+        impactScore,
+        status: 'ACTIVE',
+        entityId: product.id,
+        entityName: product.name || 'Product',
+        title: `Dead Stock Alert: ${product.name}`,
+        description: `${product.name} has 0 sales across ${salesHistory.historyDays}+ days of historical records with ${stock} unsold units (${formatCur(tiedUpCapital)} tied up). Apply a 20% clearance discount to accelerate liquidation and recover capital.`,
+        impactFormatted: `${formatCur(tiedUpCapital)} Capital Locked`,
+        recommendation: `Apply 20% clearance discount to accelerate velocity.`,
+        firstDetected: nowIso,
+        lastUpdated: nowIso,
+        actionPayload: {
+          actionType: 'discount',
+          targetRoute: '/dashboard/inventory',
+          targetId: product.id,
+          discountPercent: 20,
+        },
+      });
+    });
+  }
 
   // --- CATEGORY 4: BUSINESS HEALTH SCORE CHANGE ---
   const health = computeBusinessHealth(products, transactions, suppliers, returns);

@@ -25,6 +25,8 @@ export interface ShopifyConnectionRecord {
   grantedScopes: string[];
   missingScopes: string[];
   storeName: string;
+  companyName?: string;
+  logoUrl?: string;
   currency: string;
   storeEmail?: string;
   shopId?: string;

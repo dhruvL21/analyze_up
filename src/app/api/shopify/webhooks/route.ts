@@ -80,6 +80,8 @@ export async function POST(req: NextRequest) {
     }
 
     const tenantId = connection.tenantId;
+    const storeName = connection.storeName || shop.replace('.myshopify.com', '');
+    const companyName = connection.companyName || storeName;
 
     // 4. Handle App Uninstallation Webhook
     if (topic === 'app/uninstalled') {
@@ -146,6 +148,9 @@ export async function POST(req: NextRequest) {
         lineItemsCount: payload.line_items?.length || 0,
         processedAt: payload.processed_at || payload.created_at,
         source: 'SHOPIFY',
+        companyName,
+        storeName,
+        shopDomain: shop,
         createdAt: payload.created_at || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       }, { merge: true });
@@ -182,6 +187,9 @@ export async function POST(req: NextRequest) {
           costPrice: Math.round(unitPrice * 0.6),
           totalCost: Math.round(unitPrice * 0.6 * qty),
           customerName,
+          companyName,
+          storeName,
+          shopDomain: shop,
           financialStatus: rawFin,
           fulfillmentStatus: rawFul,
           paymentReceived: isPaid,
@@ -374,6 +382,9 @@ export async function POST(req: NextRequest) {
           shopifyInventoryItemId: v.inventory_item_id ? String(v.inventory_item_id) : null,
           ...(prodImage ? { imageUrl: prodImage } : {}),
           ...(v.compare_at_price ? { compareAtPrice: Number(v.compare_at_price) } : {}),
+          companyName,
+          storeName,
+          shopDomain: shop,
           userId: tenantId,
           updatedAt: new Date().toISOString(),
         }, { merge: true });

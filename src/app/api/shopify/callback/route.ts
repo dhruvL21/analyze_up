@@ -223,6 +223,7 @@ export async function GET(req: NextRequest) {
     const finalConnection: ShopifyConnectionRecord = {
       ...initialConnection,
       storeName,
+      companyName: storeName,
       currency,
       grantedScopes,
       missingScopes,
@@ -254,6 +255,7 @@ export async function GET(req: NextRequest) {
       JSON.stringify({
         shopDomain: shop,
         storeName,
+        companyName: storeName,
         currency,
         accessToken,
         scope: grantedScopes.join(','),

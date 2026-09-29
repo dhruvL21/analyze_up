@@ -82,7 +82,7 @@ export function DailyAILearningBanner({
         actionableAdvice: 'Run supplier purchase orders for items reaching reorder trigger points.',
       },
       privacySanitizationVerified: true,
-      aiModelUsed: 'gpt-4o (Tokenized Privacy Gateway)',
+      aiModelUsed: 'Tokenized Privacy Gateway',
     };
 
     setLearningLog(defaultLog);
@@ -121,7 +121,7 @@ export function DailyAILearningBanner({
 
         toast({
           title: `🧠 Day ${dayNumber} AI Learning Complete`,
-          description: `GPT-4 analyzed ${currentOrders} orders with tokenized privacy. Calibrated velocity curves updated.`,
+          description: `AI engine analyzed ${currentOrders} orders with tokenized privacy. Calibrated velocity curves updated.`,
         });
       } else {
         throw new Error(data.error || 'Daily learning call failed');
@@ -152,16 +152,13 @@ export function DailyAILearningBanner({
                 <ShieldCheck className="w-3.5 h-3.5" />
                 TOKENIZED PRIVACY SHIELD ACTIVE
               </Badge>
-              <Badge variant="outline" className="border-purple-500/40 text-purple-300 bg-purple-500/10 font-mono text-[10px] font-bold px-2 py-0.5">
-                Powered by GPT-4
-              </Badge>
             </div>
 
             <CardTitle className="text-xl md:text-2xl font-black text-foreground tracking-tight">
               Day {dayNumber} AI Model Intelligence &amp; Daily Learning
             </CardTitle>
             <CardDescription className="text-xs md:text-sm text-muted-foreground leading-relaxed max-w-3xl">
-              AnalyzeUp does not sit idle. Every day, our GPT-4 learning engine ingests your newly synced sales transactions and catalog states through an isolated zero-PII privacy gateway—anonymizing products and order tokens to calibrate true velocity curves, elasticity, and inventory runway.
+              AnalyzeUp does not sit idle. Every day, our proprietary AI learning engine ingests your newly synced sales transactions and catalog states through an isolated zero-PII privacy gateway—anonymizing products and order tokens to calibrate true velocity curves, elasticity, and inventory runway.
             </CardDescription>
           </div>
 
@@ -173,10 +170,10 @@ export function DailyAILearningBanner({
               className="gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-lg shadow-indigo-600/20 h-9 px-4 cursor-pointer"
             >
               <RotateCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-              {isLoading ? 'Tokenizing & Learning with GPT-4...' : 'Run Today’s AI Learning Cycle'}
+              {isLoading ? 'Tokenizing & Learning...' : 'Run Today’s AI Learning Cycle'}
             </Button>
             <span className="text-[10px] text-muted-foreground font-mono">
-              Model: {learningLog?.aiModelUsed || 'gpt-4o (Tokenized)'}
+              Privacy Gateway: Active (Tokenized)
             </span>
           </div>
         </div>
@@ -236,7 +233,7 @@ export function DailyAILearningBanner({
           <div className="flex items-center justify-between flex-wrap gap-2">
             <h4 className="text-sm font-bold text-indigo-300 flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-indigo-400" />
-              Observations Learned Today by GPT-4 (Day {dayNumber})
+              Observations Learned Today by AI Engine (Day {dayNumber})
             </h4>
             <Badge variant="outline" className="text-[10px] text-indigo-300 border-indigo-500/40">
               Live Inferred Signals

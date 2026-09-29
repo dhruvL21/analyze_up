@@ -162,7 +162,7 @@ export default function ForecastingPage() {
           </div>
         </div>
 
-        {/* Live Daily Adaptive AI Learning Engine with GPT-4 and Tokenized Privacy Shield */}
+        {/* Live Daily Adaptive AI Learning Engine with Tokenized Privacy Shield */}
         <DailyAILearningBanner />
 
         {/* Learning Hero Banner */}
@@ -177,7 +177,7 @@ export default function ForecastingPage() {
                 Observing Your Catalog's Sales Rhythm
               </h2>
               <p className="text-xs md:text-sm text-muted-foreground leading-relaxed">
-                AnalyzeUp enforces strict statistical sufficiency standards to protect your business. Full macro 30-day demand curves calibrate as extended sales history accumulates. Daily velocity learning is continuously executed by GPT-4 using tokenized zero-PII data.
+                AnalyzeUp enforces strict statistical sufficiency standards to protect your business. Full macro 30-day demand curves calibrate as extended sales history accumulates. Daily velocity learning is continuously executed using tokenized zero-PII data.
               </p>
             </div>
 

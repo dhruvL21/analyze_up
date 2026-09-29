@@ -49,6 +49,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const isPilotAuthorizedStore =
+      shop === 'snkhed.myshopify.com' ||
+      shop === '14aj1c-0a.myshopify.com' ||
+      shop.startsWith('snkhed.') ||
+      shop.startsWith('14aj1c-0a.');
+
+    if (process.env.NODE_ENV !== 'test' && !isPilotAuthorizedStore) {
+      return NextResponse.json(
+        {
+          error:
+            'Shopify App Store Partner Review in progress. Live OAuth connection is currently reserved for the developer pilot store (snkhed.myshopify.com) awaiting general release.',
+          isPilotRestricted: true,
+        },
+        { status: 403 }
+      );
+    }
+
     const clientId = getShopifyClientId();
     let requestedScopes: string[] = getShopifyScopes();
     if (Array.isArray(body.scopes) && body.scopes.length > 0) {
@@ -117,6 +134,23 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(
       { error: 'Invalid Shopify store domain format. Expected: your-store.myshopify.com' },
       { status: 400 }
+    );
+  }
+
+  const isPilotAuthorizedStore =
+    shop === 'snkhed.myshopify.com' ||
+    shop === '14aj1c-0a.myshopify.com' ||
+    shop.startsWith('snkhed.') ||
+    shop.startsWith('14aj1c-0a.');
+
+  if (process.env.NODE_ENV !== 'test' && !isPilotAuthorizedStore) {
+    return NextResponse.json(
+      {
+        error:
+          'Shopify App Store Partner Review in progress. Live OAuth connection is currently reserved for the developer pilot store (snkhed.myshopify.com) awaiting general release.',
+        isPilotRestricted: true,
+      },
+      { status: 403 }
     );
   }
 

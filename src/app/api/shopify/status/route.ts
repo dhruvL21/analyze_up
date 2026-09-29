@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveServerTenant } from '@/lib/shopify/auth-guard';
-import { getShopifyConnectionByTenant, getShopifyConnection } from '@/lib/shopify/connection-store';
-import { sanitizeShopDomain } from '@/lib/shopify/config';
+import { getShopifyConnectionByTenant, getShopifyConnection, saveShopifyConnection } from '@/lib/shopify/connection-store';
+import { sanitizeShopDomain, isPilotAuthorizedStore } from '@/lib/shopify/config';
 
 /**
  * GET /api/shopify/status
@@ -31,16 +31,25 @@ export async function GET(req: NextRequest) {
       if (sanitizedShop) {
         const foundConn = await getShopifyConnection(sanitizedShop);
         // STRICT MULTI-TENANT ISOLATION GUARD:
-        // Only accept if connection.tenantId matches the requesting tenantId!
+        // Only accept if connection.tenantId matches the requesting tenantId,
+        // or if it's the pilot store / test environment!
         if (foundConn) {
           if (foundConn.tenantId && foundConn.tenantId !== tenantId) {
-            // Connection belongs to another account! Never expose across accounts.
-            return NextResponse.json({
-              connected: false,
-              connection: null,
-            });
+            if (isPilotAuthorizedStore(sanitizedShop)) {
+              foundConn.tenantId = tenantId;
+              foundConn.id = `conn_${tenantId}_${sanitizedShop}`;
+              await saveShopifyConnection(foundConn).catch(console.warn);
+              connection = foundConn;
+            } else {
+              // Connection belongs to another account! Never expose across accounts.
+              return NextResponse.json({
+                connected: false,
+                connection: null,
+              });
+            }
+          } else {
+            connection = foundConn;
           }
-          connection = foundConn;
         }
       }
     }
@@ -58,10 +67,16 @@ export async function GET(req: NextRequest) {
 
     // Secondary multi-tenant verification check
     if (connection.tenantId && connection.tenantId !== tenantId) {
-      return NextResponse.json({
-        connected: false,
-        connection: null,
-      });
+      if (isPilotAuthorizedStore(connection.shopDomain)) {
+        connection.tenantId = tenantId;
+        connection.id = `conn_${tenantId}_${connection.shopDomain}`;
+        await saveShopifyConnection(connection).catch(console.warn);
+      } else {
+        return NextResponse.json({
+          connected: false,
+          connection: null,
+        });
+      }
     }
 
     const isConnected = connection.status === 'ACTIVE' || connection.status === 'SYNCED';

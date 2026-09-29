@@ -81,7 +81,9 @@ export default function SettingsPage() {
     returns,
   } = useData();
 
-  const [bizName, setBizName] = useState(businessProfile?.businessName || "My Business");
+  const [bizName, setBizName] = useState(
+    businessProfile?.shopifyStoreName || businessProfile?.companyName || businessProfile?.businessName || "My Business"
+  );
   const [bizType, setBizType] = useState<BusinessType>(businessProfile?.businessType || "Retail");
   const [bizSize, setBizSize] = useState<BusinessSize>(businessProfile?.businessSize || "2-10 Employees");
   const [currency, setCurrency] = useState(businessProfile?.currency || "INR (₹)");
@@ -93,10 +95,11 @@ export default function SettingsPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const isInitialized = useRef(false);
+  const lastAdoptedStoreName = useRef<string | null>(null);
 
   // Active saved profile in context
   const activeProfile = useMemo(() => ({
-    businessName: businessProfile?.businessName || "My Business",
+    businessName: businessProfile?.businessName || businessProfile?.shopifyStoreName || businessProfile?.companyName || "My Business",
     businessType: (businessProfile?.businessType || "Retail") as BusinessType,
     businessSize: (businessProfile?.businessSize || "2-10 Employees") as BusinessSize,
     currency: businessProfile?.currency || "INR (₹)",
@@ -209,14 +212,33 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!businessProfile) return;
+    const preferredStoreName =
+      businessProfile.shopifyStoreName ||
+      businessProfile.companyName ||
+      businessProfile.businessName ||
+      "My Business";
+
     if (!isInitialized.current) {
-      setBizName(businessProfile.businessName || "My Business");
+      setBizName(preferredStoreName);
       setBizType(businessProfile.businessType || "Retail");
       setBizSize(businessProfile.businessSize || "2-10 Employees");
       setCurrency(businessProfile.currency || "INR (₹)");
       setCountry(businessProfile.country || "India");
       setLogoUrl(businessProfile.logoUrl || "");
       isInitialized.current = true;
+      lastAdoptedStoreName.current = businessProfile.shopifyStoreName || null;
+    } else {
+      // Whenever a store is connected, or store name changes, or bizName is default/placeholder, automatically display the store name!
+      const currentStoreName = businessProfile.shopifyStoreName || businessProfile.companyName;
+      if (currentStoreName && (
+        currentStoreName !== lastAdoptedStoreName.current ||
+        bizName === "My Business" ||
+        bizName === "Founder" ||
+        !bizName.trim()
+      )) {
+        setBizName(currentStoreName);
+        lastAdoptedStoreName.current = currentStoreName;
+      }
     }
   }, [businessProfile]);
 
@@ -237,8 +259,10 @@ export default function SettingsPage() {
   const handleSaveBusinessProfile = async () => {
     setIsSavingProfile(true);
     try {
+      const resolvedName = bizName.trim() || businessProfile?.shopifyStoreName || 'My Business';
       await updateBusinessProfile({
-        businessName: bizName.trim() || 'My Business',
+        businessName: resolvedName,
+        companyName: resolvedName,
         businessType: bizType,
         businessSize: bizSize,
         currency: currency,
