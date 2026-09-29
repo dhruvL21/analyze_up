@@ -4,6 +4,7 @@ import {
   executeNotificationAction,
 } from '@/lib/notification-action-engine';
 import { detectBusinessEvents } from '@/lib/business-event-engine';
+import { getAuditLogs, setActiveAuditUserId } from '@/lib/audit-store';
 import { BusinessEvent, Product, Supplier, BusinessProfile } from '@/lib/types';
 
 describe('Notification Center Actionable Engine Suite', () => {
@@ -560,6 +561,69 @@ describe('Notification Center Actionable Engine Suite', () => {
         }),
         expect.anything()
       );
+    });
+
+    it('executes price_up (Optimize Price): updates product price and records directly into audit log', async () => {
+      const updateProductMock = vi.fn().mockResolvedValue({});
+      const testUid = 'user-test-audit-123';
+      setActiveAuditUserId(testUid);
+
+      const event: BusinessEvent = {
+        id: 'event-margin-mug-exec',
+        type: 'MARGIN_EROSION',
+        category: 'finance',
+        severity: 'CRITICAL',
+        status: 'ACTIVE',
+        impactScore: 90,
+        entityId: 'prod-loss-1',
+        entityName: 'Loss Leader Mug',
+        title: 'Loss-Making SKU: Loss Leader Mug',
+        description: 'Cost exceeds retail.',
+        impactFormatted: 'Negative margin',
+        recommendation: 'Increase retail price to ₹438.',
+        firstDetected: new Date().toISOString(),
+        lastUpdated: new Date().toISOString(),
+        actionPayload: {
+          actionType: 'price_up',
+          targetId: 'prod-loss-1',
+          targetPrice: 438,
+        },
+      };
+
+      const action = getActionableAction(event, mockProducts, mockProfile, null, mockSuppliers)!;
+      expect(action).not.toBeNull();
+
+      const execResult = await executeNotificationAction({
+        event,
+        action,
+        addOrder: vi.fn(),
+        updateProduct: updateProductMock,
+        businessProfile: mockProfile,
+        user: { uid: testUid },
+      });
+
+      expect(execResult.success).toBe(true);
+      expect(updateProductMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'prod-loss-1',
+          price: 438,
+        }),
+        expect.anything()
+      );
+
+      // Verify audit record was created
+      const auditLogs = getAuditLogs(testUid);
+      expect(auditLogs.length).toBeGreaterThan(0);
+      const auditEntry = auditLogs.find(l => l.productName === 'Loss Leader Mug');
+      expect(auditEntry).toBeDefined();
+      expect(auditEntry?.actionType).toBe('price_up');
+      expect(auditEntry?.title).toContain('Price Optimized');
+      expect(auditEntry?.newValue).toContain('438');
+    });
+
+    it('returns empty events when products and transactions are empty (zero data / reset workspace)', () => {
+      const events = detectBusinessEvents([], []);
+      expect(events).toEqual([]);
     });
   });
 

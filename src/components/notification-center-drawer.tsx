@@ -20,7 +20,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useData } from '@/context/data-context';
-import { useUser } from '@/firebase';
+import { useUser, useFirestore } from '@/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import {
@@ -69,6 +69,7 @@ export function NotificationCenterDrawer({ open, onOpenChange }: NotificationCen
     updateProduct,
   } = useData();
   const { user } = useUser();
+  const firestore = useFirestore();
   const { toast } = useToast();
   const router = useRouter();
 
@@ -170,6 +171,7 @@ export function NotificationCenterDrawer({ open, onOpenChange }: NotificationCen
       driveConnection,
       getGoogleDriveFiles,
       user,
+      firestore,
     });
 
     setIsExecuting(false);
@@ -177,9 +179,12 @@ export function NotificationCenterDrawer({ open, onOpenChange }: NotificationCen
 
     if (res.success) {
       setEventStatuses(prev => ({ ...prev, [event.id]: 'RESOLVED' }));
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('analyzeup_audit_logged', { detail: { userId: user?.uid } }));
+      }
       toast({
         title: res.title,
-        description: res.message,
+        description: `${res.message} Logged to audit trail.`,
       });
     } else {
       toast({
@@ -195,28 +200,28 @@ export function NotificationCenterDrawer({ open, onOpenChange }: NotificationCen
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent side="right" className="w-[95vw] sm:max-w-md p-6 ios-glass flex flex-col justify-between">
           {/* Header */}
-          <SheetHeader className="pb-3 border-b border-border/40 space-y-1">
-            <div className="flex items-center justify-between">
-              <SheetTitle className="text-lg font-extrabold text-foreground flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
+          <SheetHeader className="pb-3 border-b border-border/40 space-y-1.5 pr-8">
+            <div className="flex items-center justify-between gap-2.5">
+              <SheetTitle className="text-base sm:text-lg font-extrabold text-foreground flex items-center gap-2 min-w-0">
+                <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20 shrink-0">
                   <Bell className="w-4.5 h-4.5" />
                 </div>
-                Business Monitoring Alerts
+                <span className="truncate">Business Alerts</span>
               </SheetTitle>
               {activeCount > 0 && (
-                <Badge className="bg-rose-500 text-white font-bold text-xs">
+                <Badge className="bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs whitespace-nowrap shrink-0 px-2.5 py-0.5 rounded-full shadow-sm">
                   {activeCount} Active Alerts
                 </Badge>
               )}
             </div>
-            <div className="flex items-center justify-between gap-2 pt-1">
-              <SheetDescription className="text-xs text-muted-foreground">
+            <div className="flex items-center justify-between gap-2 pt-0.5">
+              <SheetDescription className="text-xs text-muted-foreground leading-normal line-clamp-2">
                 Continuous event engine monitoring stockouts, margin erosion, vendor risks, and return rate surges.
               </SheetDescription>
               {activeCount > 0 && (
                 <button
                   onClick={handleDismissAll}
-                  className="text-[10px] text-rose-400 hover:text-rose-300 font-bold underline shrink-0"
+                  className="text-[11px] text-rose-400 hover:text-rose-300 font-bold underline shrink-0 cursor-pointer"
                 >
                   Clear All
                 </button>

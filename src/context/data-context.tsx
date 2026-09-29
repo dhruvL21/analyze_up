@@ -4533,7 +4533,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     if (typeof window !== 'undefined') {
       try {
         const keysToRemove = Object.keys(localStorage).filter(
-          (k) => k.startsWith('analyzeup_shopify_') || k.includes('shopify_sync') || k.includes('shopify_store')
+          (k) =>
+            k.startsWith('analyzeup_shopify_') ||
+            k.includes('shopify_sync') ||
+            k.includes('shopify_store') ||
+            (purgeData && (k.startsWith('analyzeup_daily_learning_') || k.startsWith('analyzeup_data_readiness_')))
         );
         keysToRemove.forEach((k) => localStorage.removeItem(k));
 

@@ -29,6 +29,11 @@ export function detectBusinessEvents(
   businessProfile?: BusinessProfile | null,
   preferences?: NotificationPreferences
 ): BusinessEvent[] {
+  // Strict empty workspace guard: if there are no products and no transactions, no events should be emitted
+  if (products.length === 0 && transactions.length === 0) {
+    return [];
+  }
+
   const events: BusinessEvent[] = [];
   const nowIso = new Date().toISOString();
 

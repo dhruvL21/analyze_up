@@ -901,10 +901,16 @@ function ExecutiveIntelligencePageContent() {
                 <div className="p-5 rounded-2xl bg-secondary/30 border border-border/40 space-y-2 min-w-[220px] shrink-0 text-center">
                   <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Current Readiness</span>
                   <div className="text-3xl font-black text-amber-400 font-mono">
-                    {dataReadiness?.score || 48}<span className="text-sm text-muted-foreground">/100</span>
+                    {dataReadiness?.score ?? 0}<span className="text-sm text-muted-foreground">/100</span>
                   </div>
                   <Badge variant="outline" className="bg-amber-500/10 text-amber-300 border-amber-500/30 text-[10px] font-semibold">
-                    {dataReadiness?.level ? `Level ${dataReadiness.level === 'LEARNING' ? '1 • Learning' : '2 • Early Insights'}` : 'Level 2 • Early Insights'}
+                    {dataReadiness?.level === 'EARLY_INSIGHTS'
+                      ? 'Level 2 • Early Insights'
+                      : dataReadiness?.level === 'PREDICTIVE'
+                      ? 'Level 3 • Predictive'
+                      : dataReadiness?.level === 'OPTIMIZATION'
+                      ? 'Level 4 • Optimization'
+                      : 'Level 1 • Learning'}
                   </Badge>
                 </div>
               </div>
@@ -915,9 +921,11 @@ function ExecutiveIntelligencePageContent() {
                     <Clock className="w-3.5 h-3.5 text-blue-400" /> Sales History
                   </span>
                   <div className="text-base font-bold text-foreground font-mono">
-                    {dataReadiness?.historicalDays ?? 21} / 30 Days
+                    {dataReadiness?.historicalDays ?? 0} / 30 Days
                   </div>
-                  <p className="text-[10px] text-amber-400">Baseline calibrating</p>
+                  <p className="text-[10px] text-amber-400">
+                    {(dataReadiness?.historicalDays ?? 0) >= 30 ? 'Target achieved' : 'Baseline calibrating'}
+                  </p>
                 </div>
 
                 <div className="p-4 rounded-2xl bg-secondary/20 border border-border/30 space-y-1.5">
@@ -925,9 +933,11 @@ function ExecutiveIntelligencePageContent() {
                     <Sparkles className="w-3.5 h-3.5 text-emerald-400" /> Order Density
                   </span>
                   <div className="text-base font-bold text-foreground font-mono">
-                    {dataReadiness?.totalOrders ?? 50} / 50 Orders (100%)
+                    {dataReadiness?.totalOrders ?? 0} / 50 Orders ({Math.min(100, Math.round(((dataReadiness?.totalOrders ?? 0) / 50) * 100))}%)
                   </div>
-                  <p className="text-[10px] text-emerald-400 font-semibold">Threshold reached</p>
+                  <p className="text-[10px] text-emerald-400 font-semibold">
+                    {(dataReadiness?.totalOrders ?? 0) >= 50 ? 'Threshold reached' : 'Calibrating order density'}
+                  </p>
                 </div>
 
                 <div className="p-4 rounded-2xl bg-secondary/20 border border-border/30 space-y-1.5">

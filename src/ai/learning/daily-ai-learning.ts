@@ -41,10 +41,11 @@ export async function runDailyAILearning(
   businessProfile?: BusinessProfile | null,
   options?: { currentDayNumber?: number; historicalDays?: number }
 ): Promise<DailyLearningRecord> {
+  const hasData = (products && products.length > 0) || (transactions && transactions.length > 0);
   const readiness = evaluateDataReadiness(products, transactions);
   const totalOrders = readiness.totalOrders;
-  const historicalDays = options?.historicalDays || readiness.historicalDays || 1;
-  const dayNumber = options?.currentDayNumber || historicalDays;
+  const historicalDays = options?.historicalDays ?? readiness.historicalDays ?? 0;
+  const dayNumber = options?.currentDayNumber ?? (hasData ? Math.max(1, historicalDays) : 0);
   const nowIso = new Date().toISOString();
 
   // If OpenAI is not configured, generate a deterministic high-fidelity mathematical baseline

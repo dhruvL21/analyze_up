@@ -125,7 +125,7 @@ export default function ForecastingPage() {
     const targetOrders = 80;
     const ordersPercent = Math.min(100, Math.round((totalOrders / targetOrders) * 100));
 
-    const qualityScore = dataReadiness?.qualityReport?.percentage || 87;
+    const qualityScore = dataReadiness?.qualityReport?.percentage ?? (products.length > 0 ? 87 : 0);
 
     return (
       <div className="flex flex-col gap-6 w-full max-w-[1600px] mx-auto px-2 sm:px-4 pb-12">
@@ -149,7 +149,13 @@ export default function ForecastingPage() {
               className="bg-indigo-500/15 text-indigo-300 border-indigo-500/30 px-3 py-1 text-xs font-bold flex items-center gap-1.5 rounded-full"
             >
               <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-              {dataReadiness?.level === 'LEARNING' ? 'Level 1 • Baseline Learning Active' : 'Level 2 • Early Insights Active'}
+              {dataReadiness?.level === 'EARLY_INSIGHTS'
+                ? 'Level 2 • Early Insights Active'
+                : dataReadiness?.level === 'PREDICTIVE'
+                ? 'Level 3 • Predictive Active'
+                : dataReadiness?.level === 'OPTIMIZATION'
+                ? 'Level 4 • Optimization Active'
+                : 'Level 1 • Baseline Learning Active'}
             </Badge>
             <Button
               size="sm"
@@ -184,10 +190,16 @@ export default function ForecastingPage() {
             <div className="p-5 rounded-2xl bg-secondary/30 border border-border/40 space-y-2 min-w-[240px] shrink-0 text-center">
               <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block">Current Readiness</span>
               <div className="text-4xl font-black text-amber-400 font-mono">
-                {dataReadiness?.score || 48}<span className="text-lg text-muted-foreground">/100</span>
+                {dataReadiness?.score ?? 0}<span className="text-lg text-muted-foreground">/100</span>
               </div>
               <Badge variant="outline" className="bg-amber-500/10 text-amber-300 border-amber-500/30 text-[10px] font-semibold">
-                {dataReadiness?.level ? `Level ${dataReadiness.level === 'LEARNING' ? '1 • Learning' : '2 • Early Insights'}` : 'Level 2 • Early Insights'}
+                {dataReadiness?.level === 'EARLY_INSIGHTS'
+                  ? 'Level 2 • Early Insights'
+                  : dataReadiness?.level === 'PREDICTIVE'
+                  ? 'Level 3 • Predictive'
+                  : dataReadiness?.level === 'OPTIMIZATION'
+                  ? 'Level 4 • Optimization'
+                  : 'Level 1 • Learning'}
               </Badge>
             </div>
           </div>
@@ -218,7 +230,9 @@ export default function ForecastingPage() {
               <Progress value={Math.min(100, Math.round((totalOrders / 50) * 100))} className="h-2 bg-secondary" />
               <div className="flex items-center justify-between text-[10px]">
                 <span className="text-muted-foreground">{Math.min(100, Math.round((totalOrders / 50) * 100))}% toward threshold</span>
-                <span className="font-semibold text-emerald-400 font-mono">100% threshold reached</span>
+                <span className="font-semibold text-emerald-400 font-mono">
+                  {totalOrders >= 50 ? 'Threshold reached' : `${totalOrders}/50 orders`}
+                </span>
               </div>
             </div>
 

@@ -51,4 +51,17 @@ describe('Daily Adaptive AI Learning Engine with Tokenized Privacy', () => {
     expect(record.velocityMovers).toBeDefined();
     expect(record.recommendedTuning).toBeDefined();
   });
+
+  it('correctly handles zero data / reset workspace without defaulting to fake numbers', async () => {
+    const emptyRecord = await runDailyAILearning([], [], null);
+
+    expect(emptyRecord).toBeDefined();
+    expect(emptyRecord.dayNumber).toBe(0);
+    expect(emptyRecord.ordersAnalyzed).toBe(0);
+    expect(emptyRecord.skusAnalyzed).toBe(0);
+    expect(emptyRecord.readinessScore).toBe(0);
+    expect(emptyRecord.maturityLevel).toBe('LEARNING');
+    expect(emptyRecord.velocityMovers.trendingUp).toHaveLength(0);
+    expect(emptyRecord.velocityMovers.dormantRisk).toHaveLength(0);
+  });
 });

@@ -1,3 +1,4 @@
+import type { Firestore } from 'firebase/firestore';
 import { BusinessEvent, Product, PurchaseOrder, BusinessProfile, Supplier, Transaction } from './types';
 import { getRecommendationChannel } from '@/components/inventory-recommendations-panel';
 import { logBusinessAction } from './audit-store';
@@ -161,6 +162,7 @@ export interface ExecuteNotificationActionParams {
   driveConnection?: any;
   getGoogleDriveFiles?: () => Promise<any[]>;
   user?: any;
+  firestore?: Firestore;
 }
 
 export interface ExecutionResult {
@@ -181,6 +183,7 @@ export async function executeNotificationAction({
   driveConnection,
   getGoogleDriveFiles,
   user,
+  firestore,
 }: ExecuteNotificationActionParams): Promise<ExecutionResult> {
   const { product, channel, productName } = action;
   const currencySymbol = businessProfile?.currency?.includes('USD') ? '$' : '₹';
@@ -292,14 +295,20 @@ export async function executeNotificationAction({
         }
       }
 
-      // 5. Audit Log
-      logBusinessAction({
-        title: 'Notification Action: Reorder Executed',
-        productName,
-        actionType: 'reorder',
-        changeDetails: `Reordered ${reorderQty} units from ${action.supplierName || 'Supplier'}. Total: ${currencySymbol}${totalCost.toLocaleString('en-IN')}.${channelDesc}`,
-        impactValue: `+${reorderQty} Units Restocked`,
-      });
+      // 5. Audit Log (persisted to Firestore, localStorage, and activity timelines)
+      logBusinessAction(
+        {
+          title: `Purchase Order Executed: ${productName}`,
+          productName,
+          actionType: 'reorder',
+          changeDetails: `Reordered ${reorderQty} units from ${supName}. Total investment: ${currencySymbol}${totalCost.toLocaleString('en-IN')}.${channelDesc}`,
+          impactValue: `+${reorderQty} Units Restocked`,
+          previousValue: `${product.stock || 0} units`,
+          newValue: `${newStock} units`,
+        },
+        firestore,
+        user?.uid
+      );
 
       // 6. Mark Event Resolved
       saveEventStatus(event.id, 'RESOLVED');
@@ -373,14 +382,20 @@ export async function executeNotificationAction({
         }
       }
 
-      // 3. Audit Log
-      logBusinessAction({
-        title: `Notification Action: ${discountPercent}% Discount Applied`,
-        productName,
-        actionType: 'discount',
-        changeDetails: `Reduced price from ${currencySymbol}${oldPrice} to ${currencySymbol}${newPrice} (-${discountPercent}%) to liquidate dead stock.${channelDesc}`,
-        impactValue: `-${discountPercent}% Clearance Price`,
-      });
+      // 3. Audit Log (persisted to Firestore, localStorage, and activity timelines)
+      logBusinessAction(
+        {
+          title: `Clearance Discount Applied (${discountPercent}%): ${productName}`,
+          productName,
+          actionType: 'discount',
+          changeDetails: `Reduced retail price from ${currencySymbol}${oldPrice.toLocaleString('en-IN')} to ${currencySymbol}${newPrice.toLocaleString('en-IN')} (-${discountPercent}%) to liquidate inventory and prevent dead stock.${channelDesc}`,
+          impactValue: `-${discountPercent}% Clearance Price`,
+          previousValue: `${currencySymbol}${oldPrice.toLocaleString('en-IN')}`,
+          newValue: `${currencySymbol}${newPrice.toLocaleString('en-IN')}`,
+        },
+        firestore,
+        user?.uid
+      );
 
       // 4. Mark Event Resolved
       saveEventStatus(event.id, 'RESOLVED');
@@ -450,14 +465,20 @@ export async function executeNotificationAction({
         }
       }
 
-      // 3. Audit Log
-      logBusinessAction({
-        title: 'Notification Action: Margin Price Protected',
-        productName,
-        actionType: 'price_up',
-        changeDetails: `Increased price from ${currencySymbol}${oldPrice} to ${currencySymbol}${newPrice} to recover healthy margin.${channelDesc}`,
-        impactValue: `+${currencySymbol}${newPrice - oldPrice} Margin Recovery`,
-      });
+      // 3. Audit Log (persisted to Firestore, localStorage, and activity timelines)
+      logBusinessAction(
+        {
+          title: `Price Optimized for Margin Protection: ${productName}`,
+          productName,
+          actionType: 'price_up',
+          changeDetails: `Increased retail price from ${currencySymbol}${oldPrice.toLocaleString('en-IN')} to ${currencySymbol}${newPrice.toLocaleString('en-IN')} to recover healthy margin from negative/low profit.${channelDesc}`,
+          impactValue: `+${currencySymbol}${(newPrice - oldPrice).toLocaleString('en-IN')} Margin Recovery`,
+          previousValue: `${currencySymbol}${oldPrice.toLocaleString('en-IN')}`,
+          newValue: `${currencySymbol}${newPrice.toLocaleString('en-IN')}`,
+        },
+        firestore,
+        user?.uid
+      );
 
       // 4. Mark Event Resolved
       saveEventStatus(event.id, 'RESOLVED');
