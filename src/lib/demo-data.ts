@@ -1,5 +1,38 @@
 import { Product, Supplier, Category, Transaction, PurchaseOrder, ProductReturn } from './types';
 
+export const DEMO_BUSINESS_NAME = 'Apex Lifestyle Co.';
+
+export const DEMO_BUSINESS_LOGO = `data:image/svg+xml;utf8,${encodeURIComponent(`
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A" />
+      <stop offset="50%" stop-color="#1E293B" />
+      <stop offset="100%" stop-color="#020617" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F59E0B" />
+      <stop offset="50%" stop-color="#D97706" />
+      <stop offset="100%" stop-color="#B45309" />
+    </linearGradient>
+    <linearGradient id="cyanGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#0284C7" />
+    </linearGradient>
+  </defs>
+
+  <!-- Premium Dark Curved Container -->
+  <rect width="200" height="200" rx="44" fill="url(#bgGrad)" stroke="#334155" stroke-width="3" />
+
+  <!-- Geometric Modern Peak Monogram (A) -->
+  <path d="M100 36 L152 136 L124 136 L100 88 L76 136 L48 136 Z" fill="url(#goldGrad)" />
+  <polygon points="100,56 138,136 116,136 100,102 84,136 62,136" fill="#0F172A" opacity="0.3" />
+  
+  <!-- Modern Accent Jewel Dot -->
+  <circle cx="100" cy="154" r="10" fill="url(#cyanGrad)" />
+</svg>
+`.trim())}`;
+
 export function generateDemoBusinessData() {
   const categories: Category[] = [
     { id: 'cat-fashion-1', name: 'Apparel & Wearables', description: 'T-Shirts, Hoodies, Jackets & Denim', isDemo: true, source: 'DEMO' },

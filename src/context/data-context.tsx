@@ -8,7 +8,7 @@ import { collection, addDoc, updateDoc, deleteDoc, doc, serverTimestamp, writeBa
 import { useCollection } from '@/firebase/firestore/use-collection';
 import { errorEmitter } from '@/firebase/error-emitter';
 import { FirestorePermissionError } from '@/firebase/errors';
-import { generateDemoBusinessData } from '@/lib/demo-data';
+import { generateDemoBusinessData, DEMO_BUSINESS_LOGO, DEMO_BUSINESS_NAME } from '@/lib/demo-data';
 import Papa from 'papaparse';
 import { getClientDriveToken, isAutoSyncDue, autoDetectMapping, formatLastSyncTime } from '@/lib/drive-helper';
 import { isShopifyAutoSyncDue } from '@/lib/shopify-sync-helper';
@@ -183,6 +183,36 @@ const cleanObject = (obj: any) => {
   return result;
 };
 
+export function sanitizeDisconnectedProfile(profile: BusinessProfile | null): BusinessProfile | null {
+  if (!profile) return profile;
+  const isDisconnected = !profile.shopifyConnected && !profile.shopifyStoreUrl;
+  if (!isDisconnected) return profile;
+
+  const staleStoreName = profile.shopifyStoreName;
+  const isBizNameStale = Boolean(
+    (staleStoreName && (profile.businessName === staleStoreName || profile.businessName?.includes('.myshopify.com'))) ||
+    (profile.businessName && /^[0-9a-z]{6}-[0-9a-z]{2}$/i.test(profile.businessName))
+  );
+  const isCompanyNameStale = Boolean(
+    (staleStoreName && (profile.companyName === staleStoreName || profile.companyName?.includes('.myshopify.com'))) ||
+    (profile.companyName && /^[0-9a-z]{6}-[0-9a-z]{2}$/i.test(profile.companyName))
+  );
+
+  if (!staleStoreName && !isBizNameStale && !isCompanyNameStale) {
+    return profile;
+  }
+
+  return {
+    ...profile,
+    shopifyStoreName: '',
+    shopifyStoreUrl: '',
+    shopifyConnected: false,
+    shopifyStatus: 'Disconnected',
+    businessName: isBizNameStale ? 'My Business' : (profile.businessName || 'My Business'),
+    companyName: isCompanyNameStale ? 'My Business' : (profile.companyName || 'My Business'),
+    logoUrl: isBizNameStale || isCompanyNameStale ? '' : (profile.logoUrl || ''),
+  };
+}
 
 export const DataProvider = ({ children }: { children: ReactNode }) => {
   const { toast } = useToast();
@@ -612,9 +642,13 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     if (localProfile) {
       try {
         const parsed = JSON.parse(localProfile);
-        setBusinessProfile(parsed);
-        businessProfileRef.current = parsed;
-        if (parsed.inventorySetupMethod === 'demo') {
+        const sanitized = sanitizeDisconnectedProfile(parsed);
+        setBusinessProfile(sanitized);
+        businessProfileRef.current = sanitized;
+        if (sanitized && JSON.stringify(sanitized) !== localProfile) {
+          localStorage.setItem(`analyzeup_profile_${user.uid}`, JSON.stringify(sanitized));
+        }
+        if (sanitized?.inventorySetupMethod === 'demo') {
           setHasDemoData(true);
         }
       } catch (e) {
@@ -643,8 +677,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         (snap) => {
           if (snap.exists()) {
             const remote = snap.data() as BusinessProfile;
+            const sanitizedRemote = sanitizeDisconnectedProfile(remote);
             setBusinessProfile((prev) => {
-              const merged = { ...(prev || {}), ...remote } as BusinessProfile;
+              const merged = sanitizeDisconnectedProfile({ ...(prev || {}), ...(sanitizedRemote || {}) } as BusinessProfile);
               businessProfileRef.current = merged;
               return merged;
             });
@@ -697,6 +732,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
                 if (!prev) return prev;
                 const merged: BusinessProfile = {
                   ...prev,
+                  businessName: 'My Business',
+                  companyName: 'My Business',
+                  logoUrl: '',
                   shopifyConnected: false,
                   shopifyStatus: 'Disconnected',
                   shopifyStoreUrl: '',
@@ -717,6 +755,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
               if (!prev || (!prev.shopifyConnected && !prev.shopifyStoreUrl)) return prev;
               const cleaned: BusinessProfile = {
                 ...prev,
+                businessName: 'My Business',
+                companyName: 'My Business',
+                logoUrl: '',
                 shopifyConnected: false,
                 shopifyStatus: 'Disconnected',
                 shopifyStoreUrl: '',
@@ -740,8 +781,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
               getDoc(profileRef).then((pSnap) => {
                 if (pSnap.exists()) {
                   const pData = pSnap.data();
-                  if (pData?.shopifyConnected || pData?.shopifyStoreUrl || pData?.shopifyAccessToken) {
+                  if (pData?.shopifyConnected || pData?.shopifyStoreUrl || pData?.shopifyAccessToken || pData?.shopifyStoreName) {
                     updateDoc(profileRef, {
+                      businessName: 'My Business',
+                      companyName: 'My Business',
+                      logoUrl: '',
                       shopifyConnected: false,
                       shopifyStatus: 'Disconnected',
                       shopifyStoreUrl: '',
@@ -939,14 +983,36 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     if (!user) return;
     const current = businessProfileRef.current;
 
-    const targetStoreName = updates.shopifyStoreName || current?.shopifyStoreName;
-    const shouldAdoptBizName =
-      (!current?.businessName || current.businessName === 'My Business' || current.businessName === 'Founder' || current.businessName === current?.shopifyStoreName) ||
-      (!updates.businessName || updates.businessName === 'My Business' || updates.businessName === 'Founder');
-    const resolvedBizName = targetStoreName && (shouldAdoptBizName || updates.shopifyStoreName)
-      ? (updates.businessName && updates.businessName !== 'My Business' && updates.businessName !== 'Founder' ? updates.businessName : targetStoreName)
-      : (updates.businessName || current?.businessName || 'My Business');
-    const resolvedCompanyName = updates.companyName || targetStoreName || current?.companyName || resolvedBizName;
+    const isDisconnectingOrDisconnected =
+      updates.shopifyConnected === false ||
+      updates.shopifyStatus === 'Disconnected' ||
+      updates.shopifyStatus === 'Uninstalled' ||
+      updates.shopifyStoreUrl === '';
+
+    const targetStoreName = updates.shopifyStoreName !== undefined ? updates.shopifyStoreName : (current?.shopifyStoreName || '');
+
+    let resolvedBizName: string;
+    let resolvedCompanyName: string;
+    let resolvedLogoUrl: string;
+
+    if (isDisconnectingOrDisconnected) {
+      resolvedBizName = updates.businessName !== undefined ? updates.businessName : 'My Business';
+      resolvedCompanyName = updates.companyName !== undefined ? updates.companyName : 'My Business';
+      resolvedLogoUrl = updates.logoUrl !== undefined ? updates.logoUrl : '';
+    } else {
+      const shouldAdoptBizName =
+        (!current?.businessName || current.businessName === 'My Business' || current.businessName === 'Founder' || current.businessName === current?.shopifyStoreName) ||
+        (!updates.businessName || updates.businessName === 'My Business' || updates.businessName === 'Founder');
+      resolvedBizName = updates.businessName !== undefined
+        ? updates.businessName
+        : (targetStoreName && (shouldAdoptBizName || updates.shopifyStoreName)
+          ? targetStoreName
+          : (current?.businessName || 'My Business'));
+      resolvedCompanyName = updates.companyName !== undefined
+        ? updates.companyName
+        : (targetStoreName || current?.companyName || resolvedBizName);
+      resolvedLogoUrl = updates.logoUrl !== undefined ? updates.logoUrl : (current?.logoUrl || '');
+    }
 
     const updatedProfile: BusinessProfile = {
       businessType: 'Retail',
@@ -961,6 +1027,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       ...updates,
       businessName: resolvedBizName,
       companyName: resolvedCompanyName,
+      logoUrl: resolvedLogoUrl,
       updatedAt: new Date().toISOString(),
     };
 
@@ -1103,8 +1170,19 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
 
       setHasDemoData(true);
 
-      const targetType = customType || businessProfile?.businessType || 'Fashion';
+      const targetType = customType || businessProfile?.businessType || 'Retail';
+      const demoBizName = customType === 'Fashion'
+        ? 'Apex Fashion Co.'
+        : customType === 'Electronics'
+        ? 'Apex Electronics'
+        : customType === 'Beauty'
+        ? 'Apex Botanica & Beauty'
+        : DEMO_BUSINESS_NAME;
+
       await updateBusinessProfile({
+        businessName: demoBizName,
+        companyName: demoBizName,
+        logoUrl: DEMO_BUSINESS_LOGO,
         businessType: targetType,
         isOnboardingCompleted: true,
         inventorySetupMethod: 'demo',
@@ -2853,8 +2931,11 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         throw new Error('Workspace reset could not finish. No success message was shown; please try again.');
       }
 
-      // Keep business preferences, but remove all setup/import and integration state.
+      // Reset business profile, remove all setup/import and integration state, and wipe store name & logo.
       const profileReset = {
+        businessName: 'My Business',
+        companyName: 'My Business',
+        logoUrl: '',
         inventorySetupMethod: 'manual',
         csvImportedAt: deleteField(),
         shopifyConnected: false,
@@ -2873,6 +2954,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       if (businessProfile) {
         const cleanedProfile: BusinessProfile = {
           ...businessProfile,
+          businessName: 'My Business',
+          companyName: 'My Business',
+          logoUrl: '',
           inventorySetupMethod: profileReset.inventorySetupMethod,
           csvImportedAt: undefined,
           shopifyConnected: false,
@@ -2887,6 +2971,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
           updatedAt: profileReset.updatedAt,
         };
         setBusinessProfile(cleanedProfile);
+        businessProfileRef.current = cleanedProfile;
         localStorage.setItem(`analyzeup_profile_${uid}`, JSON.stringify(cleanedProfile));
       }
     }
@@ -2985,16 +3070,22 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       if (businessProfile?.inventorySetupMethod === 'demo') {
         const profileUpdate = {
           inventorySetupMethod: 'manual',
+          businessName: 'My Business',
+          companyName: 'My Business',
+          logoUrl: '',
           updatedAt: new Date().toISOString(),
         };
         await setDoc(doc(firestore, 'users', uid, 'settings', 'business_profile'), profileUpdate, { merge: true }).catch(() => {});
-        setBusinessProfile(prev => prev ? { ...prev, inventorySetupMethod: 'manual' } : null);
+        setBusinessProfile(prev => prev ? { ...prev, inventorySetupMethod: 'manual', businessName: 'My Business', companyName: 'My Business', logoUrl: '' } : null);
         if (typeof window !== 'undefined') {
           try {
             const stored = localStorage.getItem(`analyzeup_profile_${uid}`);
             if (stored) {
               const parsed = JSON.parse(stored);
               parsed.inventorySetupMethod = 'manual';
+              parsed.businessName = 'My Business';
+              parsed.companyName = 'My Business';
+              parsed.logoUrl = '';
               localStorage.setItem(`analyzeup_profile_${uid}`, JSON.stringify(parsed));
             }
           } catch {}
@@ -4388,6 +4479,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     // 3. Reset businessProfile in React state, localStorage, and Firestore
     await updateBusinessProfile(
       {
+        businessName: 'My Business',
+        companyName: 'My Business',
+        logoUrl: '',
         shopifyConnected: false,
         shopifyStoreUrl: '',
         shopifyStoreName: '',
@@ -4405,6 +4499,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     if (firestore && user) {
       const profileRef = doc(firestore, 'users', uid, 'settings', 'business_profile');
       await setDoc(profileRef, {
+        businessName: 'My Business',
+        companyName: 'My Business',
+        logoUrl: '',
         shopifyConnected: false,
         shopifyStoreUrl: '',
         shopifyStoreName: '',
@@ -4443,6 +4540,9 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         const localProf = localStorage.getItem(`analyzeup_profile_${uid}`);
         if (localProf) {
           const parsed = JSON.parse(localProf);
+          parsed.businessName = 'My Business';
+          parsed.companyName = 'My Business';
+          parsed.logoUrl = '';
           parsed.shopifyConnected = false;
           parsed.shopifyStatus = 'Disconnected';
           parsed.shopifyStoreUrl = '';

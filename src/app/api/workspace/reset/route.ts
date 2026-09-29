@@ -86,10 +86,13 @@ export async function POST(req: NextRequest) {
     // 5. Reset analytics summary document to default empty state
     await db.collection('users').doc(userId).collection('analytics').doc('summary').set(DEFAULT_ANALYTICS_SUMMARY).catch(() => {});
 
-    // 6. Reset business profile integration flags
+    // 6. Reset business profile integration flags and wipe store name & logo
     const profileRef = db.collection('users').doc(userId).collection('settings').doc('business_profile');
     await profileRef.set(
       {
+        businessName: 'My Business',
+        companyName: 'My Business',
+        logoUrl: '',
         inventorySetupMethod: 'manual',
         csvImportedAt: null,
         shopifyConnected: false,

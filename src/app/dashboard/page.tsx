@@ -43,7 +43,13 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl font-extrabold tracking-tight md:text-3xl text-foreground">
-                {businessProfile?.companyName || businessProfile?.shopifyStoreName || businessProfile?.businessName || 'Business Copilot'}
+                {businessProfile?.shopifyConnected
+                  ? (businessProfile?.companyName || businessProfile?.shopifyStoreName || businessProfile?.businessName || 'Business Copilot')
+                  : (businessProfile?.businessName && businessProfile.businessName !== 'Founder' && businessProfile.businessName !== businessProfile?.shopifyStoreName && !/^[0-9a-z]{6}-[0-9a-z]{2}$/i.test(businessProfile.businessName)
+                      ? businessProfile.businessName
+                      : (businessProfile?.companyName && businessProfile.companyName !== 'Founder' && businessProfile.companyName !== businessProfile?.shopifyStoreName && !/^[0-9a-z]{6}-[0-9a-z]{2}$/i.test(businessProfile.companyName)
+                          ? businessProfile.companyName
+                          : 'My Business'))}
               </h1>
               {businessProfile?.businessType && (
                 <Badge variant="outline" className="text-[10px] uppercase font-bold tracking-wider py-0.5 px-2 bg-secondary/40 border-border/60 text-muted-foreground">
@@ -52,7 +58,13 @@ export default function DashboardPage() {
               )}
             </div>
             <p className="text-xs md:text-sm text-muted-foreground mt-1 font-medium">
-              Welcome back, <span className="font-semibold text-foreground">{businessProfile?.companyName || businessProfile?.shopifyStoreName || businessProfile?.businessName || 'Founder'}</span> — Know what&apos;s happening. Decide what matters.
+              Welcome back, <span className="font-semibold text-foreground">
+                {businessProfile?.shopifyConnected
+                  ? (businessProfile?.companyName || businessProfile?.shopifyStoreName || businessProfile?.businessName || 'Founder')
+                  : (businessProfile?.businessName && businessProfile.businessName !== 'My Business' && businessProfile.businessName !== businessProfile?.shopifyStoreName && !/^[0-9a-z]{6}-[0-9a-z]{2}$/i.test(businessProfile.businessName)
+                      ? businessProfile.businessName
+                      : 'Founder')}
+              </span> — Know what&apos;s happening. Decide what matters.
             </p>
           </div>
         </div>

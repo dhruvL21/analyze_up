@@ -98,14 +98,20 @@ export default function SettingsPage() {
   const lastAdoptedStoreName = useRef<string | null>(null);
 
   // Active saved profile in context
-  const activeProfile = useMemo(() => ({
-    businessName: businessProfile?.businessName || businessProfile?.shopifyStoreName || businessProfile?.companyName || "My Business",
-    businessType: (businessProfile?.businessType || "Retail") as BusinessType,
-    businessSize: (businessProfile?.businessSize || "2-10 Employees") as BusinessSize,
-    currency: businessProfile?.currency || "INR (₹)",
-    country: businessProfile?.country || "India",
-    logoUrl: businessProfile?.logoUrl || "",
-  }), [businessProfile]);
+  const activeProfile = useMemo(() => {
+    const isShopifyActive = Boolean(businessProfile?.shopifyConnected && (businessProfile?.shopifyStoreUrl || businessProfile?.shopifyStoreName));
+    const resolvedName = isShopifyActive
+      ? (businessProfile?.shopifyStoreName || businessProfile?.companyName || businessProfile?.businessName || "My Business")
+      : (businessProfile?.businessName || "My Business");
+    return {
+      businessName: resolvedName,
+      businessType: (businessProfile?.businessType || "Retail") as BusinessType,
+      businessSize: (businessProfile?.businessSize || "2-10 Employees") as BusinessSize,
+      currency: businessProfile?.currency || "INR (₹)",
+      country: businessProfile?.country || "India",
+      logoUrl: businessProfile?.logoUrl || "",
+    };
+  }, [businessProfile]);
 
   // Determine if there are uncommitted changes
   const hasChanges = useMemo(() => {
@@ -212,13 +218,13 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!businessProfile) return;
-    const preferredStoreName =
-      businessProfile.shopifyStoreName ||
-      businessProfile.companyName ||
-      businessProfile.businessName ||
-      "My Business";
+    const isShopifyActive = Boolean(businessProfile.shopifyConnected && (businessProfile.shopifyStoreUrl || businessProfile.shopifyStoreName));
 
     if (!isInitialized.current) {
+      const preferredStoreName = isShopifyActive
+        ? (businessProfile.shopifyStoreName || businessProfile.companyName || businessProfile.businessName || "My Business")
+        : (businessProfile.businessName || "My Business");
+
       setBizName(preferredStoreName);
       setBizType(businessProfile.businessType || "Retail");
       setBizSize(businessProfile.businessSize || "2-10 Employees");
@@ -226,18 +232,37 @@ export default function SettingsPage() {
       setCountry(businessProfile.country || "India");
       setLogoUrl(businessProfile.logoUrl || "");
       isInitialized.current = true;
-      lastAdoptedStoreName.current = businessProfile.shopifyStoreName || null;
+      lastAdoptedStoreName.current = isShopifyActive ? (businessProfile.shopifyStoreName || null) : null;
     } else {
-      // Whenever a store is connected, or store name changes, or bizName is default/placeholder, automatically display the store name!
-      const currentStoreName = businessProfile.shopifyStoreName || businessProfile.companyName;
-      if (currentStoreName && (
-        currentStoreName !== lastAdoptedStoreName.current ||
-        bizName === "My Business" ||
-        bizName === "Founder" ||
-        !bizName.trim()
-      )) {
-        setBizName(currentStoreName);
-        lastAdoptedStoreName.current = currentStoreName;
+      if (isShopifyActive) {
+        // Whenever a store is connected, or store name changes, or bizName is default/placeholder, automatically display the store name!
+        const currentStoreName = businessProfile.shopifyStoreName || businessProfile.companyName;
+        if (currentStoreName && (
+          currentStoreName !== lastAdoptedStoreName.current ||
+          bizName === "My Business" ||
+          bizName === "Founder" ||
+          !bizName.trim()
+        )) {
+          setBizName(currentStoreName);
+          lastAdoptedStoreName.current = currentStoreName;
+        }
+        if (businessProfile.logoUrl && !logoUrl) {
+          setLogoUrl(businessProfile.logoUrl);
+        }
+      } else {
+        // Disconnected or cleared: wipe store name & logo from input states if they still hold old store values
+        if (lastAdoptedStoreName.current !== null) {
+          lastAdoptedStoreName.current = null;
+          setBizName(businessProfile.businessName || "My Business");
+          setLogoUrl(businessProfile.logoUrl || "");
+        } else if (!businessProfile.businessName || businessProfile.businessName === "My Business") {
+          if (bizName !== "My Business" && (bizName === businessProfile.shopifyStoreName || !businessProfile.shopifyStoreName || /^[0-9a-z]{6}-[0-9a-z]{2}$/i.test(bizName))) {
+            setBizName(businessProfile.businessName || "My Business");
+          }
+          if (logoUrl !== (businessProfile.logoUrl || "")) {
+            setLogoUrl(businessProfile.logoUrl || "");
+          }
+        }
       }
     }
   }, [businessProfile]);

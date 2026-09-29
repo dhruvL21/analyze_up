@@ -798,6 +798,9 @@ export async function markShopifyUninstalled(rawShop: string, purgeData: boolean
         batch.set(
           profileRef,
           {
+            businessName: 'My Business',
+            companyName: 'My Business',
+            logoUrl: '',
             shopifyConnected: false,
             shopifyStatus: 'Uninstalled',
             shopifyStoreUrl: '',
@@ -883,6 +886,9 @@ export async function markShopifyDisconnected(
         batch.set(
           profileRef,
           {
+            businessName: 'My Business',
+            companyName: 'My Business',
+            logoUrl: '',
             shopifyConnected: false,
             shopifyStatus: 'Disconnected',
             shopifyStoreUrl: '',
