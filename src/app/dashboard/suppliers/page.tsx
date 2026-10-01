@@ -79,6 +79,7 @@ import {
   detectProcurementRisks,
   calculateProcurementSavings,
   compareSuppliers,
+  getMinimalRiskSignals,
   SupplierPerformanceMetrics,
   ProcurementRiskItem,
   ProcurementSavingsItem,
@@ -114,6 +115,7 @@ function SuppliersPageContent() {
   // Supplier Comparison Modal State
   const [compareModalOpen, setCompareModalOpen] = useState(false);
   const [compareProductId, setCompareProductId] = useState<string>('');
+  const [showAllRisks, setShowAllRisks] = useState(false);
 
   const currencySymbol = businessProfile?.currency?.includes('USD') ? '$' : '₹';
 
@@ -280,14 +282,14 @@ function SuppliersPageContent() {
           <Card className="ios-glass p-4 space-y-1 rounded-2xl border border-border/40 shadow-sm">
             <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">Avg Lead Time</span>
             <div className="text-2xl font-black text-foreground flex items-center gap-1.5">
-              <Clock className="w-4 h-4 text-primary" /> {executiveKPIs.avgLeadTime}
+              <Clock className="w-4 h-4 text-muted-foreground" /> {executiveKPIs.avgLeadTime}
             </div>
             <p className="text-[11px] text-muted-foreground">Order to delivery</p>
           </Card>
           <Card className="ios-glass p-4 space-y-1 rounded-2xl border border-border/40 shadow-sm">
             <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">On-Time Delivery</span>
             <div className="text-2xl font-black text-emerald-400 flex items-center gap-1.5">
-              <Truck className="w-4 h-4 text-emerald-400" /> {executiveKPIs.avgOnTimeRate}
+              <Truck className="w-4 h-4 text-muted-foreground" /> {executiveKPIs.avgOnTimeRate}
             </div>
             <p className="text-[11px] text-muted-foreground">Fulfilled on schedule</p>
           </Card>
@@ -298,10 +300,10 @@ function SuppliersPageContent() {
             </div>
             <p className="text-[11px] text-muted-foreground">Require attention</p>
           </Card>
-          <Card className="ios-glass p-4 space-y-1 rounded-2xl border-primary/30 bg-primary/5 shadow-sm">
-            <span className="text-[11px] font-bold text-primary uppercase tracking-wider block">Potential Savings</span>
-            <div className="text-2xl font-black text-primary flex items-center gap-1.5">
-              <Coins className="w-4 h-4 text-primary" /> {currencySymbol}{Math.round(executiveKPIs.totalPotentialSaving).toLocaleString('en-IN')}
+          <Card className="ios-glass p-4 space-y-1 rounded-2xl border border-border/40 shadow-sm">
+            <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider block">Potential Savings</span>
+            <div className="text-2xl font-black text-primary flex items-center gap-1.5 font-mono">
+              <Coins className="w-4 h-4 text-muted-foreground" /> {currencySymbol}{Math.round(executiveKPIs.totalPotentialSaving).toLocaleString('en-IN')}
             </div>
             <p className="text-[11px] text-muted-foreground">Across catalog products</p>
           </Card>
@@ -310,36 +312,95 @@ function SuppliersPageContent() {
         {/* Procurement Risk Alerts Banner */}
         {procurementRisks.length > 0 && (
           <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-2">
               <span className="font-extrabold text-rose-400 text-xs uppercase tracking-wider flex items-center gap-1.5">
                 <ShieldAlert className="w-4 h-4 text-rose-400 animate-pulse" /> Active Procurement Risks ({procurementRisks.length})
               </span>
-              <span className="text-[11px] text-rose-300 font-mono">Action Recommended</span>
+              <div className="flex items-center gap-2">
+                {procurementRisks.length > 4 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowAllRisks(!showAllRisks)}
+                    className="h-6 text-[11px] text-rose-300 hover:text-rose-200 hover:bg-rose-500/20 px-2 rounded-lg font-medium"
+                  >
+                    {showAllRisks ? 'Show Top 4' : `View All (${procurementRisks.length})`}
+                  </Button>
+                )}
+                <span className="text-[10px] text-rose-300/80 font-mono uppercase tracking-wider bg-rose-500/15 px-2 py-0.5 rounded-md border border-rose-500/25">
+                  Action Recommended
+                </span>
+              </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {procurementRisks.slice(0, 4).map(risk => (
-                <div key={risk.id} className="p-3 rounded-xl bg-background/80 border border-rose-500/20 space-y-1.5 text-xs">
-                  <div className="flex items-center justify-between font-bold text-foreground">
-                    <span>{risk.supplierName} • <span className="text-muted-foreground">{risk.productName}</span></span>
-                    <Badge variant="destructive" className="text-[10px] px-1.5 py-0">{risk.riskLevel} RISK</Badge>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+              {(showAllRisks ? procurementRisks : procurementRisks.slice(0, 4)).map(risk => {
+                const { primaryTag, metricTag, actionLabel } = getMinimalRiskSignals(risk);
+                return (
+                  <div
+                    key={risk.id}
+                    className="p-3 rounded-xl bg-background/90 border border-rose-500/25 hover:border-rose-500/40 transition-all flex flex-col justify-between gap-2 shadow-xs group"
+                  >
+                    {/* Header: Product Name + Supplier & Risk Level */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <h4 className="text-xs font-bold text-foreground truncate" title={risk.productName}>
+                          {risk.productName}
+                        </h4>
+                        <p className="text-[11px] text-muted-foreground truncate" title={risk.supplierName}>
+                          Vendor: <span className="font-semibold text-foreground/80">{risk.supplierName}</span>
+                        </p>
+                      </div>
+                      <Badge
+                        variant="destructive"
+                        className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 tracking-wider shrink-0 bg-rose-500/15 text-rose-400 border border-rose-500/30"
+                      >
+                        {risk.riskLevel} RISK
+                      </Badge>
+                    </div>
+
+                    {/* Metric Chips: Minimal, instant visual indicators instead of long text */}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-500/10 border border-rose-500/20 text-[10px] font-bold text-rose-300">
+                        <AlertTriangle className="w-3 h-3 text-rose-400 shrink-0" />
+                        {primaryTag}
+                      </span>
+                      {metricTag && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-secondary/80 border border-border/50 text-[10px] font-medium text-foreground/80">
+                          <Clock className="w-3 h-3 text-muted-foreground shrink-0" />
+                          {metricTag}
+                        </span>
+                      )}
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-300 text-[10px] font-semibold border border-amber-500/20">
+                        Top Seller
+                      </span>
+                    </div>
+
+                    {/* Footer: One-line compact action & inspect */}
+                    <div className="pt-1.5 flex items-center justify-between border-t border-border/40 gap-2">
+                      <div
+                        className="flex items-center gap-1 text-[11px] text-muted-foreground min-w-0 truncate cursor-help"
+                        title={risk.reason}
+                      >
+                        <span className="text-amber-400 shrink-0">💡</span>
+                        <span className="text-foreground/90 font-medium truncate">{actionLabel}</span>
+                      </div>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-6 text-[10px] px-2.5 font-bold rounded-xl border-border/60 hover:bg-secondary shrink-0"
+                        onClick={() => {
+                          const sup = suppliers.find(s => s.name === risk.supplierName);
+                          if (sup) setActiveProfileSupplier(sup);
+                        }}
+                      >
+                        Inspect
+                      </Button>
+                    </div>
                   </div>
-                  <p className="text-muted-foreground text-[11px] leading-relaxed">{risk.reason}</p>
-                  <div className="pt-1 flex items-center justify-between border-t border-border/40">
-                    <span className="text-primary font-medium text-[11px]">💡 {risk.recommendation}</span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="h-6 text-[10px] px-2 font-bold"
-                      onClick={() => {
-                        const sup = suppliers.find(s => s.name === risk.supplierName);
-                        if (sup) setActiveProfileSupplier(sup);
-                      }}
-                    >
-                      Inspect
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

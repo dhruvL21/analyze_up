@@ -20,7 +20,15 @@ export function AIBrief() {
 
   const [brief, setBrief] = useState<AIBriefOutput | null>(null);
   const isPaid = activePlan !== 'Free Trial';
-  const isLearning = Boolean(dataReadiness?.level === 'LEARNING' || (!capabilities?.stockoutPrediction && !capabilities?.slowMoverDetection));
+  const isThresholdMet = Boolean(
+    (dataReadiness?.totalOrders && dataReadiness.totalOrders >= 50) ||
+    (dataReadiness?.historicalDays && dataReadiness.historicalDays >= 14) ||
+    (dataReadiness?.score && dataReadiness.score >= 40) ||
+    (dataReadiness?.level && dataReadiness.level !== 'LEARNING') ||
+    capabilities?.stockoutPrediction ||
+    capabilities?.slowMoverDetection
+  );
+  const isLearning = !isThresholdMet;
   const isEverythingUnlocked = isPaid && !isLearning;
 
   // Real-time dynamic brief calculated strictly from current live products & transactions
@@ -302,7 +310,7 @@ export function AIBrief() {
                       <Coins className="h-3.5 w-3.5" />
                     </div>
                     <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
-                      {Boolean(capabilities?.slowMoverDetection && dataReadiness?.level !== 'LEARNING') ? 'Slow-Moving' : 'Capital Asset'}
+                      {Boolean((capabilities?.slowMoverDetection && dataReadiness?.level !== 'LEARNING') || isThresholdMet) ? 'Slow-Moving' : 'Capital Asset'}
                     </span>
                   </div>
                   <h4 className="font-bold text-sm text-zinc-100 leading-snug line-clamp-2 pt-0.5">{activeBrief.slowMovingItem.name}</h4>
@@ -324,7 +332,7 @@ export function AIBrief() {
                       .replace(/^Suggested action:\s*/i, '')
                       .replace(/^Action:\s*/i, '')
                       .replace(/\s*clearance discount\.?/i, ' Discount')
-                      .trim() || (Boolean(capabilities?.slowMoverDetection && dataReadiness?.level !== 'LEARNING') ? '20% Discount' : 'Monitor Velocity')}
+                      .trim() || (Boolean((capabilities?.slowMoverDetection && dataReadiness?.level !== 'LEARNING') || isThresholdMet) ? '20% Discount' : 'Monitor Velocity')}
                   </span>
                 </div>
               </div>

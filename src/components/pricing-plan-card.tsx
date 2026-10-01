@@ -79,19 +79,18 @@ export function PricingPlanCard({
     <div
       className={`relative flex flex-col justify-between rounded-2xl p-5 sm:p-6 transition-all duration-300 border h-full ${
         isGrowth
-          ? 'border-amber-500/60 bg-gradient-to-b from-[#181613] via-[#121316] to-[#0f1013] shadow-xl shadow-amber-500/10 ring-1 ring-amber-500/30'
+          ? 'border-border/80 bg-secondary/30 shadow-lg ring-1 ring-white/10'
           : isCurrent
-          ? 'border-primary/50 bg-[#141519] ring-1 ring-primary/30 shadow-lg shadow-black/50'
+          ? 'border-border/50 bg-secondary/20 shadow-md'
           : isFreePromoActive
-          ? 'border-emerald-500/60 bg-gradient-to-b from-[#101915] via-[#121316] to-[#0f1013] ring-1 ring-emerald-500/30'
-          : 'border-zinc-800/90 bg-[#121316] hover:border-zinc-700/90 shadow-md'
+          ? 'border-emerald-500/30 bg-secondary/25'
+          : 'border-border/40 bg-secondary/15 hover:border-border/70 shadow-sm'
       }`}
     >
       {/* Most Popular Badge for Growth */}
       {isGrowth && (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
-          <span className="px-3 py-0.5 rounded-full bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-zinc-950 text-[10px] font-black uppercase tracking-wider shadow-md shadow-amber-500/30 flex items-center gap-1 whitespace-nowrap">
-            <Zap className="w-3 h-3 fill-current" />
+          <span className="px-3 py-0.5 rounded-full bg-secondary border border-border/80 text-foreground text-[10px] font-semibold uppercase tracking-wider shadow-sm flex items-center gap-1 whitespace-nowrap">
             MOST POPULAR
           </span>
         </div>
@@ -186,14 +185,14 @@ export function PricingPlanCard({
         <Button
           onClick={() => onSelect(planKey)}
           disabled={isCurrent || isProcessing}
-          className={`w-full rounded-xl h-10 text-xs font-bold transition-all duration-200 ${
+          className={`w-full rounded-xl h-10 text-xs font-semibold transition-all duration-200 ${
             isCurrent
-              ? 'bg-zinc-800/50 text-zinc-400 border border-zinc-800 cursor-default hover:bg-zinc-800/50'
+              ? 'bg-secondary/40 text-muted-foreground border border-border/40 cursor-default hover:bg-secondary/40'
               : isFreePromoActive
-              ? 'bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-500 text-zinc-950 font-black shadow-md shadow-emerald-500/20 hover:scale-[1.01] active:scale-[0.99]'
+              ? 'bg-foreground text-background font-bold hover:opacity-90 shadow-sm'
               : isGrowth
-              ? 'bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-zinc-950 font-black shadow-md shadow-amber-500/25 hover:brightness-105 hover:scale-[1.01] active:scale-[0.99]'
-              : 'bg-[#18191d] hover:bg-zinc-800 text-white border border-zinc-800/90 shadow-sm hover:scale-[1.01] active:scale-[0.99]'
+              ? 'bg-foreground text-background font-bold hover:opacity-90 shadow-sm'
+              : 'bg-secondary/60 hover:bg-secondary text-foreground border border-border/60 shadow-sm hover:scale-[1.01] active:scale-[0.99]'
           }`}
         >
           {isProcessing ? (

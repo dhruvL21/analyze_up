@@ -21,7 +21,7 @@ import { computeBusinessHealth } from '@/lib/command-center-engine';
 import { evaluateSalesHistory } from '@/lib/sales-history-helper';
 
 export function InventoryInsightsTicker() {
-  const { products, transactions, suppliers, returns = [], businessProfile, capabilities, businessBuddyCalibration } = useData();
+  const { products, transactions, suppliers, returns = [], businessProfile, capabilities, businessBuddyCalibration, dataReadiness } = useData();
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
@@ -38,10 +38,20 @@ export function InventoryInsightsTicker() {
     return evaluateSalesHistory(products, transactions);
   }, [products, transactions]);
 
-  // Capability status for dead stock detection (requires >= 30 days of history unless overridden)
-  const isDeadStockActive = capabilities
-    ? capabilities.deadStockDetection
-    : (businessBuddyCalibration?.status !== 'LEARNING' && salesHistory.hasMinimumHistory);
+  // Capability status for dead stock detection (unlocks immediately once threshold criteria are met)
+  const isThresholdMet = Boolean(
+    (transactions.length >= 80) ||
+    (dataReadiness?.totalOrders && dataReadiness.totalOrders >= 80) ||
+    (dataReadiness?.historicalDays && dataReadiness.historicalDays >= 30) ||
+    (dataReadiness?.score && dataReadiness.score >= 60) ||
+    (dataReadiness?.level && dataReadiness.level !== 'LEARNING')
+  );
+
+  const isDeadStockActive = Boolean(
+    isThresholdMet ||
+    capabilities?.deadStockDetection ||
+    (businessBuddyCalibration?.status !== 'LEARNING' && salesHistory.hasMinimumHistory)
+  );
 
   const insights = React.useMemo(() => {
     const list = [];

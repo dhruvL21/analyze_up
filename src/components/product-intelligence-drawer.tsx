@@ -131,9 +131,20 @@ export function ProductIntelligenceDrawer({ product, open, onOpenChange }: Produ
   };
 
   const currencySymbol = businessProfile?.currency?.includes('USD') ? '$' : '₹';
+  const isDeadStockActive = Boolean(
+    (capabilities?.deadStockDetection && dataReadiness?.level !== 'LEARNING') ||
+    (dataReadiness?.totalOrders && dataReadiness.totalOrders >= 50) ||
+    (dataReadiness?.historicalDays && dataReadiness.historicalDays >= 30) ||
+    (dataReadiness?.score && dataReadiness.score >= 60)
+  );
+  const isVelocityActive = Boolean(
+    capabilities?.trendAnalysis ||
+    (dataReadiness?.totalOrders && dataReadiness.totalOrders >= 50) ||
+    (dataReadiness?.historicalDays && dataReadiness.historicalDays >= 14)
+  );
   const report = computeProductIntelligence(liveProduct, transactions, returns, suppliers, {
-    isDeadStockEnabled: Boolean(capabilities?.deadStockDetection && dataReadiness?.level !== 'LEARNING'),
-    isVelocityEnabled: capabilities?.trendAnalysis,
+    isDeadStockEnabled: isDeadStockActive,
+    isVelocityEnabled: isVelocityActive,
     historicalDays: dataReadiness?.historicalDays,
   });
 

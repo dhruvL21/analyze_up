@@ -24,6 +24,20 @@ import { sanitizeShopDomain } from './config';
 import { encryptShopifyToken } from './crypto';
 import { DEFAULT_ANALYTICS_SUMMARY } from '@/lib/analytics-aggregator';
 
+/**
+ * Known store alias groups — stores in the same group are treated as equivalent
+ * during OAuth domain validation. Add dev/pilot store pairs here.
+ */
+const KNOWN_STORE_ALIAS_GROUPS: ReadonlyArray<ReadonlySet<string>> = [
+  new Set(['snkhed.myshopify.com', '14aj1c-0a.myshopify.com']),
+];
+
+function areKnownAliases(a: string, b: string): boolean {
+  const normA = (a || '').toLowerCase().trim();
+  const normB = (b || '').toLowerCase().trim();
+  return KNOWN_STORE_ALIAS_GROUPS.some((group) => group.has(normA) && group.has(normB));
+}
+
 // ============================================================================
 // Level 1 & 2: Durable In-Memory & Local File Cache Layer
 // ============================================================================
@@ -183,7 +197,13 @@ export async function areShopDomainsEquivalent(expectedShop: string, actualShop:
   // 1. Direct match
   if (normExpected === normActual) return true;
 
-  // 2. Check if one redirects to the other via HTTP 301/302 primary_domain_redirection
+  // 2. Static known-alias check (dev/pilot store pairs — avoids network calls)
+  if (areKnownAliases(normExpected, normActual)) {
+    console.log(`[Shopify OAuth] Known store alias match: ${normExpected} <-> ${normActual}`);
+    return true;
+  }
+
+  // 3. Check if one redirects to the other via HTTP 301/302 primary_domain_redirection
   try {
     const checkRedirect = async (source: string, target: string): Promise<boolean> => {
       const res = await fetch(`https://${source}`, {

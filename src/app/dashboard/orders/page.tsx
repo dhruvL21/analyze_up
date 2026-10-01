@@ -263,7 +263,7 @@ export default function OrdersPage() {
           <div className="flex items-center gap-2">
             <Button
               size="sm"
-              className="h-9 px-4 gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-md shadow-emerald-600/20"
+              className="h-9 px-4 gap-1.5 rounded-xl bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-sm"
               onClick={() => setDialogOpen(true)}
             >
               <PlusCircle className="h-4 w-4" />
@@ -274,16 +274,16 @@ export default function OrdersPage() {
 
         {/* Inbound KPI Summary Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Card className="ios-glass rounded-2xl border border-amber-500/20 p-4 shadow-sm">
+          <Card className="ios-glass rounded-2xl border border-border/40 p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-amber-400 font-bold uppercase tracking-wider">In Transit Shipments</p>
+                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider">In Transit Shipments</p>
                 <h3 className="text-2xl font-black text-foreground mt-1">
                   {pendingOrders.length} <span className="text-xs font-normal text-muted-foreground">POs active</span>
                 </h3>
               </div>
-              <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                <Truck className="w-5 h-5 animate-pulse" />
+              <div className="p-2.5 rounded-xl bg-secondary/80 text-muted-foreground border border-border/40">
+                <Truck className="w-5 h-5" />
               </div>
             </div>
             <p className="text-[11px] text-muted-foreground mt-2">
@@ -291,15 +291,15 @@ export default function OrdersPage() {
             </p>
           </Card>
 
-          <Card className="ios-glass rounded-2xl border border-blue-500/20 p-4 shadow-sm">
+          <Card className="ios-glass rounded-2xl border border-border/40 p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-blue-400 font-bold uppercase tracking-wider">Inbound Capital Committed</p>
+                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider">Inbound Capital Committed</p>
                 <h3 className="text-2xl font-black text-foreground mt-1">
                   {currencySymbol}{totalInboundSpend.toLocaleString('en-IN')}
                 </h3>
               </div>
-              <div className="p-2.5 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20">
+              <div className="p-2.5 rounded-xl bg-secondary/80 text-muted-foreground border border-border/40">
                 <DollarSign className="w-5 h-5" />
               </div>
             </div>
@@ -308,15 +308,15 @@ export default function OrdersPage() {
             </p>
           </Card>
 
-          <Card className="ios-glass rounded-2xl border border-emerald-500/20 p-4 shadow-sm">
+          <Card className="ios-glass rounded-2xl border border-border/40 p-4 shadow-sm">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-xs text-emerald-400 font-bold uppercase tracking-wider">Received & Restocked</p>
+                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider">Received & Restocked</p>
                 <h3 className="text-2xl font-black text-foreground mt-1">
                   {fulfilledOrders.length} <span className="text-xs font-normal text-muted-foreground">fulfilled</span>
                 </h3>
               </div>
-              <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              <div className="p-2.5 rounded-xl bg-secondary/80 text-muted-foreground border border-border/40">
                 <CheckCircle2 className="w-5 h-5" />
               </div>
             </div>
@@ -336,8 +336,8 @@ export default function OrdersPage() {
                 onClick={() => setActiveTab('pending')}
                 className={`px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap ${
                   activeTab === 'pending'
-                    ? 'bg-amber-500 text-black font-bold shadow-xs'
-                    : 'text-amber-400/90 hover:text-amber-400 hover:bg-amber-500/10'
+                    ? 'bg-primary text-primary-foreground font-bold shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
                 }`}
               >
                 <Truck className="w-3.5 h-3.5" />
@@ -357,8 +357,8 @@ export default function OrdersPage() {
                 onClick={() => setActiveTab('fulfilled')}
                 className={`px-3.5 py-1.5 rounded-xl transition-all flex items-center gap-1.5 whitespace-nowrap ${
                   activeTab === 'fulfilled'
-                    ? 'bg-emerald-600 text-white font-bold shadow-xs'
-                    : 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10'
+                    ? 'bg-primary text-primary-foreground font-bold shadow-xs'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
                 }`}
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
@@ -369,7 +369,7 @@ export default function OrdersPage() {
                   onClick={() => setActiveTab('cancelled')}
                   className={`px-3.5 py-1.5 rounded-xl transition-all whitespace-nowrap ${
                     activeTab === 'cancelled'
-                      ? 'bg-rose-600 text-white font-bold shadow-xs'
+                      ? 'bg-primary text-primary-foreground font-bold shadow-xs'
                       : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
                   }`}
                 >

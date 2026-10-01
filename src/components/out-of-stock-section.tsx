@@ -66,16 +66,17 @@ export function OutOfStockSection() {
   const currentDays = dataReadiness?.historicalDays ?? 0;
   const currentScore = dataReadiness?.score ?? 0;
 
-  const isThresholdMet = (currentOrders >= 50 || currentDays >= 14) && currentScore >= 40;
+  const isThresholdMet =
+    currentOrders >= 50 ||
+    currentDays >= 14 ||
+    currentScore >= 40 ||
+    Boolean(dataReadiness?.level && dataReadiness.level !== 'LEARNING');
 
   const isRestockUnlocked = Boolean(
     businessBuddyCalibration?.isOverridden ||
+    businessBuddyCalibration?.status === 'CALIBRATED' ||
     isThresholdMet ||
-    (
-      currentScore >= 40 &&
-      dataReadiness?.level !== 'LEARNING'
-    ) ||
-    (capabilities?.reorderRecommendations && (currentScore >= 40 || currentOrders >= 50))
+    capabilities?.reorderRecommendations
   );
 
   const [activeTab, setActiveTab] = useState<'out_of_stock' | 'low_stock' | 'all'>('out_of_stock');
@@ -292,27 +293,21 @@ export function OutOfStockSection() {
   return (
     <>
       <div id="out-of-stock-hub" className="scroll-mt-24 space-y-4">
-        <Card className="rounded-3xl ios-glass border border-red-500/25 bg-gradient-to-b from-red-950/15 via-background to-background shadow-2xl overflow-hidden">
+        <Card className="rounded-3xl ios-glass border border-border/50 bg-card/60 shadow-xl overflow-hidden">
           <CardHeader className="p-6 md:p-8 pb-4">
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
               <div className="space-y-1.5">
                 <div className="flex items-center gap-2.5 flex-wrap">
-                  <div className="p-2 rounded-2xl bg-red-500/15 border border-red-500/30 text-red-400">
-                    <AlertOctagon className="w-5 h-5 animate-pulse" />
+                  <div className="p-2 rounded-2xl bg-secondary/80 border border-border/40 text-muted-foreground">
+                    <AlertOctagon className="w-5 h-5" />
                   </div>
-                  <Badge variant="outline" className="border-red-500/40 text-red-400 bg-red-500/10 font-mono text-[11px] font-bold px-2.5 py-0.5 tracking-wider">
+                  <Badge variant="outline" className="border-border/50 text-muted-foreground bg-secondary/30 font-mono text-[11px] font-bold px-2.5 py-0.5 tracking-wider">
                     CRITICAL RESTOCK RADAR
                   </Badge>
                   <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 bg-emerald-500/10 font-mono text-[11px] font-bold px-2.5 py-0.5 tracking-wider flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5" />
                     AI CALIBRATED (Score: {readinessScore}/100 • {readinessLevelLabel})
                   </Badge>
-                  {outOfStockItems.length > 0 && (
-                    <span className="flex h-2 w-2 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
-                    </span>
-                  )}
                 </div>
                 <CardTitle className="text-xl md:text-2xl font-extrabold text-foreground tracking-tight flex items-center gap-2">
                   Out of Stock & Urgent Restock Hub
@@ -325,7 +320,7 @@ export function OutOfStockSection() {
               {/* Quick Summary Metrics Grid */}
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 shrink-0">
                 <div className="p-3 rounded-2xl bg-secondary/30 border border-border/40 text-left space-y-0.5">
-                  <span className="text-[10px] uppercase font-bold text-red-400 block tracking-wider">Out of Stock</span>
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground block tracking-wider">Out of Stock</span>
                   <p className="text-lg md:text-xl font-extrabold text-foreground font-mono">
                     {outOfStockItems.length}
                     <span className="text-[11px] font-normal text-muted-foreground ml-1">SKUs</span>
@@ -333,7 +328,7 @@ export function OutOfStockSection() {
                 </div>
 
                 <div className="p-3 rounded-2xl bg-secondary/30 border border-border/40 text-left space-y-0.5">
-                  <span className="text-[10px] uppercase font-bold text-amber-400 block tracking-wider">Low Buffer</span>
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground block tracking-wider">Low Buffer</span>
                   <p className="text-lg md:text-xl font-extrabold text-foreground font-mono">
                     {lowStockItems.length}
                     <span className="text-[11px] font-normal text-muted-foreground ml-1">SKUs</span>
@@ -366,19 +361,19 @@ export function OutOfStockSection() {
                 <TabsList className="bg-secondary/40 border border-border/40 p-1 rounded-2xl h-10 w-full sm:w-auto flex">
                   <TabsTrigger
                     value="out_of_stock"
-                    className="rounded-xl text-xs font-bold px-3.5 data-[state=active]:bg-red-500/20 data-[state=active]:text-red-400 data-[state=active]:border-red-500/30 border border-transparent"
+                    className="rounded-xl text-xs font-bold px-3.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border border-transparent transition-all"
                   >
                     Out of Stock ({outOfStockItems.length})
                   </TabsTrigger>
                   <TabsTrigger
                     value="low_stock"
-                    className="rounded-xl text-xs font-bold px-3.5 data-[state=active]:bg-amber-500/20 data-[state=active]:text-amber-400 data-[state=active]:border-amber-500/30 border border-transparent"
+                    className="rounded-xl text-xs font-bold px-3.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border border-transparent transition-all"
                   >
                     Low Stock Buffer ({lowStockItems.length})
                   </TabsTrigger>
                   <TabsTrigger
                     value="all"
-                    className="rounded-xl text-xs font-bold px-3.5 data-[state=active]:bg-secondary data-[state=active]:text-foreground"
+                    className="rounded-xl text-xs font-bold px-3.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border border-transparent transition-all"
                   >
                     All Critical ({allCriticalItems.length})
                   </TabsTrigger>
@@ -392,7 +387,7 @@ export function OutOfStockSection() {
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search SKU, name, supplier..."
-                  className="pl-9 h-9 text-xs rounded-2xl bg-secondary/30 border-border/40 focus:border-red-500/50"
+                  className="pl-9 h-9 text-xs rounded-2xl bg-secondary/30 border-border/40 focus:border-primary/50"
                 />
               </div>
             </div>
@@ -425,7 +420,7 @@ export function OutOfStockSection() {
                     size="sm"
                     variant="outline"
                     onClick={() => setActiveTab('low_stock')}
-                    className="rounded-xl text-xs border-amber-500/30 text-amber-400 hover:bg-amber-500/10 font-bold"
+                    className="rounded-xl text-xs border-border/60 hover:bg-secondary text-foreground font-semibold"
                   >
                     Inspect {lowStockItems.length} Low Stock Buffers →
                   </Button>
@@ -464,11 +459,11 @@ export function OutOfStockSection() {
                                 {prod.name}
                               </span>
                               {item.isZero ? (
-                                <Badge className="bg-red-500/20 text-red-400 border border-red-500/40 text-[10px] font-bold px-2 py-0">
+                                <Badge variant="outline" className="text-[10px] font-semibold text-rose-400 border-rose-500/30 px-2 py-0">
                                   0 Units (Out of Stock)
                                 </Badge>
                               ) : (
-                                <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/40 text-[10px] font-bold px-2 py-0">
+                                <Badge variant="outline" className="text-[10px] font-semibold text-amber-400 border-amber-500/30 px-2 py-0">
                                   {item.stock} Units Left (Low)
                                 </Badge>
                               )}
@@ -499,7 +494,7 @@ export function OutOfStockSection() {
                             {/* AI Calibration Tags & Rationale */}
                             <div className="flex items-center gap-2 text-xs text-muted-foreground pt-0.5 flex-wrap">
                               <Badge variant="secondary" className="bg-secondary/60 text-foreground text-[10px] font-semibold border border-border/40 py-0 px-2 flex items-center gap-1">
-                                <Sparkles className="w-3 h-3 text-amber-400" />
+                                <Sparkles className="w-3 h-3 text-primary" />
                                 {item.dailySales > 0 ? `${item.dailySales.toFixed(1)} units/day velocity` : `Safety buffer (${item.minStock}u)`}
                               </Badge>
                               <span className="text-[11px] text-muted-foreground">
@@ -533,10 +528,10 @@ export function OutOfStockSection() {
                           <Button
                             size="sm"
                             onClick={() => handleOpenReorder(item)}
-                            className="rounded-xl text-xs font-extrabold gap-1.5 h-9 px-4 bg-red-600 hover:bg-red-500 text-white shadow-lg shadow-red-600/20 hover:shadow-red-600/30 transition-all cursor-pointer shrink-0"
+                            className="rounded-xl text-xs font-bold gap-1.5 h-9 px-4 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm transition-all cursor-pointer shrink-0"
                           >
                             <ShoppingBag className="w-4 h-4" />
-                            <span>⚡ Reorder</span>
+                            <span>Reorder</span>
                           </Button>
                         </div>
                       </div>

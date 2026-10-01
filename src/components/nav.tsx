@@ -22,7 +22,6 @@ import {
   Download,
   ChevronDown,
   ChevronRight,
-  Rocket,
   CreditCard,
   Users,
 } from "lucide-react";
@@ -114,12 +113,6 @@ const navItems: NavItem[] = [
         label: "Demand Forecasting",
         description: "Predictive sales velocity & 30-day stockout projections",
         icon: TrendingUp,
-      },
-      {
-        href: "/dashboard/executive?tab=growth",
-        label: "Growth & Retention",
-        description: "Repeat purchasing rates, customer RFM & churn alerts",
-        icon: Rocket,
       },
       {
         href: "/dashboard/executive?tab=simulation",

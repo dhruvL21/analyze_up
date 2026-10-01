@@ -495,6 +495,45 @@ export function detectProcurementRisks(
   return risks;
 }
 
+export interface MinimalRiskSignal {
+  primaryTag: string;
+  metricTag: string | null;
+  actionLabel: string;
+}
+
+export function getMinimalRiskSignals(risk: ProcurementRiskItem): MinimalRiskSignal {
+  let primaryTag = 'Single-Sourced';
+  let metricTag: string | null = null;
+  let actionLabel = 'Review supplier';
+
+  if (risk.type === 'single_supplier_dependency') {
+    primaryTag = '100% Single-Sourced';
+    const daysMatch = risk.reason.match(/(\d+(\.\d+)?) days/i);
+    metricTag = daysMatch ? `${daysMatch[1]}d Lead Time` : 'Slow Delivery';
+    actionLabel = 'Add backup supplier';
+  } else if (risk.type === 'late_delivery') {
+    primaryTag = 'Frequent Delays';
+    const pctMatch = risk.reason.match(/(\d+(\.\d+)?)%/);
+    metricTag = pctMatch ? `${pctMatch[1]}% On-Time` : 'SLA Breach';
+    actionLabel = 'Renegotiate SLAs';
+  } else if (risk.type === 'cost_increase') {
+    const pctMatch = risk.problem.match(/(\d+(\.\d+)?)%/);
+    primaryTag = pctMatch ? `+${pctMatch[1]}% Cost Hike` : 'Price Increase';
+    metricTag = 'Margin Impact';
+    actionLabel = 'Request volume discount';
+  } else if (risk.type === 'high_cancellation') {
+    primaryTag = 'High Cancellations';
+    metricTag = 'Unreliable Supply';
+    actionLabel = 'Audit fulfillment';
+  } else if (risk.type === 'lead_time_spike') {
+    primaryTag = 'Lead Time Spike';
+    metricTag = 'Delivery Delay';
+    actionLabel = 'Increase buffer stock';
+  }
+
+  return { primaryTag, metricTag, actionLabel };
+}
+
 // 4. Calculate Procurement Cost Saving Opportunities
 export function calculateProcurementSavings(
   allProducts: Product[] = [],

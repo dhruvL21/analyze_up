@@ -58,7 +58,7 @@ import { ThreeTierBadge } from '@/components/three-tier-badge';
 import { DailyAILearningBanner } from '@/components/daily-ai-learning-banner';
 
 export default function ForecastingPage() {
-  const { products, transactions, suppliers, orders, businessProfile, capabilities, dataReadiness } = useData();
+  const { products, transactions, suppliers, orders, businessProfile, capabilities, dataReadiness, businessBuddyCalibration } = useData();
   const { toast } = useToast();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -114,15 +114,31 @@ export default function ForecastingPage() {
   }, [searchTerm, selectedRiskFilter]);
 
   const hasData = report.overallConfidence !== 'INSUFFICIENT';
-  const isForecastingActive = Boolean(capabilities?.demandForecasting && dataReadiness?.level !== 'LEARNING');
+  const historicalDays = dataReadiness?.historicalDays ?? 0;
+  const targetDays = 30;
+  const totalOrders = dataReadiness?.totalOrders || transactions.filter(t => t.type === 'Sale').length || 0;
+  const targetOrders = 80;
+
+  // Criteria to unlock forecasting:
+  // 1. Reached target orders (>= 80, or 50 with 14 days)
+  // 2. Reached target history (>= 30 days)
+  // 3. Level progressed beyond LEARNING (Early Insights, Predictive, Optimization)
+  // 4. Feature capability active or founder override
+  const isThresholdMet =
+    totalOrders >= targetOrders ||
+    historicalDays >= targetDays ||
+    (totalOrders >= 50 && historicalDays >= 14) ||
+    Boolean(dataReadiness?.level && dataReadiness.level !== 'LEARNING');
+
+  const isForecastingActive = Boolean(
+    isThresholdMet ||
+    capabilities?.demandForecasting ||
+    businessBuddyCalibration?.isOverridden ||
+    businessBuddyCalibration?.status === 'CALIBRATED'
+  );
 
   if (!isForecastingActive) {
-    const historicalDays = dataReadiness?.historicalDays ?? 0;
-    const targetDays = 30;
     const daysPercent = Math.min(100, Math.round((historicalDays / targetDays) * 100));
-
-    const totalOrders = dataReadiness?.totalOrders || transactions.filter(t => t.type === 'Sale').length || 0;
-    const targetOrders = 80;
     const ordersPercent = Math.min(100, Math.round((totalOrders / targetOrders) * 100));
 
     const qualityScore = dataReadiness?.qualityReport?.percentage ?? (products.length > 0 ? 87 : 0);

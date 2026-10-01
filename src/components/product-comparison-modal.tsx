@@ -34,8 +34,17 @@ export function ProductComparisonModal({ open, onOpenChange }: ProductComparison
   const productB = products.find(p => p.id === prodIdB) || products[1] || products[0];
 
   const readinessOpts = {
-    isDeadStockEnabled: Boolean(capabilities?.deadStockDetection && dataReadiness?.level !== 'LEARNING'),
-    isVelocityEnabled: capabilities?.trendAnalysis,
+    isDeadStockEnabled: Boolean(
+      (capabilities?.deadStockDetection && dataReadiness?.level !== 'LEARNING') ||
+      (dataReadiness?.totalOrders && dataReadiness.totalOrders >= 50) ||
+      (dataReadiness?.historicalDays && dataReadiness.historicalDays >= 30) ||
+      (dataReadiness?.score && dataReadiness.score >= 60)
+    ),
+    isVelocityEnabled: Boolean(
+      capabilities?.trendAnalysis ||
+      (dataReadiness?.totalOrders && dataReadiness.totalOrders >= 50) ||
+      (dataReadiness?.historicalDays && dataReadiness.historicalDays >= 14)
+    ),
     historicalDays: dataReadiness?.historicalDays,
   };
   const reportA = productA ? computeProductIntelligence(productA, transactions, returns, [], readinessOpts) : null;

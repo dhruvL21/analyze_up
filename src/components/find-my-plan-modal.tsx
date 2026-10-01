@@ -582,13 +582,7 @@ export function FindMyPlanModal({
               >
                 {/* Result Top Hero */}
                 <div
-                  className={`p-5 rounded-2xl border ${
-                    recommendation.isBeyondStandardPlans
-                      ? 'bg-amber-500/10 border-amber-500/40 text-amber-200'
-                      : recommendation.recommendedPlanKey === 'GROWTH'
-                      ? 'bg-gradient-to-b from-amber-500/15 via-zinc-900/90 to-zinc-950 border-amber-500/60 shadow-xl shadow-amber-500/10'
-                      : 'bg-gradient-to-b from-primary/15 via-zinc-900/90 to-zinc-950 border-primary/50 shadow-xl shadow-primary/10'
-                  }`}
+                  className="p-5 rounded-2xl border border-border/80 bg-secondary/30 shadow-md"
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
@@ -598,8 +592,7 @@ export function FindMyPlanModal({
                       <h3 className="text-2xl sm:text-3xl font-black text-foreground tracking-tight flex items-center gap-2 mt-0.5">
                         {recommendation.planName.toUpperCase()}
                         {recommendation.recommendedPlanKey === 'GROWTH' && (
-                          <Badge className="bg-amber-500 text-zinc-950 text-[10px] font-black uppercase px-2 py-0.5">
-                            <Zap className="w-3 h-3 fill-current mr-1" />
+                          <Badge className="bg-secondary text-foreground border border-border text-[10px] font-semibold uppercase px-2 py-0.5">
                             Best Match
                           </Badge>
                         )}
@@ -713,7 +706,7 @@ export function FindMyPlanModal({
                       href="mailto:support@analyzeup.com?subject=AnalyzeUp%20Enterprise%20Inquiry"
                       className="w-full sm:flex-1"
                     >
-                      <Button className="w-full h-10 text-xs font-bold gap-1.5 bg-gradient-to-r from-amber-500 to-amber-600 text-zinc-950 font-black shadow-lg shadow-amber-500/25">
+                      <Button className="w-full h-10 text-xs font-semibold gap-1.5 bg-foreground text-background shadow-sm hover:opacity-90">
                         <Mail className="w-3.5 h-3.5" /> Talk to AnalyzeUp
                       </Button>
                     </a>
@@ -723,11 +716,7 @@ export function FindMyPlanModal({
                         onSelectPlan(recommendation.recommendedPlanKey as PlanType);
                         onClose();
                       }}
-                      className={`w-full sm:flex-1 h-10 text-xs font-bold gap-1.5 ${
-                        recommendation.recommendedPlanKey === 'GROWTH'
-                          ? 'bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-zinc-950 font-black shadow-lg shadow-amber-500/25'
-                          : 'bg-primary hover:bg-primary/90 text-primary-foreground font-extrabold'
-                      }`}
+                      className="w-full sm:flex-1 h-10 text-xs font-semibold gap-1.5 bg-foreground text-background shadow-sm hover:opacity-90"
                     >
                       <span>Choose {recommendation.planName} Plan</span>
                       <ArrowRight className="w-3.5 h-3.5" />

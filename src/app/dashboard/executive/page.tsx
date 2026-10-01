@@ -73,11 +73,6 @@ import {
   Clock,
   Trash2,
   Key,
-  Rocket,
-  Target,
-  UserCheck,
-  UserX,
-  Repeat,
   Check,
   FlaskConical,
   Sliders,
@@ -91,7 +86,6 @@ import {
   calculateProfitBridge,
   generateRiskAndOpportunityMatrix,
   generateExecutiveScorecard,
-  generateAIExecutiveBrief,
   createReportSnapshot,
   getStoredReportSnapshots,
   deleteStoredReportSnapshot,
@@ -103,11 +97,6 @@ import {
   evaluateScenario,
   ScenarioType,
 } from '@/lib/forecasting-engine';
-import {
-  computeCustomerGrowthIntelligence,
-  saveOpportunityStatus,
-  getStoredOpportunityStatuses,
-} from '@/lib/customer-growth-engine';
 import {
   runBusinessSimulation,
   saveScenario,
@@ -126,7 +115,6 @@ import {
   getStoredWorkspaceMembers,
 } from '@/lib/saas-engine';
 import { CreatePurchaseOrderModal } from '@/components/create-purchase-order-modal';
-import { UnlockProgressCard } from '@/components/unlock-progress-card';
 import { DailyAILearningBanner } from '@/components/daily-ai-learning-banner';
 import {
   Sheet,
@@ -154,6 +142,7 @@ function ExecutiveIntelligencePageContent() {
     updateActivePlan,
     capabilities,
     dataReadiness,
+    businessBuddyCalibration,
   } = useData();
   const { user } = useUser();
   const { toast } = useToast();
@@ -165,7 +154,7 @@ function ExecutiveIntelligencePageContent() {
   }, [dataReadiness?.totalOrders, transactions]);
 
   // Unified Navigation Tab State
-  const [activeTab, setActiveTab] = useState<'overview' | 'forecasting' | 'growth' | 'simulation' | 'billing' | 'team'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'forecasting' | 'simulation' | 'billing' | 'team'>('overview');
   const tabsContainerRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [canScrollTabsLeft, setCanScrollTabsLeft] = useState(false);
@@ -186,7 +175,7 @@ function ExecutiveIntelligencePageContent() {
 
   useEffect(() => {
     const tab = searchParams?.get('tab');
-    if (tab && ['overview', 'forecasting', 'growth', 'simulation', 'billing', 'team'].includes(tab)) {
+    if (tab && ['overview', 'forecasting', 'simulation', 'billing', 'team'].includes(tab)) {
       setActiveTab(tab as any);
     }
   }, [searchParams]);
@@ -212,7 +201,6 @@ function ExecutiveIntelligencePageContent() {
   const [periodType, setPeriodType] = useState<'MONTH' | 'QUARTER' | 'YEAR'>('MONTH');
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
   const [selectedSnapshot, setSelectedSnapshot] = useState<ReportSnapshot | null>(null);
-  const [growthTick, setGrowthTick] = useState(0);
   const [confirmData, setConfirmData] = useState<{
     title: string;
     description: string;
@@ -227,29 +215,17 @@ function ExecutiveIntelligencePageContent() {
   const [savedSimTick, setSavedSimTick] = useState(0);
   const [snapshotTick, setSnapshotTick] = useState(0);
 
-  // Sync opportunity status updates, simulation updates & snapshot updates
+  // Sync simulation updates & snapshot updates
   React.useEffect(() => {
-    const sync = () => setGrowthTick(t => t + 1);
     const syncSims = () => setSavedSimTick(t => t + 1);
     const syncSnaps = () => setSnapshotTick(t => t + 1);
-    window.addEventListener('analyzeup_growth_opps_updated', sync);
     window.addEventListener('analyzeup_simulations_updated', syncSims);
     window.addEventListener('analyzeup_snapshots_updated', syncSnaps);
     return () => {
-      window.removeEventListener('analyzeup_growth_opps_updated', sync);
       window.removeEventListener('analyzeup_simulations_updated', syncSims);
       window.removeEventListener('analyzeup_snapshots_updated', syncSnaps);
     };
   }, []);
-
-  // Growth Intelligence Engine (computed when growth or overview tab is active)
-  const growthReport = useMemo(() => {
-    if (activeTab !== 'growth' && activeTab !== 'overview') {
-      return { totalCustomers: 0, repeatPurchaseRatePercent: 0, atRiskCustomers: [], opportunities: [], rfmSegments: {} } as any;
-    }
-    void growthTick;
-    return computeCustomerGrowthIntelligence(products, transactions, suppliers, orders, returns, businessProfile);
-  }, [products, transactions, suppliers, orders, returns, businessProfile, growthTick, activeTab]);
 
   // Simulation Engine (computed only when simulation tab is active)
   const activeSimulation = useMemo(() => {
@@ -327,7 +303,11 @@ function ExecutiveIntelligencePageContent() {
   ]);
 
   const currencySymbol = businessProfile?.currency?.includes('USD') ? '$' : '₹';
-  const formatCur = (val: number) => `${currencySymbol}${Math.round(val).toLocaleString('en-IN')}`;
+  const formatCur = (val: number) => {
+    const isNeg = val < 0;
+    const abs = Math.abs(Math.round(val)).toLocaleString('en-IN');
+    return isNeg ? `-${currencySymbol}${abs}` : `${currencySymbol}${abs}`;
+  };
 
   // Calculated Metrics
   const comparison = useMemo(() => {
@@ -346,9 +326,15 @@ function ExecutiveIntelligencePageContent() {
     return generateRiskAndOpportunityMatrix(products, transactions, suppliers, orders, returns, businessProfile);
   }, [products, transactions, suppliers, orders, returns, businessProfile]);
 
-  const brief = useMemo(() => {
-    return generateAIExecutiveBrief(comparison, scorecard, risks, opportunities, businessProfile);
-  }, [comparison, scorecard, risks, opportunities, businessProfile]);
+  const isForecastingUnlocked = Boolean(
+    businessBuddyCalibration?.isOverridden ||
+    businessBuddyCalibration?.status === 'CALIBRATED' ||
+    capabilities?.demandForecasting ||
+    (dataReadiness?.totalOrders && dataReadiness.totalOrders >= 80) ||
+    (dataReadiness?.historicalDays && dataReadiness.historicalDays >= 30) ||
+    ((dataReadiness?.totalOrders ?? 0) >= 50 && (dataReadiness?.historicalDays ?? 0) >= 14) ||
+    (dataReadiness?.level && dataReadiness.level !== 'LEARNING')
+  );
 
   const forecastingReport = useMemo(() => {
     if (activeTab !== 'forecasting' && activeTab !== 'overview') {
@@ -571,23 +557,11 @@ function ExecutiveIntelligencePageContent() {
             }`}
           >
             <TrendingUp className="w-4.5 h-4.5" /> Demand Forecasting
-            {(dataReadiness?.level === 'LEARNING' || !capabilities?.demandForecasting) && (
+            {!isForecastingUnlocked && (
               <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
                 Learning
               </span>
             )}
-          </button>
-
-          <button
-            ref={(el) => { tabRefs.current['growth'] = el; }}
-            onClick={(e) => handleTabClick('growth', e)}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 ${
-              activeTab === 'growth'
-                ? 'bg-primary text-primary-foreground shadow-md'
-                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
-            }`}
-          >
-            <Rocket className="w-4.5 h-4.5" /> Growth & Retention
           </button>
 
           <button
@@ -688,13 +662,13 @@ function ExecutiveIntelligencePageContent() {
             <Card className="ios-glass rounded-2xl border-border/40">
               <CardContent className="p-4 text-center space-y-1">
                 <span className="text-xs text-muted-foreground block font-semibold">Forecast Conf.</span>
-                <span className={`text-xl font-black block ${dataReadiness?.level === 'LEARNING' || !capabilities?.demandForecasting ? 'text-amber-400' : 'text-indigo-400'}`}>
-                  {dataReadiness?.level === 'LEARNING' || !capabilities?.demandForecasting
+                <span className={`text-xl font-black block ${!isForecastingUnlocked ? 'text-amber-400' : 'text-indigo-400'}`}>
+                  {!isForecastingUnlocked
                     ? 'LEARNING'
                     : (products.length > 0 ? scorecard.forecastConfidence : 'AWAITING DATA')}
                 </span>
                 <span className="text-xs text-muted-foreground font-semibold block">
-                  {dataReadiness?.level === 'LEARNING' || !capabilities?.demandForecasting
+                  {!isForecastingUnlocked
                     ? 'Requires 30d Baseline'
                     : (products.length > 0 ? '30D Projected' : 'No Transactions')}
                 </span>
@@ -729,146 +703,284 @@ function ExecutiveIntelligencePageContent() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-sm">
-                <div className="p-3.5 rounded-xl bg-secondary/30 border border-border/30 space-y-1">
-                  <span className="text-xs font-semibold text-muted-foreground block">Revenue</span>
-                  <span className="text-lg font-bold text-foreground block">{formatCur(comparison.currentPeriod.revenue)}</span>
-                  {comparison.currentPeriod.revenue > 0 || comparison.priorPeriod.revenue > 0 ? (
-                    <span className={`text-xs font-bold flex items-center gap-0.5 ${comparison.revenueChangePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {comparison.revenueChangePercent >= 0 ? <TrendingUp className="w-3.5 h-3.5 inline" /> : <TrendingDown className="w-3.5 h-3.5 inline" />}
-                      {comparison.revenueChangePercent >= 0 ? `+${comparison.revenueChangePercent}%` : `${comparison.revenueChangePercent}%`}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">0% vs prior</span>
-                  )}
-                </div>
+              {(() => {
+                const aov = comparison.currentPeriod.totalOrders > 0
+                  ? Math.round(comparison.currentPeriod.revenue / comparison.currentPeriod.totalOrders)
+                  : 0;
+                const totalOrders = comparison.currentPeriod.totalOrders;
+                const totalReturns = comparison.currentPeriod.totalReturns;
+                const returnRate = totalOrders > 0
+                  ? ((totalReturns / totalOrders) * 100).toFixed(1)
+                  : '0.0';
+                const ordersChange = comparison.ordersChangePercent;
+                const returnsChange = comparison.returnsChangePercent;
+                const currentMargin = comparison.currentPeriod.profitMarginPercent;
+                const marginPts = comparison.marginChangePercentagePoints;
+                const currentCogs = comparison.currentPeriod.cogs;
+                const inventoryVal = comparison.currentPeriod.inventoryValue;
+                const invChange = comparison.inventoryValueChangePercent;
 
-                <div className="p-3.5 rounded-xl bg-secondary/30 border border-border/30 space-y-1">
-                  <span className="text-xs font-semibold text-muted-foreground block">Gross Profit</span>
-                  <span className="text-lg font-bold text-foreground block">{formatCur(comparison.currentPeriod.grossProfit)}</span>
-                  {comparison.currentPeriod.grossProfit > 0 || comparison.priorPeriod.grossProfit > 0 ? (
-                    <span className={`text-xs font-bold flex items-center gap-0.5 ${comparison.profitChangePercent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {comparison.profitChangePercent >= 0 ? <TrendingUp className="w-3.5 h-3.5 inline" /> : <TrendingDown className="w-3.5 h-3.5 inline" />}
-                      {comparison.profitChangePercent >= 0 ? `+${comparison.profitChangePercent}%` : `${comparison.profitChangePercent}%`}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">0% vs prior</span>
-                  )}
-                </div>
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 text-sm">
+                    {/* Box 1: Revenue & AOV */}
+                    <div className="p-4 rounded-2xl bg-secondary/30 border border-border/40 space-y-2.5 hover:bg-secondary/40 transition-all flex flex-col justify-between shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-muted-foreground flex items-center gap-1.5 uppercase tracking-wider">
+                          <Coins className="w-3.5 h-3.5 text-muted-foreground" /> Revenue & AOV
+                        </span>
+                        {comparison.currentPeriod.revenue > 0 || comparison.priorPeriod.revenue > 0 ? (
+                          <span className={`text-[11px] font-bold flex items-center gap-0.5 px-2 py-0.5 rounded-lg ${
+                            comparison.revenueChangePercent >= 0 ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
+                          }`}>
+                            {comparison.revenueChangePercent >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                            {comparison.revenueChangePercent >= 0 ? `+${comparison.revenueChangePercent}%` : `${comparison.revenueChangePercent}%`}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-muted-foreground">0% vs prior</span>
+                        )}
+                      </div>
 
-                <div className="p-3.5 rounded-xl bg-secondary/30 border border-border/30 space-y-1">
-                  <span className="text-xs font-semibold text-muted-foreground block">Profit Margin</span>
-                  <span className="text-lg font-bold text-foreground block">{comparison.currentPeriod.profitMarginPercent}%</span>
-                  {comparison.currentPeriod.revenue > 0 ? (
-                    <span className={`text-xs font-bold ${comparison.marginChangePercentagePoints >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                      {comparison.marginChangePercentagePoints >= 0 ? `+${comparison.marginChangePercentagePoints} pts` : `${comparison.marginChangePercentagePoints} pts`}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">0 pts</span>
-                  )}
-                </div>
+                      <div>
+                        <span className="text-2xl font-black text-foreground block tracking-tight">
+                          {formatCur(comparison.currentPeriod.revenue)}
+                        </span>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          Prior Period: {formatCur(comparison.priorPeriod.revenue)}
+                        </p>
+                      </div>
 
-                <div className="p-3.5 rounded-xl bg-secondary/30 border border-border/30 space-y-1">
-                  <span className="text-xs font-semibold text-muted-foreground block">Total Orders</span>
-                  <span className="text-lg font-bold text-foreground block">{comparison.currentPeriod.totalOrders}</span>
-                  {comparison.currentPeriod.totalOrders > 0 || comparison.priorPeriod.totalOrders > 0 ? (
-                    <span className="text-xs text-emerald-400 font-bold">+{comparison.ordersChangePercent}% vs prior</span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">0 vs prior</span>
-                  )}
-                </div>
+                      <div className="pt-2 border-t border-border/40 flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground text-[11px]">Avg Order Value (AOV):</span>
+                        <span className="font-bold text-foreground text-xs">{formatCur(aov)}</span>
+                      </div>
+                    </div>
 
-                <div className="p-3.5 rounded-xl bg-secondary/30 border border-border/30 space-y-1">
-                  <span className="text-xs font-semibold text-muted-foreground block">Customer Returns</span>
-                  <span className="text-lg font-bold text-foreground block">{comparison.currentPeriod.totalReturns}</span>
-                  {comparison.currentPeriod.totalReturns > 0 ? (
-                    <span className="text-xs text-amber-400 font-bold">+{comparison.returnsChangePercent}% rate</span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">0% rate</span>
-                  )}
-                </div>
+                    {/* Box 2: Gross Profit & Margin (Combines Profit, Margin % & COGS) */}
+                    <div className="p-4 rounded-2xl bg-secondary/30 border border-border/40 space-y-2.5 hover:bg-secondary/40 transition-all flex flex-col justify-between shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-muted-foreground flex items-center gap-1.5 uppercase tracking-wider">
+                          <DollarSign className="w-3.5 h-3.5 text-muted-foreground" /> Gross Profit & Margin
+                        </span>
+                        {comparison.currentPeriod.grossProfit > 0 || comparison.priorPeriod.grossProfit > 0 ? (
+                          <span className={`text-[11px] font-bold flex items-center gap-0.5 px-2 py-0.5 rounded-lg ${
+                            comparison.profitChangePercent >= 0 ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
+                          }`}>
+                            {comparison.profitChangePercent >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                            {comparison.profitChangePercent >= 0 ? `+${comparison.profitChangePercent}%` : `${comparison.profitChangePercent}%`}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-muted-foreground">0% vs prior</span>
+                        )}
+                      </div>
 
-                <div className="p-3.5 rounded-xl bg-secondary/30 border border-border/30 space-y-1">
-                  <span className="text-xs font-semibold text-muted-foreground block">Inventory Value</span>
-                  <span className="text-lg font-bold text-foreground block">{formatCur(comparison.currentPeriod.inventoryValue)}</span>
-                  {comparison.currentPeriod.inventoryValue > 0 ? (
-                    <span className="text-xs text-muted-foreground font-bold">+{comparison.inventoryValueChangePercent}% holding</span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">₹0 holding</span>
-                  )}
-                </div>
-              </div>
+                      <div>
+                        <span className="text-2xl font-black text-foreground block tracking-tight">
+                          {formatCur(comparison.currentPeriod.grossProfit)}
+                        </span>
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          <span className="text-xs font-bold text-emerald-400">
+                            {currentMargin}% Margin
+                          </span>
+                          <span className={`text-[10px] font-semibold ${marginPts >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                            ({marginPts >= 0 ? `+${marginPts}` : `${marginPts}`} pts vs prior)
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-border/40 flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground text-[11px]">COGS Cost Base:</span>
+                        <span className="font-semibold text-muted-foreground text-xs">{formatCur(currentCogs)}</span>
+                      </div>
+                    </div>
+
+                    {/* Box 3: Orders & Customer Returns (Combines Orders, Returns & Return Rate) */}
+                    <div className="p-4 rounded-2xl bg-secondary/30 border border-border/40 space-y-2.5 hover:bg-secondary/40 transition-all flex flex-col justify-between shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-muted-foreground flex items-center gap-1.5 uppercase tracking-wider">
+                          <PackageX className="w-3.5 h-3.5 text-muted-foreground" /> Orders & Returns
+                        </span>
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-lg ${
+                          ordersChange >= 0 ? 'bg-emerald-500/15 text-emerald-400' : 'bg-rose-500/15 text-rose-400'
+                        }`}>
+                          {ordersChange >= 0 ? `+${ordersChange}%` : `${ordersChange}%`} orders
+                        </span>
+                      </div>
+
+                      <div>
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-2xl font-black text-foreground tracking-tight">
+                            {totalOrders}
+                          </span>
+                          <span className="text-xs text-muted-foreground font-semibold">Total Orders</span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          Prior Period: {comparison.priorPeriod.totalOrders} Orders
+                        </p>
+                      </div>
+
+                      <div className="pt-2 border-t border-border/40 flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground text-[11px]">Returns ({returnRate}% rate):</span>
+                        <span className="text-xs font-bold text-foreground">
+                          {totalReturns} ({returnsChange >= 0 ? `+${returnsChange}%` : `${returnsChange}%`})
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Box 4: Inventory & Working Capital */}
+                    <div className="p-4 rounded-2xl bg-secondary/30 border border-border/40 space-y-2.5 hover:bg-secondary/40 transition-all flex flex-col justify-between shadow-xs">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-muted-foreground flex items-center gap-1.5 uppercase tracking-wider">
+                          <Boxes className="w-3.5 h-3.5 text-muted-foreground" /> Inventory & Capital
+                        </span>
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-lg bg-secondary text-muted-foreground">
+                          {invChange >= 0 ? `+${invChange}%` : `${invChange}%`} holding
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-2xl font-black text-foreground block tracking-tight">
+                          {formatCur(inventoryVal)}
+                        </span>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          Catalog: {products.length} Products
+                        </p>
+                      </div>
+
+                      <div className="pt-2 border-t border-border/40 flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground text-[11px]">Runway Status:</span>
+                        <span className="font-semibold text-foreground text-xs">
+                          {products.filter(p => p.stock <= (p.minStock || 5)).length > 0
+                            ? `${products.filter(p => p.stock <= (p.minStock || 5)).length} Reorders Needed`
+                            : 'Healthy Stock Buffer'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
 
           {/* Deterministic Profit Bridge */}
           <Card className="ios-glass rounded-2xl border-border/50">
             <CardHeader className="pb-3">
-              <CardTitle className="text-base font-bold flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-emerald-400" /> Deterministic Profit Bridge Analysis
+              <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+                <BarChart3 className="w-5 h-5 text-muted-foreground" /> Deterministic Profit Bridge Analysis
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-6 gap-2 text-xs">
-                {profitBridge.components.map((c, i) => (
-                  <div
-                    key={i}
-                    className={`p-3 rounded-xl border space-y-1 text-center ${
-                      c.type === 'base'
-                        ? 'bg-secondary/40 border-border/40'
-                        : c.type === 'positive'
-                        ? 'bg-emerald-500/10 border-emerald-500/30'
-                        : c.type === 'negative'
-                        ? 'bg-rose-500/10 border-rose-500/30'
-                        : 'bg-primary/10 border-primary/30 font-bold'
-                    }`}
-                  >
-                    <span className="text-[10px] text-muted-foreground block truncate">{c.label}</span>
-                    <span className={`text-sm font-black block ${c.type === 'positive' ? 'text-emerald-400' : c.type === 'negative' ? 'text-rose-400' : 'text-foreground'}`}>
-                      {c.amount >= 0 ? `+${formatCur(c.amount)}` : `${formatCur(c.amount)}`}
-                    </span>
-                    <span className="text-[9px] text-muted-foreground block leading-snug">{c.description}</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+              {(() => {
+                const priorProfit = profitBridge.priorProfit;
+                const currentProfit = profitBridge.currentProfit;
+                const netDelta = currentProfit - priorProfit;
+                const netPercent = priorProfit > 0 ? Math.round((netDelta / priorProfit) * 1000) / 10 : 0;
+                const absDelta = Math.abs(netDelta);
+                const varianceDrivers = profitBridge.components.filter(c => c.type !== 'base' && c.type !== 'total');
 
-          {/* AI Executive Brief */}
-          <Card className="ios-glass rounded-2xl border-amber-500/20 bg-amber-500/5">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base font-bold flex items-center gap-2 text-amber-400">
-                <Sparkles className="w-5 h-5 text-amber-400" /> AI Executive Brief
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 text-xs">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <div className="p-3 rounded-xl bg-background/60 border border-border/30 space-y-1">
-                    <span className="font-bold text-foreground text-xs block">Overall Business Status</span>
-                    <p className="text-muted-foreground text-[11px]">{brief.overallStatus}</p>
-                  </div>
-                  <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 space-y-1">
-                    <span className="font-bold text-emerald-400 text-xs block">Biggest Positive Contribution</span>
-                    <p className="text-muted-foreground text-[11px]">{brief.biggestPositiveChange}</p>
-                  </div>
-                </div>
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3.5 text-xs">
+                    {/* Box 1: Profit Progression Anchor (Combines Prior Profit, Current Profit & Net Delta in 1 box!) */}
+                    <div className="p-4 rounded-2xl bg-secondary/30 hover:bg-secondary/40 border border-border/50 hover:border-border/70 space-y-3 flex flex-col justify-between shadow-xs transition-all">
+                      <div className="flex items-start justify-between gap-1.5">
+                        <span className="text-[11px] font-bold text-foreground/90 uppercase tracking-wider">
+                          Profit Trajectory
+                        </span>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 border border-border/50 bg-secondary/60 text-muted-foreground">
+                          {netPercent >= 0 ? `+${netPercent}%` : `${netPercent}%`}
+                        </span>
+                      </div>
 
-                <div className="space-y-2">
-                  <div className="p-3 rounded-xl bg-background/60 border border-border/30 space-y-1">
-                    <span className="font-bold text-amber-400 text-xs block">Primary Operational Risk</span>
-                    <p className="text-muted-foreground text-[11px]">{brief.mainRisk}</p>
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] text-muted-foreground block font-medium uppercase tracking-wider">
+                          Net Shift
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {netDelta >= 0 ? (
+                            <TrendingUp className="w-4 h-4 text-emerald-400 shrink-0" />
+                          ) : (
+                            <TrendingDown className="w-4 h-4 text-rose-400 shrink-0" />
+                          )}
+                          <span className={`text-xl font-extrabold tracking-tight ${
+                            netDelta >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                          }`}>
+                            {netDelta >= 0 ? `+${formatCur(netDelta)}` : formatCur(netDelta)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="pt-2.5 border-t border-border/30 text-[11px] space-y-1">
+                        <div className="flex items-center justify-between text-muted-foreground">
+                          <span>Prior Period:</span>
+                          <span className="font-semibold text-foreground">{formatCur(priorProfit)}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-muted-foreground">
+                          <span>Realized Profit:</span>
+                          <span className="font-bold text-foreground">{formatCur(currentProfit)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Boxes 2-5: The 4 Distinct Variance Drivers */}
+                    {varianceDrivers.map((c, i) => {
+                      const share = absDelta > 0 ? Math.round((Math.abs(c.amount) / absDelta) * 1000) / 10 : 0;
+                      const isPositive = c.amount > 0;
+                      const isNegative = c.amount < 0;
+
+                      return (
+                        <div
+                          key={i}
+                          className="p-4 rounded-2xl bg-secondary/25 hover:bg-secondary/35 border border-border/50 hover:border-border/70 space-y-3 flex flex-col justify-between transition-all shadow-xs"
+                        >
+                          <div className="flex items-start justify-between gap-1.5">
+                            <span className="text-xs font-bold text-foreground leading-tight line-clamp-1" title={c.label}>
+                              {c.label}
+                            </span>
+                            {share > 0 && (
+                              <span
+                                className="text-[10px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap shrink-0 border border-border/50 bg-secondary/60 text-muted-foreground"
+                                title={`${share}% share of total variance`}
+                              >
+                                {share}% impact
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5">
+                              {isPositive ? (
+                                <TrendingUp className="w-4 h-4 text-emerald-400 shrink-0" />
+                              ) : isNegative ? (
+                                <TrendingDown className="w-4 h-4 text-rose-400 shrink-0" />
+                              ) : null}
+                              <span className={`text-xl font-extrabold tracking-tight ${
+                                isPositive ? 'text-emerald-400' : isNegative ? 'text-rose-400' : 'text-foreground'
+                              }`}>
+                                {isPositive ? `+${formatCur(c.amount)}` : formatCur(c.amount)}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5 leading-relaxed">
+                              {c.description}
+                            </p>
+                          </div>
+
+                          <div className="pt-2.5 border-t border-border/30 flex items-center justify-between text-[11px] text-muted-foreground">
+                            <span>Driver Category:</span>
+                            <span className="font-semibold text-foreground/90 px-1.5 py-0.5 rounded-md bg-secondary/50 text-[10px]">
+                              {c.label.includes('Revenue')
+                                ? 'Sales Volume'
+                                : c.label.includes('Supplier')
+                                ? 'Procurement'
+                                : c.label.includes('Returns')
+                                ? 'Operations'
+                                : 'Catalog Mix'}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="p-3 rounded-xl bg-primary/10 border border-primary/20 space-y-1">
-                    <span className="font-bold text-primary text-xs block">Executive Action Priorities</span>
-                    <ul className="list-disc list-inside text-muted-foreground text-[11px] space-y-0.5">
-                      {brief.recommendedActions.map((act, i) => (
-                        <li key={i}>{act}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </div>
@@ -878,7 +990,7 @@ function ExecutiveIntelligencePageContent() {
       {/* TAB 2: DEMAND & REVENUE FORECASTING */}
       {/* ========================================================================= */}
       {activeTab === 'forecasting' && (
-        (dataReadiness?.level === 'LEARNING' || !capabilities?.demandForecasting) ? (
+        !isForecastingUnlocked ? (
           <div className="space-y-6">
             {/* Live Daily Adaptive AI Learning Engine with Tokenized Privacy Shield */}
             <DailyAILearningBanner />
@@ -954,44 +1066,9 @@ function ExecutiveIntelligencePageContent() {
           </div>
         ) : (
         <div className="space-y-6">
-          {/* Forecasting KPIs */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-            <Card className="ios-glass rounded-2xl border-primary/20">
-              <CardContent className="p-4 space-y-1">
-                <span className="text-xs text-muted-foreground font-semibold">Projected 30D Revenue</span>
-                <div className="text-2xl font-black text-primary">{formatCur(scenarioTotals.projected30DayRevenue)}</div>
-                <span className="text-[11px] text-emerald-400 font-bold">Demand Multiplier: {scenarioTotals.demandMultiplier}x</span>
-              </CardContent>
-            </Card>
-
-            <Card className="ios-glass rounded-2xl border-border/40">
-              <CardContent className="p-4 space-y-1">
-                <span className="text-xs text-muted-foreground font-semibold">Projected 30D Profit</span>
-                <div className="text-2xl font-black text-foreground">{formatCur(scenarioTotals.projected30DayProfit)}</div>
-                <span className="text-[11px] text-muted-foreground">Estimated gross profit</span>
-              </CardContent>
-            </Card>
-
-            <Card className="ios-glass rounded-2xl border-rose-500/20">
-              <CardContent className="p-4 space-y-1">
-                <span className="text-xs text-muted-foreground font-semibold">Imminent Stockouts</span>
-                <div className="text-2xl font-black text-rose-400">{scenarioTotals.criticalStockouts} SKUs</div>
-                <span className="text-[11px] text-rose-400 font-bold">Action Required</span>
-              </CardContent>
-            </Card>
-
-            <Card className="ios-glass rounded-2xl border-amber-500/20">
-              <CardContent className="p-4 space-y-1">
-                <span className="text-xs text-muted-foreground font-semibold">Excess Capital Risk</span>
-                <div className="text-2xl font-black text-amber-400">{formatCur(forecastingReport.projectedExcessCapital)}</div>
-                <span className="text-[11px] text-amber-400 font-bold">In Slow Inventory</span>
-              </CardContent>
-            </Card>
-          </div>
-
           {/* Scenario Simulator */}
-          <Card className="ios-glass rounded-2xl border-border/50">
-            <CardHeader className="pb-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <Card className="ios-glass rounded-2xl border-border/50 shadow-md overflow-hidden">
+            <CardHeader className="pb-4 flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-border/30">
               <div>
                 <CardTitle className="text-base font-bold flex items-center gap-2">
                   <Zap className="w-5 h-5 text-amber-400" /> Forecast Scenario Simulator
@@ -1015,6 +1092,33 @@ function ExecutiveIntelligencePageContent() {
                 ))}
               </div>
             </CardHeader>
+            <CardContent className="pt-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="p-4 rounded-xl bg-background/50 border border-border/40 space-y-1">
+                  <span className="text-xs text-muted-foreground font-semibold">Projected 30D Revenue</span>
+                  <div className="text-2xl font-black text-foreground font-mono">{formatCur(scenarioTotals.projected30DayRevenue)}</div>
+                  <span className="text-[11px] text-muted-foreground">Demand Multiplier: {scenarioTotals.demandMultiplier}x</span>
+                </div>
+
+                <div className="p-4 rounded-xl bg-background/50 border border-border/40 space-y-1">
+                  <span className="text-xs text-muted-foreground font-semibold">Projected 30D Profit</span>
+                  <div className="text-2xl font-black text-foreground font-mono">{formatCur(scenarioTotals.projected30DayProfit)}</div>
+                  <span className="text-[11px] text-muted-foreground">Estimated gross profit</span>
+                </div>
+
+                <div className="p-4 rounded-xl bg-background/50 border border-border/40 space-y-1">
+                  <span className="text-xs text-muted-foreground font-semibold">Imminent Stockouts</span>
+                  <div className="text-2xl font-black text-rose-400 font-mono">{scenarioTotals.criticalStockouts} SKUs</div>
+                  <span className="text-[11px] text-muted-foreground">Action Required</span>
+                </div>
+
+                <div className="p-4 rounded-xl bg-background/50 border border-border/40 space-y-1">
+                  <span className="text-xs text-muted-foreground font-semibold">Excess Capital Risk</span>
+                  <div className="text-2xl font-black text-amber-400 font-mono">{formatCur(forecastingReport.projectedExcessCapital)}</div>
+                  <span className="text-[11px] text-muted-foreground">In Slow Inventory</span>
+                </div>
+              </div>
+            </CardContent>
           </Card>
 
           {/* Demand & Stockout Table */}
@@ -1267,387 +1371,6 @@ function ExecutiveIntelligencePageContent() {
               </div>
             </CardContent>
           </Card>
-        </div>
-      )}
-
-      {/* ========================================================================= */}
-      {/* TAB: CUSTOMER GROWTH & RETENTION INTELLIGENCE */}
-      {/* ========================================================================= */}
-      {activeTab === 'growth' && (
-        <div className="space-y-6">
-          {/* Active Unlock Countdown Banner if under 50 orders */}
-          {currentOrders < 50 && (
-            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
-              <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                  <Clock className="w-4 h-4" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h4 className="text-xs font-bold text-foreground">
-                      Customer Growth Intelligence Calibrating
-                    </h4>
-                    <Badge variant="outline" className="text-[10px] font-mono font-bold text-amber-300 border-amber-500/40 bg-amber-500/15">
-                      {currentOrders} / 50 Orders ({Math.min(100, Math.round((currentOrders / 50) * 100))}%)
-                    </Badge>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    {Math.max(1, 50 - currentOrders)} more customer order{Math.max(1, 50 - currentOrders) === 1 ? '' : 's'} needed to unlock automated growth bottleneck modeling, repeat customer cohorts, and volume pricing.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2.5 shrink-0 self-end sm:self-center">
-                <div className="w-32 bg-secondary/60 h-2 rounded-full overflow-hidden border border-border/40">
-                  <div
-                    className="bg-amber-500 h-full rounded-full transition-all duration-500"
-                    style={{ width: `${Math.max(5, Math.min(100, Math.round((currentOrders / 50) * 100)))}%` }}
-                  />
-                </div>
-                <span className="text-xs font-mono font-bold text-amber-400">
-                  {Math.min(100, Math.round((currentOrders / 50) * 100))}%
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Top Scorecard Bar */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            <Card className="ios-glass rounded-2xl border-primary/20 col-span-2 md:col-span-1">
-              <CardContent className="p-4 space-y-1">
-                <span className="text-xs text-muted-foreground font-semibold block">Growth Health Score</span>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-3xl font-black text-foreground">{growthReport.growthHealthScore}</span>
-                  <span className="text-xs text-muted-foreground">/ 100</span>
-                </div>
-                <Badge className="bg-primary/20 text-primary text-[10px] font-bold">
-                  {growthReport.scoreCategory}
-                </Badge>
-              </CardContent>
-            </Card>
-
-            <Card className="ios-glass rounded-2xl border-border/40">
-              <CardContent className="p-4 text-center space-y-1">
-                <span className="text-xs text-muted-foreground block font-semibold">Repeat Purchase Rate</span>
-                <span className="text-xl font-black text-emerald-400 block">{growthReport.repeatPurchaseRatePercent}%</span>
-                <span className="text-xs text-muted-foreground font-semibold block">
-                  {transactions.length > 0 ? (growthReport.repeatRateChangePoints >= 0 ? `+${growthReport.repeatRateChangePoints} pts vs prior` : `${growthReport.repeatRateChangePoints} pts vs prior`) : 'Awaiting Sales Data'}
-                </span>
-              </CardContent>
-            </Card>
-
-            <Card className="ios-glass rounded-2xl border-border/40">
-              <CardContent className="p-4 text-center space-y-1">
-                <span className="text-xs text-muted-foreground block font-semibold">Average Order Value</span>
-                <span className="text-xl font-black text-foreground block">{formatCur(growthReport.avgOrderValue)}</span>
-                <span className="text-xs text-muted-foreground font-semibold block">
-                  {transactions.length > 0 ? 'Per Transaction' : 'No Orders'}
-                </span>
-              </CardContent>
-            </Card>
-
-            <Card className="ios-glass rounded-2xl border-border/40">
-              <CardContent className="p-4 text-center space-y-1">
-                <span className="text-xs text-muted-foreground block font-semibold">At-Risk Customers</span>
-                <span className="text-xl font-black text-rose-400 block">{growthReport.atRiskCustomers.length}</span>
-                <span className="text-xs text-rose-400/90 font-semibold block">
-                  {transactions.length > 0 ? 'Exceeded Interval' : '0 Churn Alerts'}
-                </span>
-              </CardContent>
-            </Card>
-
-            <Card className="ios-glass rounded-2xl border-border/40">
-              <CardContent className="p-4 text-center space-y-1">
-                <span className="text-xs text-muted-foreground block font-semibold">Concentration Risk</span>
-                <Badge
-                  className={`text-[10px] font-bold uppercase mt-1 ${
-                    growthReport.revenueConcentration.riskLevel === 'High'
-                      ? 'bg-rose-500 text-white'
-                      : growthReport.revenueConcentration.riskLevel === 'Medium'
-                      ? 'bg-amber-500/20 text-amber-300'
-                      : 'bg-emerald-500/20 text-emerald-300'
-                  }`}
-                >
-                  {growthReport.revenueConcentration.riskLevel} Risk
-                </Badge>
-                <span className="text-[10px] text-muted-foreground block truncate">
-                  {transactions.length > 0 ? `Top 3 SKUs: ${growthReport.revenueConcentration.top3ProductsPercent}%` : 'Top 3 SKUs: 0%'}
-                </span>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Drivers & Bottlenecks Bar */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card className="ios-glass rounded-2xl border-emerald-500/30">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-bold flex items-center gap-2 text-emerald-400">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Positive Revenue Expansion Drivers
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-xs">
-                {growthReport.positiveDrivers.length === 0 ? (
-                  currentOrders < 20 ? (
-                    <UnlockProgressCard
-                      mode="compact"
-                      accentColor="emerald"
-                      currentOrders={currentOrders}
-                      targetOrders={20}
-                      featureName="Positive Revenue Drivers"
-                      description="Calibrating catalog repeat purchase rates and product demand concentration to isolate positive expansion drivers."
-                    />
-                  ) : (
-                    <p className="text-muted-foreground text-xs py-3 text-center">
-                      No sales transactions recorded. Upload sales history to identify expansion drivers.
-                    </p>
-                  )
-                ) : (
-                  growthReport.positiveDrivers.map((d: any, i: number) => (
-                    <div key={i} className="flex items-start gap-2 p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-                      <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                      <span className="text-emerald-200 leading-snug">{d}</span>
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="ios-glass rounded-2xl border-amber-500/30">
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between gap-2">
-                  <CardTitle className="text-sm font-bold flex items-center gap-2 text-amber-400">
-                    <AlertTriangle className="w-4 h-4 text-amber-400" /> Operational Growth Bottlenecks & Risks
-                  </CardTitle>
-                  {currentOrders < 50 && (
-                    <Badge variant="outline" className="text-[10px] font-mono font-bold text-amber-400 border-amber-500/30 bg-amber-500/10">
-                      {currentOrders} / 50 Orders
-                    </Badge>
-                  )}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-2 text-xs">
-                {currentOrders < 50 ? (
-                  <UnlockProgressCard
-                    mode="compact"
-                    accentColor="amber"
-                    currentOrders={currentOrders}
-                    targetOrders={50}
-                    featureName="Operational Bottlenecks & Risk Warnings"
-                    description="AnalyzeUp observes sales velocity, inventory depletion runway, and supplier lead-time variances. Automated detection of catalog stockout bottlenecks and supplier capacity risks unlocks at 50 recorded customer orders."
-                  />
-                ) : growthReport.growthBottlenecks.length === 0 ? (
-                  <div className="flex items-start gap-2.5 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                    <div>
-                      <strong className="text-emerald-400 block text-xs">Zero Operational Bottlenecks Detected</strong>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
-                        All supplier lead times and catalog inventory stock levels are operating within safe expansion parameters.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  growthReport.growthBottlenecks.map((b: any, i: number) => (
-                    <div key={i} className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
-                      <ShieldAlert className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                      <span className="text-amber-200 leading-snug">{b}</span>
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Centralized Scored Growth Opportunities Table */}
-          <Card className="ios-glass rounded-2xl border-border/50">
-            <CardHeader className="pb-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div>
-                <CardTitle className="text-lg font-bold flex items-center gap-2">
-                  <Rocket className="w-5 h-5 text-primary" /> Centralized Growth Opportunity Engine
-                </CardTitle>
-                <CardDescription className="text-sm">
-                  Scored growth recommendations with calculated revenue impact and confidence.
-                </CardDescription>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0 overflow-x-auto scrollbar-none">
-              <Table className="min-w-[850px]">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-xs whitespace-nowrap w-[70px]">Score</TableHead>
-                    <TableHead className="text-xs min-w-[260px]">Opportunity & Target</TableHead>
-                    <TableHead className="text-xs whitespace-nowrap min-w-[150px]">Category</TableHead>
-                    <TableHead className="text-xs whitespace-nowrap min-w-[120px]">Est. Rev Impact</TableHead>
-                    <TableHead className="text-xs whitespace-nowrap min-w-[120px]">Est. Profit Impact</TableHead>
-                    <TableHead className="text-xs whitespace-nowrap min-w-[100px]">Confidence</TableHead>
-                    <TableHead className="text-xs whitespace-nowrap text-right min-w-[140px]">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {growthReport.opportunities.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="py-6 px-4">
-                        {currentOrders < 50 ? (
-                          <div className="max-w-md mx-auto py-2">
-                            <UnlockProgressCard
-                              mode="compact"
-                              accentColor="purple"
-                              currentOrders={currentOrders}
-                              targetOrders={50}
-                              featureName="Scored Growth Opportunities"
-                              description="Multi-product volume bundling, clearance arbitrage, and repeat customer retention engines activate at 50 recorded customer orders."
-                            />
-                          </div>
-                        ) : (
-                          <p className="text-center text-xs text-muted-foreground">
-                            No active growth opportunities detected. Catalog operations are balanced.
-                          </p>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    growthReport.opportunities.map((opp: any) => (
-                      <TableRow key={opp.id} className="hover:bg-secondary/30 transition-colors">
-                        <TableCell>
-                          <span className="w-8 h-8 rounded-full bg-primary/20 text-primary font-black text-xs inline-flex items-center justify-center border border-primary/30">
-                            {opp.opportunityScore}
-                          </span>
-                        </TableCell>
-                        <TableCell>
-                          <div className="space-y-0.5">
-                            <span className="font-bold text-foreground text-xs block">{opp.title}</span>
-                            <span className="text-[11px] text-muted-foreground block max-w-sm leading-relaxed">{opp.description}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="whitespace-nowrap">
-                          <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wider whitespace-nowrap px-3 py-1">
-                            {opp.type.replace('_', ' ')}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-bold text-emerald-400 text-xs">
-                          +{formatCur(opp.expectedAdditionalRevenue)}
-                        </TableCell>
-                        <TableCell className="font-bold text-foreground text-xs">
-                          +{formatCur(opp.expectedAdditionalProfit)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge className="bg-primary/10 text-primary text-[10px]">
-                            {opp.confidence}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            {opp.status === 'ACCEPTED' ? (
-                              <Badge className="bg-emerald-500 text-white text-[10px]">Accepted</Badge>
-                            ) : (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 text-[11px] rounded-lg border-border/40"
-                                  onClick={() => {
-                                    setConfirmData({
-                                      title: `Dismiss Growth Opportunity: ${opp.title}`,
-                                      description: `Are you sure you want to dismiss this growth opportunity? This will remove it from your active queue.`,
-                                      onConfirm: () => {
-                                        saveOpportunityStatus(opp.id, 'DISMISSED');
-                                        toast({ title: 'Opportunity Dismissed', description: 'Removed from priority queue.' });
-                                      }
-                                    });
-                                  }}
-                                >
-                                  Dismiss
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  className="h-7 text-[11px] rounded-lg gap-1 bg-primary text-primary-foreground font-bold"
-                                  onClick={() => {
-                                    setConfirmData({
-                                      title: `Execute Growth Opportunity: ${opp.title}`,
-                                      description: `Are you sure you want to accept and execute this opportunity? This will open Copilot with recommendation: "${opp.recommendation}".`,
-                                      onConfirm: () => {
-                                        saveOpportunityStatus(opp.id, 'ACCEPTED');
-                                        handleAskCopilot(`How should I execute this growth opportunity: ${opp.title}? ${opp.recommendation}`);
-                                        toast({ title: '🚀 Executing Opportunity', description: 'Copilot opened with execution plan.' });
-                                      }
-                                    });
-                                  }}
-                                >
-                                  Execute <ArrowRight className="w-3 h-3" />
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-
-          {/* Cross-Sell & Repeat Purchase Matrix */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card className="ios-glass rounded-2xl border-border/40">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-bold flex items-center gap-2">
-                  <Repeat className="w-4 h-4 text-primary" /> Verified Cross-Sell Product Combinations
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-xs">
-                {growthReport.crossSellOpportunities.length === 0 ? (
-                  currentOrders < 40 ? (
-                    <UnlockProgressCard
-                      mode="compact"
-                      accentColor="blue"
-                      currentOrders={currentOrders}
-                      targetOrders={40}
-                      featureName="Cross-Sell Affinity Matrix"
-                      description="Multi-item order co-occurrence modeling activates at 40 customer orders to recommend high-converting item bundles."
-                    />
-                  ) : (
-                    <p className="text-muted-foreground text-xs py-4 text-center">
-                      No co-occurrence patterns detected yet. Record more multi-item orders.
-                    </p>
-                  )
-                ) : (
-                  growthReport.crossSellOpportunities.map((cs: any, i: number) => (
-                    <div key={i} className="p-3 rounded-xl bg-secondary/30 border border-border/30 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-foreground text-xs">{cs.primaryProductName} + {cs.suggestedProductName}</span>
-                        <span className="text-emerald-400 font-bold text-[11px]">+{formatCur(cs.potentialRevenueImpact)} Impact</span>
-                      </div>
-                      <p className="text-muted-foreground text-[11px]">{cs.recommendation}</p>
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="ios-glass rounded-2xl border-border/40">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-bold flex items-center gap-2">
-                  <Users className="w-4 h-4 text-amber-400" /> At-Risk Customer Retention Queue
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-xs">
-                {growthReport.atRiskCustomers.length === 0 ? (
-                  <p className="text-muted-foreground text-xs py-4 text-center">
-                    Zero customer churn alerts. All repeat buyers are purchasing within normal intervals.
-                  </p>
-                ) : (
-                  growthReport.atRiskCustomers.map((cust: any, i: number) => (
-                    <div key={i} className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 space-y-1">
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-foreground text-xs">{cust.name} ({cust.segmentLabel})</span>
-                        <Badge className="bg-rose-500 text-white text-[10px]">{cust.recencyDays}d Inactive</Badge>
-                      </div>
-                      <p className="text-rose-200 text-[11px]">{cust.atRiskReason}</p>
-                    </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
-          </div>
         </div>
       )}
 

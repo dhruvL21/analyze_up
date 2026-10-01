@@ -21,15 +21,6 @@ import {
   AlertOctagon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-
-const PRESET_QUICK_QUERIES = [
-  { label: 'Fast Moving', query: 'fast moving' },
-  { label: 'Running Out Soon', query: 'running out this week' },
-  { label: 'Dead Stock', query: 'find dead stock' },
-  { label: 'Highest Margins', query: 'highest margin' },
-  { label: 'Low Margin (<20%)', query: 'less than 20%' },
-  { label: 'Overstocked', query: 'overstocked' },
-];
 import {
   Card,
   CardContent,
@@ -68,7 +59,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ImportDialog } from '@/components/import-dialog';
 import { AddProductModal } from '@/components/add-product-modal';
 import { useToast } from '@/hooks/use-toast';
-import { computeProductIntelligence, filterProductsByNaturalLanguage } from '@/lib/product-intelligence-engine';
+import { computeProductIntelligence, filterProductsByNaturalLanguage, classifyProductMovement, type ProductMovementCategory } from '@/lib/product-intelligence-engine';
 import { InventoryInsightsTicker } from '@/components/inventory-insights-ticker';
 import { InventoryRecommendationsPanel } from '@/components/inventory-recommendations-panel';
 import { ProductIntelligenceDrawer } from '@/components/product-intelligence-drawer';
@@ -100,16 +91,24 @@ function InventoryPageContent() {
 
   // Intelligence active flag: only show quick prediction/dead-stock queries when learning phase completes & predictive capabilities unlock
   const isIntelligenceActive = useMemo(() => {
-    if (!dataReadiness) return false;
-    const isLearning = dataReadiness.level === 'LEARNING' || businessBuddyCalibration?.status === 'LEARNING';
+    const isThresholdMet =
+      (dataReadiness?.totalOrders ?? 0) >= 50 ||
+      (transactions.length >= 50) ||
+      (dataReadiness?.historicalDays ?? 0) >= 14 ||
+      (dataReadiness?.score ?? 0) >= 40 ||
+      Boolean(dataReadiness?.level && dataReadiness.level !== 'LEARNING') ||
+      businessBuddyCalibration?.isOverridden ||
+      businessBuddyCalibration?.status === 'CALIBRATED';
+
     const hasActivePredictiveCapabilities = Boolean(
       capabilities?.deadStockDetection ||
       capabilities?.demandForecasting ||
       capabilities?.trendAnalysis ||
-      capabilities?.stockoutPrediction
+      capabilities?.stockoutPrediction ||
+      isThresholdMet
     );
-    return !isLearning && hasActivePredictiveCapabilities;
-  }, [dataReadiness, businessBuddyCalibration, capabilities]);
+    return isThresholdMet || hasActivePredictiveCapabilities;
+  }, [dataReadiness, businessBuddyCalibration, capabilities, transactions.length]);
 
   const [isFormDialogOpen, setIsFormDialogOpen] = useState(false);
   const [isSellDialogOpen, setIsSellDialogOpen] = useState(false);
@@ -130,6 +129,7 @@ function InventoryPageContent() {
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
+  const [movementFilter, setMovementFilter] = useState<'all' | ProductMovementCategory>('all');
 
   const [drawerProduct, setDrawerProduct] = useState<Product | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -151,10 +151,10 @@ function InventoryPageContent() {
     }
   }, [searchParams]);
 
-  // Reset pagination on search query change
+  // Reset pagination on search query or movement filter change
   useEffect(() => {
     setCurrentPage(1);
-  }, [debouncedSearchQuery, pageSize]);
+  }, [debouncedSearchQuery, pageSize, movementFilter]);
 
   const { toast } = useToast();
 
@@ -182,113 +182,6 @@ function InventoryPageContent() {
   }, [suppliers]);
 
   const currencySymbol = businessProfile?.currency?.includes('USD') ? '$' : '₹';
-
-  // 1. High-Performance Memoized Filter (runs only on debounced changes)
-  const filteredProducts = useMemo(() => {
-    // Unify duplicate entries sharing identical SKU, prioritizing authentic/integrated products
-    const uniqueProductsMap = new Map<string, Product>();
-    const withoutSkuProducts: Product[] = [];
-
-    products.forEach(p => {
-      const skuKey = (p.sku || '').trim().toUpperCase();
-      if (!skuKey) {
-        withoutSkuProducts.push(p);
-        return;
-      }
-
-      if (!uniqueProductsMap.has(skuKey)) {
-        uniqueProductsMap.set(skuKey, p);
-      } else {
-        const existing = uniqueProductsMap.get(skuKey)!;
-        const existingIsShopify = Boolean(
-          existing.shopifyProductId ||
-          existing.shopifyVariantId ||
-          existing.id?.startsWith('shopify_') ||
-          existing.source === 'SHOPIFY' ||
-          existing.source === 'shopify'
-        );
-        const currentIsShopify = Boolean(
-          p.shopifyProductId ||
-          p.shopifyVariantId ||
-          p.id?.startsWith('shopify_') ||
-          p.source === 'SHOPIFY' ||
-          p.source === 'shopify'
-        );
-
-        if (currentIsShopify && !existingIsShopify) {
-          uniqueProductsMap.set(skuKey, p);
-        } else if (!currentIsShopify && !existingIsShopify) {
-          if ((p.stock || 0) > 0 && (existing.stock || 0) === 0) {
-            uniqueProductsMap.set(skuKey, p);
-          }
-        }
-      }
-    });
-
-    const unifiedProducts = [...Array.from(uniqueProductsMap.values()), ...withoutSkuProducts];
-    return filterProductsByNaturalLanguage(unifiedProducts, transactions, debouncedSearchQuery);
-  }, [products, transactions, debouncedSearchQuery]);
-
-  // 2. Pagination Calculations
-  const totalItems = filteredProducts.length;
-  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
-  const safeCurrentPage = Math.min(currentPage, totalPages);
-  const startIndex = (safeCurrentPage - 1) * pageSize;
-  const endIndex = Math.min(startIndex + pageSize, totalItems);
-
-  const paginatedProducts = useMemo(() => {
-    return filteredProducts.slice(startIndex, endIndex);
-  }, [filteredProducts, startIndex, endIndex]);
-
-  // 3. Pre-Indexed Fast Lookups (O(1) instead of O(N*M) lookups)
-  const transactionsByProduct = useMemo(() => {
-    const map = new Map<string, typeof transactions>();
-    transactions.forEach(t => {
-      const keys = [t.productId, t.sku, t.productName?.toLowerCase()].filter(Boolean);
-      keys.forEach(k => {
-        if (!map.has(k!)) map.set(k!, []);
-        map.get(k!)!.push(t);
-      });
-    });
-    return map;
-  }, [transactions]);
-
-  const returnsByProduct = useMemo(() => {
-    const map = new Map<string, typeof returns>();
-    returns.forEach(r => {
-      if (r.productId) {
-        if (!map.has(r.productId)) map.set(r.productId, []);
-        map.get(r.productId)!.push(r);
-      }
-    });
-    return map;
-  }, [returns]);
-
-  // 4. Compute Intelligence ONLY for the current visible 25/50 items (Instant < 2ms execution)
-  const computedPageReports = useMemo(() => {
-    return paginatedProducts.map(p => {
-      const pTx = transactionsByProduct.get(p.id) || transactionsByProduct.get(p.sku || '') || [];
-      const pRet = returnsByProduct.get(p.id) || [];
-      const report = computeProductIntelligence(p, pTx, pRet, suppliers, {
-        isDeadStockEnabled: Boolean(capabilities?.deadStockDetection && dataReadiness?.level !== 'LEARNING'),
-        isVelocityEnabled: capabilities?.trendAnalysis,
-        historicalDays: dataReadiness?.historicalDays,
-      });
-      return { product: p, report };
-    });
-  }, [paginatedProducts, transactionsByProduct, returnsByProduct, suppliers, capabilities, dataReadiness]);
-
-  const handleSellSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!sellingProduct) return;
-    
-    const formData = new FormData(e.currentTarget);
-    const quantity = Number(formData.get('quantity'));
-    
-    await recordSale(sellingProduct.id, quantity);
-    setIsSellDialogOpen(false);
-    setSellingProduct(null);
-  };
 
   // Operational Sales & Product Metrics
   const saleTransactions = useMemo(() => {
@@ -341,6 +234,144 @@ function InventoryPageContent() {
     return map;
   }, [saleTransactions]);
 
+  // Unified deduplicated catalog
+  const unifiedProducts = useMemo(() => {
+    const uniqueProductsMap = new Map<string, Product>();
+    const withoutSkuProducts: Product[] = [];
+
+    products.forEach(p => {
+      const skuKey = (p.sku || '').trim().toUpperCase();
+      if (!skuKey) {
+        withoutSkuProducts.push(p);
+        return;
+      }
+
+      if (!uniqueProductsMap.has(skuKey)) {
+        uniqueProductsMap.set(skuKey, p);
+      } else {
+        const existing = uniqueProductsMap.get(skuKey)!;
+        const existingIsShopify = Boolean(
+          existing.shopifyProductId ||
+          existing.shopifyVariantId ||
+          existing.id?.startsWith('shopify_') ||
+          existing.source === 'SHOPIFY' ||
+          existing.source === 'shopify'
+        );
+        const currentIsShopify = Boolean(
+          p.shopifyProductId ||
+          p.shopifyVariantId ||
+          p.id?.startsWith('shopify_') ||
+          p.source === 'SHOPIFY' ||
+          p.source === 'shopify'
+        );
+
+        if (currentIsShopify && !existingIsShopify) {
+          uniqueProductsMap.set(skuKey, p);
+        } else if (!currentIsShopify && !existingIsShopify) {
+          if ((p.stock || 0) > 0 && (existing.stock || 0) === 0) {
+            uniqueProductsMap.set(skuKey, p);
+          }
+        }
+      }
+    });
+
+    return [...Array.from(uniqueProductsMap.values()), ...withoutSkuProducts];
+  }, [products]);
+
+  // Movement Counts across the unified catalog (Fast Moving, Slow Moving, Dead Products)
+  const movementCounts = useMemo(() => {
+    const hasTransactions = saleTransactions.length > 0;
+    const counts = { all: unifiedProducts.length, fast: 0, slow: 0, dead: 0 };
+    unifiedProducts.forEach(p => {
+      const cat = classifyProductMovement(p, productSalesMap, hasTransactions);
+      if (cat === 'fast_moving') counts.fast++;
+      else if (cat === 'slow_moving') counts.slow++;
+      else if (cat === 'dead_stock') counts.dead++;
+    });
+    return counts;
+  }, [unifiedProducts, productSalesMap, saleTransactions]);
+
+  // 1. High-Performance Memoized Filter (runs on movement filter or debounced search changes)
+  const filteredProducts = useMemo(() => {
+    let list = unifiedProducts;
+    if (movementFilter !== 'all') {
+      const hasTransactions = saleTransactions.length > 0;
+      list = unifiedProducts.filter(p => {
+        return classifyProductMovement(p, productSalesMap, hasTransactions) === movementFilter;
+      });
+    }
+
+    return filterProductsByNaturalLanguage(list, transactions, debouncedSearchQuery);
+  }, [unifiedProducts, movementFilter, transactions, debouncedSearchQuery, productSalesMap, saleTransactions]);
+
+  // 2. Pagination Calculations
+  const totalItems = filteredProducts.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (safeCurrentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, totalItems);
+
+  const paginatedProducts = useMemo(() => {
+    return filteredProducts.slice(startIndex, endIndex);
+  }, [filteredProducts, startIndex, endIndex]);
+
+  // 3. Pre-Indexed Fast Lookups (O(1) instead of O(N*M) lookups)
+  const transactionsByProduct = useMemo(() => {
+    const map = new Map<string, typeof transactions>();
+    transactions.forEach(t => {
+      const keys = [t.productId, t.sku, t.productName?.toLowerCase()].filter(Boolean);
+      keys.forEach(k => {
+        if (!map.has(k!)) map.set(k!, []);
+        map.get(k!)!.push(t);
+      });
+    });
+    return map;
+  }, [transactions]);
+
+  const returnsByProduct = useMemo(() => {
+    const map = new Map<string, typeof returns>();
+    returns.forEach(r => {
+      if (r.productId) {
+        if (!map.has(r.productId)) map.set(r.productId, []);
+        map.get(r.productId)!.push(r);
+      }
+    });
+    return map;
+  }, [returns]);
+
+  // 4. Compute Intelligence ONLY for the current visible 25/50 items (Instant < 2ms execution)
+  const computedPageReports = useMemo(() => {
+    return paginatedProducts.map(p => {
+      const pTx = transactionsByProduct.get(p.id) || transactionsByProduct.get(p.sku || '') || [];
+      const pRet = returnsByProduct.get(p.id) || [];
+      const report = computeProductIntelligence(p, pTx, pRet, suppliers, {
+        isDeadStockEnabled: Boolean(
+          capabilities?.deadStockDetection ||
+          (dataReadiness?.totalOrders ?? 0) >= 80 ||
+          (dataReadiness?.historicalDays ?? 0) >= 30 ||
+          (dataReadiness?.level && dataReadiness.level !== 'LEARNING') ||
+          businessBuddyCalibration?.isOverridden ||
+          businessBuddyCalibration?.status === 'CALIBRATED'
+        ),
+        isVelocityEnabled: capabilities?.trendAnalysis,
+        historicalDays: dataReadiness?.historicalDays,
+      });
+      return { product: p, report };
+    });
+  }, [paginatedProducts, transactionsByProduct, returnsByProduct, suppliers, capabilities, dataReadiness]);
+
+  const handleSellSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (!sellingProduct) return;
+    
+    const formData = new FormData(e.currentTarget);
+    const quantity = Number(formData.get('quantity'));
+    
+    await recordSale(sellingProduct.id, quantity);
+    setIsSellDialogOpen(false);
+    setSellingProduct(null);
+  };
+
   const openProductReport = (product: Product) => {
     setDrawerProduct(product);
     setIsDrawerOpen(true);
@@ -380,16 +411,16 @@ function InventoryPageContent() {
 
         {/* Operations Executive KPI Summary Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Card className="ios-glass rounded-2xl border border-emerald-500/25 bg-emerald-950/10 p-4 shadow-md transition-all hover:border-emerald-500/40">
+          <Card className="ios-glass rounded-2xl border border-border/50 hover:border-primary/40 transition-all p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[11px] text-emerald-400 font-bold uppercase tracking-wider">Total Products Sold</p>
-                <h3 className="text-2xl font-black text-foreground mt-1 font-mono">
+                <p className="text-xs font-semibold text-muted-foreground">Total Products Sold</p>
+                <h3 className="text-2xl font-bold tracking-tight text-foreground mt-1 font-mono">
                   {totalProductsSold.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">Units</span>
                 </h3>
               </div>
-              <div className="p-2.5 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                <ShoppingBag className="w-5 h-5" />
+              <div className="p-2 rounded-xl bg-secondary/80 border border-border/40 shrink-0">
+                <ShoppingBag className="w-4 h-4 text-muted-foreground" />
               </div>
             </div>
             <p className="text-[11px] text-muted-foreground mt-2 flex items-center justify-between">
@@ -398,16 +429,16 @@ function InventoryPageContent() {
             </p>
           </Card>
 
-          <Card className="ios-glass rounded-2xl border border-blue-500/25 bg-blue-950/10 p-4 shadow-md transition-all hover:border-blue-500/40">
+          <Card className="ios-glass rounded-2xl border border-border/50 hover:border-primary/40 transition-all p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[11px] text-blue-400 font-bold uppercase tracking-wider">Active Catalog SKUs</p>
-                <h3 className="text-2xl font-black text-foreground mt-1 font-mono">
+                <p className="text-xs font-semibold text-muted-foreground">Active Catalog SKUs</p>
+                <h3 className="text-2xl font-bold tracking-tight text-foreground mt-1 font-mono">
                   {products.length.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">Products</span>
                 </h3>
               </div>
-              <div className="p-2.5 rounded-xl bg-blue-500/15 text-blue-400 border border-blue-500/30">
-                <Boxes className="w-5 h-5" />
+              <div className="p-2 rounded-xl bg-secondary/80 border border-border/40 shrink-0">
+                <Boxes className="w-4 h-4 text-muted-foreground" />
               </div>
             </div>
             <p className="text-[11px] text-muted-foreground mt-2 flex items-center justify-between">
@@ -416,16 +447,16 @@ function InventoryPageContent() {
             </p>
           </Card>
 
-          <Card className="ios-glass rounded-2xl border border-cyan-500/25 bg-cyan-950/10 p-4 shadow-md transition-all hover:border-cyan-500/40">
+          <Card className="ios-glass rounded-2xl border border-border/50 hover:border-primary/40 transition-all p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[11px] text-cyan-400 font-bold uppercase tracking-wider">Physical Stock on Hand</p>
-                <h3 className="text-2xl font-black text-foreground mt-1 font-mono">
+                <p className="text-xs font-semibold text-muted-foreground">Physical Stock on Hand</p>
+                <h3 className="text-2xl font-bold tracking-tight text-foreground mt-1 font-mono">
                   {totalStockUnits.toLocaleString()} <span className="text-xs font-normal text-muted-foreground">Units</span>
                 </h3>
               </div>
-              <div className="p-2.5 rounded-xl bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">
-                <PackageCheck className="w-5 h-5" />
+              <div className="p-2 rounded-xl bg-secondary/80 border border-border/40 shrink-0">
+                <PackageCheck className="w-4 h-4 text-muted-foreground" />
               </div>
             </div>
             <p className="text-[11px] text-muted-foreground mt-2 flex items-center justify-between">
@@ -434,21 +465,21 @@ function InventoryPageContent() {
             </p>
           </Card>
 
-          <Card className="ios-glass rounded-2xl border border-red-500/25 bg-red-950/10 p-4 shadow-md transition-all hover:border-red-500/40">
+          <Card className="ios-glass rounded-2xl border border-border/50 hover:border-primary/40 transition-all p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-[11px] text-red-400 font-bold uppercase tracking-wider">Stockout Radar</p>
-                <h3 className="text-2xl font-black text-foreground mt-1 font-mono">
+                <p className="text-xs font-semibold text-muted-foreground">Stockout Radar</p>
+                <h3 className="text-2xl font-bold tracking-tight text-foreground mt-1 font-mono">
                   {outOfStockCount} <span className="text-xs font-normal text-muted-foreground">Out of Stock</span>
                 </h3>
               </div>
-              <div className="p-2.5 rounded-xl bg-red-500/15 text-red-400 border border-red-500/30">
-                <AlertOctagon className="w-5 h-5" />
+              <div className="p-2 rounded-xl bg-secondary/80 border border-border/40 shrink-0">
+                <AlertOctagon className="w-4 h-4 text-muted-foreground" />
               </div>
             </div>
             <p className="text-[11px] text-muted-foreground mt-2 flex items-center justify-between">
               <span>Low buffer items:</span>
-              <strong className="text-amber-400">{lowStockCount} SKUs</strong>
+              <strong className="text-foreground">{lowStockCount} SKUs</strong>
             </p>
           </Card>
         </div>
@@ -470,14 +501,14 @@ function InventoryPageContent() {
                 </CardDescription>
               </div>
 
-              <div className="flex items-center gap-2.5">
-                <div className="relative w-full sm:w-64">
+              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto">
+                <div className="relative flex-1 sm:w-64 min-w-[180px]">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                   <Input
                     placeholder="Search name, SKU, tags..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9 pr-8 h-9 rounded-xl border-border/50 bg-secondary/30 text-xs shadow-inner focus-visible:ring-primary"
+                    className="pl-9 pr-8 h-9 rounded-xl border-border/50 bg-secondary/30 text-xs shadow-inner focus-visible:ring-primary w-full"
                   />
                   {searchQuery && (
                     <button
@@ -488,50 +519,99 @@ function InventoryPageContent() {
                     </button>
                   )}
                 </div>
-                <Badge variant="outline" className="text-xs font-semibold px-2.5 py-1.5 bg-secondary/30 border-border/40 shrink-0">
-                  {totalItems.toLocaleString()} {totalItems === 1 ? 'Product' : 'Products'}
-                </Badge>
+
+                {/* Movement Velocity Filter */}
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Select
+                    value={movementFilter}
+                    onValueChange={(val: 'all' | ProductMovementCategory) => {
+                      setMovementFilter(val);
+                      setCurrentPage(1);
+                    }}
+                  >
+                    <SelectTrigger
+                      className={`h-9 w-[170px] sm:w-[190px] rounded-xl border text-xs font-medium shrink-0 focus:ring-primary shadow-inner transition-all ${
+                        movementFilter === 'fast_moving'
+                          ? 'border-emerald-500/50 bg-emerald-950/30 text-emerald-400 font-semibold'
+                          : movementFilter === 'slow_moving'
+                          ? 'border-amber-500/50 bg-amber-950/30 text-amber-400 font-semibold'
+                          : movementFilter === 'dead_stock'
+                          ? 'border-rose-500/50 bg-rose-950/30 text-rose-400 font-semibold'
+                          : 'border-border/50 bg-secondary/30 text-foreground'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 truncate">
+                        <Filter className={`w-3.5 h-3.5 shrink-0 ${
+                          movementFilter === 'fast_moving'
+                            ? 'text-emerald-400'
+                            : movementFilter === 'slow_moving'
+                            ? 'text-amber-400'
+                            : movementFilter === 'dead_stock'
+                            ? 'text-rose-400'
+                            : 'text-muted-foreground'
+                        }`} />
+                        <SelectValue placeholder="All Products" />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent className="rounded-2xl border-border/60 bg-popover/95 backdrop-blur-md shadow-2xl p-1 min-w-[210px]">
+                      <SelectItem value="all" className="rounded-xl cursor-pointer">
+                        <div className="flex items-center justify-between gap-3 w-full py-0.5">
+                          <span className="font-medium">All Products</span>
+                          <span className="text-[10px] text-muted-foreground font-mono">({movementCounts.all})</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="fast_moving" className="rounded-xl cursor-pointer">
+                        <div className="flex items-center justify-between gap-3 w-full py-0.5">
+                          <span className="flex items-center gap-1.5 font-medium text-emerald-400">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                            Fast Moving
+                          </span>
+                          <span className="text-[10px] text-emerald-400/80 font-mono">({movementCounts.fast})</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="slow_moving" className="rounded-xl cursor-pointer">
+                        <div className="flex items-center justify-between gap-3 w-full py-0.5">
+                          <span className="flex items-center gap-1.5 font-medium text-amber-400">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
+                            Slow Moving
+                          </span>
+                          <span className="text-[10px] text-amber-400/80 font-mono">({movementCounts.slow})</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="dead_stock" className="rounded-xl cursor-pointer">
+                        <div className="flex items-center justify-between gap-3 w-full py-0.5">
+                          <span className="flex items-center gap-1.5 font-medium text-rose-400">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-400 shrink-0" />
+                            Dead Products
+                          </span>
+                          <span className="text-[10px] text-rose-400/80 font-mono">({movementCounts.dead})</span>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {movementFilter !== 'all' && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        setMovementFilter('all');
+                        setCurrentPage(1);
+                      }}
+                      className="h-9 w-9 rounded-xl hover:bg-rose-500/10 hover:text-rose-400 text-muted-foreground transition-colors shrink-0"
+                      title="Clear movement filter"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Quick NL Queries Option Bar - Only shown when app starts showing predictions and dead stocks */}
-            {isIntelligenceActive && (
-              <div className="flex items-center gap-2 overflow-x-auto pt-1 pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden text-[11px]">
-                <span className="text-muted-foreground font-semibold shrink-0 flex items-center gap-1.5 text-xs">
-                  <Filter className="w-3.5 h-3.5 text-muted-foreground" /> Quick NL Queries:
-                </span>
-
-                {PRESET_QUICK_QUERIES.map((preset) => {
-                  const isActive = searchQuery.toLowerCase() === preset.query.toLowerCase();
-                  return (
-                    <button
-                      key={preset.label}
-                      onClick={() => setSearchQuery(isActive ? '' : preset.query)}
-                      className={`px-3 py-1.5 rounded-xl font-medium border text-xs transition-all shrink-0 cursor-pointer ${
-                        isActive
-                          ? 'bg-primary text-primary-foreground border-primary shadow-sm font-semibold'
-                          : 'bg-secondary/40 border-border/40 text-muted-foreground hover:text-foreground hover:bg-secondary/80'
-                      }`}
-                    >
-                      {preset.label}
-                    </button>
-                  );
-                })}
-
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery('')}
-                    className="px-2.5 py-1.5 rounded-xl font-medium text-xs text-muted-foreground hover:text-rose-400 border border-dashed border-border/60 hover:border-rose-500/40 hover:bg-rose-500/10 transition-all shrink-0 flex items-center gap-1 cursor-pointer"
-                  >
-                    <X className="w-3 h-3" /> Clear filter
-                  </button>
-                )}
-              </div>
-            )}
           </CardHeader>
           <CardContent className="p-0">
-            {/* Desktop Table View */}
-            <div className="hidden md:block overflow-x-auto">
+            {/* Table View */}
+            <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -563,8 +643,36 @@ function InventoryPageContent() {
                     ))
                   ) : computedPageReports.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground text-xs">
-                        No products match your search query. Try typing 'low stock' or 'dead stock'.
+                      <TableCell colSpan={9} className="text-center py-12 text-muted-foreground text-xs">
+                        <div className="flex flex-col items-center justify-center gap-2 max-w-sm mx-auto">
+                          <p className="font-semibold text-foreground text-sm">No matching products found</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {movementFilter !== 'all'
+                              ? `No products currently match the "${
+                                  movementFilter === 'fast_moving'
+                                    ? 'Fast Moving'
+                                    : movementFilter === 'slow_moving'
+                                    ? 'Slow Moving'
+                                    : 'Dead Products'
+                                }" filter.`
+                              : 'No products match your current search query.'}
+                          </p>
+                          {(movementFilter !== 'all' || searchQuery) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setMovementFilter('all');
+                                setSearchQuery('');
+                                setCurrentPage(1);
+                              }}
+                              className="mt-1 h-7 rounded-xl text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10"
+                            >
+                              <X className="w-3 h-3" />
+                              Reset All Filters
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -625,11 +733,14 @@ function InventoryPageContent() {
 
                           <TableCell>
                             <div className="flex flex-wrap gap-1">
-                              {report.tags.slice(0, 2).map(t => (
-                                <Badge key={t} variant="outline" className="text-[9px] px-2 py-0.5 font-semibold bg-primary/15 text-primary border-primary/30">
-                                  {t}
-                                </Badge>
-                              ))}
+                              {report.tags
+                                .filter(t => t.toLowerCase() !== report.healthStatus.toLowerCase() && !report.healthStatus.toLowerCase().includes(t.toLowerCase()))
+                                .slice(0, 2)
+                                .map(t => (
+                                  <Badge key={t} variant="outline" className="text-[9px] px-2 py-0.5 font-semibold bg-primary/15 text-primary border-primary/30">
+                                    {t}
+                                  </Badge>
+                                ))}
                             </div>
                           </TableCell>
 

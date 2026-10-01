@@ -190,12 +190,12 @@ export default function PlanFeatureComparisonTable({
                       {/* Row 1: Fixed Height Badge Slot (24px) for perfect vertical alignment */}
                       <div className="h-6 w-full flex items-center justify-center">
                         {isGrowth ? (
-                          <Badge className="bg-gradient-to-r from-amber-500 to-amber-600 text-zinc-950 text-[9px] font-black uppercase tracking-wider px-2 py-0.5 shadow-sm">
-                            <Zap className="w-2.5 h-2.5 mr-0.5 fill-current" /> MOST POPULAR
+                          <Badge className="bg-secondary text-foreground border border-border/80 text-[9px] font-semibold uppercase tracking-wider px-2 py-0.5 shadow-sm">
+                            MOST POPULAR
                           </Badge>
                         ) : isPro && appliedCoupon ? (
-                          <Badge className="bg-emerald-500 text-zinc-950 text-[9px] font-extrabold uppercase px-2 py-0.5">
-                            ✓ Promo Pass Active
+                          <Badge className="bg-secondary text-foreground border border-border/80 text-[9px] font-semibold uppercase px-2 py-0.5">
+                            Promo Pass Active
                           </Badge>
                         ) : null}
                       </div>
@@ -218,14 +218,14 @@ export default function PlanFeatureComparisonTable({
                           size="sm"
                           disabled={isCurrent || isProcessingPayment !== null}
                           onClick={() => onSelectUpgrade(key)}
-                          className={`w-full max-w-[145px] h-8 text-[11px] font-bold rounded-xl transition-all ${
+                          className={`w-full max-w-[145px] h-8 text-[11px] font-semibold rounded-xl transition-all ${
                             isCurrent
-                              ? 'bg-secondary text-muted-foreground cursor-default'
+                              ? 'bg-secondary/40 text-muted-foreground cursor-default'
                               : isPro && appliedCoupon
-                              ? 'bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-500 text-zinc-950 font-black shadow-md shadow-emerald-500/20 hover:scale-[1.02]'
+                              ? 'bg-foreground text-background font-bold shadow-sm hover:opacity-90'
                               : isGrowth
-                              ? 'bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-zinc-950 font-extrabold shadow-md shadow-amber-500/25 hover:shadow-amber-500/40 hover:scale-[1.02]'
-                              : 'bg-card hover:bg-secondary text-foreground border border-border/80 hover:border-primary/60 shadow-sm hover:scale-[1.02]'
+                              ? 'bg-foreground text-background font-bold shadow-sm hover:opacity-90'
+                              : 'bg-secondary/60 hover:bg-secondary text-foreground border border-border/80 shadow-sm'
                           }`}
                         >
                           {getCtaLabel(key)}
@@ -321,14 +321,14 @@ export default function PlanFeatureComparisonTable({
                       size="sm"
                       disabled={isCurrent || isProcessingPayment !== null}
                       onClick={() => onSelectUpgrade(key)}
-                      className={`w-full max-w-[140px] h-7 text-[10px] font-bold rounded-xl transition-all ${
+                      className={`w-full max-w-[140px] h-7 text-[10px] font-semibold rounded-xl transition-all ${
                         isCurrent
-                          ? 'bg-secondary text-muted-foreground cursor-default'
+                          ? 'bg-secondary/40 text-muted-foreground cursor-default'
                           : isPro && appliedCoupon
-                          ? 'bg-gradient-to-r from-emerald-500 via-emerald-400 to-emerald-500 text-zinc-950 font-black shadow-md shadow-emerald-500/20'
+                          ? 'bg-foreground text-background font-bold shadow-sm hover:opacity-90'
                           : isGrowth
-                          ? 'bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-zinc-950 font-extrabold shadow-md shadow-amber-500/20'
-                          : 'bg-card hover:bg-secondary text-foreground border border-border/80 hover:border-primary/60'
+                          ? 'bg-foreground text-background font-bold shadow-sm hover:opacity-90'
+                          : 'bg-secondary/60 hover:bg-secondary text-foreground border border-border/80 shadow-sm'
                       }`}
                     >
                       {getCtaLabel(key)}

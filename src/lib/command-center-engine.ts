@@ -364,8 +364,12 @@ export function generateActionTasks(
   const readiness = evaluateDataReadiness(rawProducts, rawTransactions);
   const calibration = getBusinessBuddyCalibration(businessProfile, rawProducts, rawTransactions, rawReturns);
   // Respect Data Readiness and Business Buddy learning phase (unless explicitly overridden by founder)
-  // Criteria bypass: if days >= 14 AND orders >= 50 are independently met, treat as graduated regardless of computed level
-  const criteriaMetBypassLearning = (readiness.historicalDays >= 14 && readiness.totalOrders >= 50) || readiness.totalOrders >= 100;
+  // Criteria bypass: if threshold criteria (orders >= 80, 50 orders with 14 days, level !== 'LEARNING', or calibrated) are met, treat as graduated
+  const criteriaMetBypassLearning =
+    (readiness.historicalDays >= 14 && readiness.totalOrders >= 50) ||
+    readiness.totalOrders >= 80 ||
+    (readiness.level && readiness.level !== 'LEARNING') ||
+    calibration.status === 'CALIBRATED';
   if (!calibration.isOverridden && !criteriaMetBypassLearning && (readiness.level === 'LEARNING' || !readiness.capabilities.reorderRecommendations || calibration.status === 'LEARNING')) {
     return [];
   }
@@ -442,7 +446,7 @@ export function generateActionTasks(
   deadStock.slice(0, 5).forEach((topDead) => {
     const pName = topDead.name || topDead.productName || 'Product';
     const targetSlug = topDead.id || topDead.sku || getSlug(pName);
-    const pred = predictOptimalClearanceDiscount(topDead);
+    const pred = predictOptimalClearanceDiscount(topDead, { transactions });
     const tiedCapital = (topDead.stock || 1) * pred.costPrice;
 
     tasks.push({

@@ -29,6 +29,8 @@ import {
   Target,
   ExternalLink,
   Clock,
+  X,
+  Zap,
 } from 'lucide-react';
 import {
   Dialog,
@@ -38,6 +40,49 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+
+function renderImpactText(benefit: string) {
+  if (!benefit) return null;
+  const currencyRegex = /([₹$]\s*[\d,]+(?:\.\d+)?(?:\s*(?:Lakh|Cr|k|M))?)/gi;
+  const parts = benefit.split(currencyRegex);
+
+  if (parts.length <= 1) {
+    return <span className="text-sm sm:text-base font-bold text-foreground">{benefit}</span>;
+  }
+
+  return (
+    <div className="flex items-baseline gap-1.5 flex-wrap">
+      {parts.map((part, i) => {
+        if (!part) return null;
+        if (currencyRegex.test(part)) {
+          return (
+            <span
+              key={i}
+              className="text-base sm:text-lg font-extrabold text-foreground font-mono tracking-tight"
+            >
+              {part}
+            </span>
+          );
+        }
+        return (
+          <span key={i} className="text-xs sm:text-sm text-muted-foreground font-medium">
+            {part}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
 
 function getActionDestination(task: ActionTask): { route: string; label: string } {
   if (task.actionType === 'reorder') {
@@ -99,15 +144,34 @@ export function AIActionCenter() {
     return [];
   });
 
+  const [cancelledTaskIds, setCancelledTaskIds] = useState<string[]>(() => {
+    if (typeof window !== 'undefined' && user?.uid) {
+      try {
+        return JSON.parse(localStorage.getItem(`analyzeup_cancelled_tasks_${user.uid}`) || '[]');
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
+  const [taskToCancel, setTaskToCancel] = useState<{ id: string; title: string; recommendation?: string } | null>(null);
+  const [expandedTaskIds, setExpandedTaskIds] = useState<Record<string, boolean>>({});
+  const toggleTaskExpanded = (id: string) => {
+    setExpandedTaskIds((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
+
   useEffect(() => {
     if (user?.uid) {
       try {
         setCompletedTaskIds(JSON.parse(localStorage.getItem(`analyzeup_completed_tasks_${user.uid}`) || '[]'));
+        setCancelledTaskIds(JSON.parse(localStorage.getItem(`analyzeup_cancelled_tasks_${user.uid}`) || '[]'));
       } catch {
         setCompletedTaskIds([]);
+        setCancelledTaskIds([]);
       }
     } else {
       setCompletedTaskIds([]);
+      setCancelledTaskIds([]);
     }
   }, [user?.uid]);
 
@@ -150,6 +214,31 @@ export function AIActionCenter() {
     }
   };
 
+  const cancelTask = (taskId: string, title?: string) => {
+    setCancelledTaskIds((prev) => {
+      if (prev.includes(taskId)) return prev;
+      const next = [...prev, taskId];
+      if (typeof window !== 'undefined' && user?.uid) {
+        localStorage.setItem(`analyzeup_cancelled_tasks_${user.uid}`, JSON.stringify(next));
+      }
+      return next;
+    });
+
+    if (title) {
+      logBusinessAction({
+        title: 'Cancelled Action Recommendation',
+        productName: title,
+        actionType: 'audit',
+        changeDetails: 'Founder dismissed or cancelled recommended action for today.',
+        impactValue: 'Action Cancelled',
+      });
+      toast({
+        title: 'Action Cancelled',
+        description: `"${title}" has been dismissed from active tasks.`,
+      });
+    }
+  };
+
   const undoCompletedTask = (taskId: string, title: string) => {
     setCompletedTaskIds((prev) => {
       const next = prev.filter((id) => id !== taskId);
@@ -164,13 +253,30 @@ export function AIActionCenter() {
     });
   };
 
+  const undoCancelledTask = (taskId: string, title: string) => {
+    setCancelledTaskIds((prev) => {
+      const next = prev.filter((id) => id !== taskId);
+      if (typeof window !== 'undefined' && user?.uid) {
+        localStorage.setItem(`analyzeup_cancelled_tasks_${user.uid}`, JSON.stringify(next));
+      }
+      return next;
+    });
+    toast({
+      title: 'Action Restored',
+      description: `"${title}" moved back to active business actions.`,
+    });
+  };
+
   const resetCompletedTasks = () => {
     setCompletedTaskIds([]);
+    setCancelledTaskIds([]);
     if (typeof window !== 'undefined') {
       if (user?.uid) {
         localStorage.removeItem(`analyzeup_completed_tasks_${user.uid}`);
+        localStorage.removeItem(`analyzeup_cancelled_tasks_${user.uid}`);
       }
       localStorage.removeItem('analyzeup_completed_tasks');
+      localStorage.removeItem('analyzeup_cancelled_tasks');
     }
     setActiveTab('all');
     toast({
@@ -314,14 +420,18 @@ export function AIActionCenter() {
     });
   };
 
-  // Filter tasks into Active vs Completed
+  // Filter tasks into Active vs Completed vs Cancelled
   const activeTasks = useMemo(() => {
-    return tasks.filter((t) => !completedTaskIds.includes(t.id));
-  }, [tasks, completedTaskIds]);
+    return tasks.filter((t) => !completedTaskIds.includes(t.id) && !cancelledTaskIds.includes(t.id));
+  }, [tasks, completedTaskIds, cancelledTaskIds]);
 
   const completedTasks = useMemo(() => {
     return tasks.filter((t) => completedTaskIds.includes(t.id));
   }, [tasks, completedTaskIds]);
+
+  const cancelledTasks = useMemo(() => {
+    return tasks.filter((t) => cancelledTaskIds.includes(t.id));
+  }, [tasks, cancelledTaskIds]);
 
   // Separate Top Priorities (#1, #2, #3) vs Other Actions
   const topPriorityTasks = useMemo(() => {
@@ -341,118 +451,141 @@ export function AIActionCenter() {
     return (
       <div
         key={task.id}
-        className={`p-4 sm:p-5 rounded-2xl transition-all space-y-3.5 relative overflow-hidden ${
-          isTopPriority
-            ? 'bg-secondary/40 border-2 border-amber-500/40 shadow-md'
-            : 'bg-secondary/20 border border-border/40 hover:bg-secondary/30'
-        }`}
+        className="p-4 sm:p-5 transition-all space-y-3.5 bg-card/40 hover:bg-card/60"
       >
-        {isTopPriority && (
-          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500/40 via-amber-500 to-amber-500/40" />
-        )}
-
-        {/* Top Header line of the task */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2 flex-wrap">
-            {isTopPriority && rankIndex !== undefined && (
-              <span className="w-6 h-6 rounded-full bg-amber-500 text-black font-extrabold text-xs flex items-center justify-center shadow-xs shrink-0">
-                #{rankIndex + 1}
-              </span>
-            )}
-
-            {isTopPriority && (
-              <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30 text-[10px] font-bold gap-1">
-                <Flame className="w-3 h-3 text-amber-400" /> Must-Do Today
-              </Badge>
-            )}
-
+        {/* Top Header line of the task: single clean priority badge and title */}
+        <div className="flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <Badge
-              className={
+              variant="outline"
+              className={`text-[10px] font-semibold border px-2 py-0.5 rounded-lg shrink-0 ${
                 task.priority === 'High'
-                  ? 'bg-rose-500/15 text-rose-400 border-rose-500/30 font-semibold text-[10px]'
-                  : task.priority === 'Medium'
-                  ? 'bg-amber-500/15 text-amber-400 border-amber-500/30 font-semibold text-[10px]'
-                  : 'bg-muted text-muted-foreground border-border font-semibold text-[10px]'
-              }
+                  ? 'border-rose-500/30 text-rose-400 bg-rose-500/10'
+                  : 'border-border/60 text-muted-foreground bg-secondary/30'
+              }`}
             >
               {task.priority} Priority
             </Badge>
 
-            <span className="text-xs font-bold text-foreground">{task.title}</span>
+            <span className="text-xs sm:text-sm font-semibold text-foreground truncate">{task.title}</span>
+          </div>
+
+          {/* Quick Cross (X) icon to cancel / dismiss action */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setTaskToCancel({ id: task.id, title: task.title, recommendation: task.recommendation })}
+            className="h-7 w-7 rounded-xl hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors shrink-0"
+            title="Cancel / Dismiss Action"
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+
+        {/* Minimal High-Signal Action Summary */}
+        <div className="space-y-2.5">
+          {/* Action Required: Neutral, clean, minimal */}
+          <div className="p-3 sm:p-3.5 rounded-xl bg-secondary/30 border border-border/40 space-y-1">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+              Action Required
+            </span>
+            <p className="text-xs sm:text-sm font-medium text-foreground leading-relaxed">
+              {task.recommendation}
+            </p>
+          </div>
+
+          {/* Minimal Key Drivers: Trigger & Impact in unified neutral style */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+            {/* Trigger */}
+            <div className="p-2.5 sm:p-3 rounded-xl bg-secondary/20 border border-border/30 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                Trigger
+              </span>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {task.problem || task.reason}
+              </p>
+            </div>
+
+            {/* Expected Benefit */}
+            <div className="p-2.5 sm:p-3 rounded-xl bg-secondary/20 border border-border/30 space-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                Expected Impact
+              </span>
+              <div className="leading-snug pt-0.5">
+                {renderImpactText(task.estimatedBenefit)}
+              </div>
+            </div>
+          </div>
+
+          {/* Optional Collapsible Model Breakdown */}
+          <div className="pt-0.5">
+            <button
+              type="button"
+              onClick={() => toggleTaskExpanded(task.id)}
+              className="text-[11px] text-muted-foreground/70 hover:text-foreground flex items-center gap-1 font-medium transition-colors cursor-pointer py-0.5"
+            >
+              <span>{expandedTaskIds[task.id] ? 'Hide Full Breakdown' : 'View Full Breakdown'}</span>
+              {expandedTaskIds[task.id] ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+
+            {expandedTaskIds[task.id] && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1.5 animate-in fade-in duration-200">
+                <div className="p-2.5 rounded-xl bg-secondary/15 border border-border/30 space-y-1">
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold block">1. Observed Fact</span>
+                  <p className="text-[11px] text-muted-foreground">{task.problem}</p>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-secondary/15 border border-border/30 space-y-1">
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold block">2. Root Cause</span>
+                  <p className="text-[11px] text-muted-foreground">{task.reason}</p>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-secondary/15 border border-border/30 space-y-1">
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold block">3. Forecast Projection</span>
+                  <p className="text-[11px] text-muted-foreground">{task.impact}</p>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-secondary/15 border border-border/30 space-y-1">
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold block">4. Benefit Details</span>
+                  <p className="text-[11px] text-foreground font-medium">{task.estimatedBenefit}</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* 5-Part Structured Explanation Breakdown */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-          <div className="p-3 rounded-xl bg-background/80 border border-border/40 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">1. Observed Fact</span>
-              <ThreeTierBadge tier="ACTUAL_DATA" size="sm" />
-            </div>
-            <p className="text-[11px] text-foreground leading-relaxed">{task.problem}</p>
-          </div>
-
-          <div className="p-3 rounded-xl bg-background/80 border border-border/40 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">2. Root Cause / Impact</span>
-              <span className="text-[10px] text-muted-foreground font-semibold">Operational</span>
-            </div>
-            <p className="text-[11px] text-foreground leading-relaxed">{task.reason}</p>
-          </div>
-
-          <div className="p-3 rounded-xl bg-purple-500/5 border border-purple-500/20 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-purple-400 uppercase tracking-wider font-bold">3. Forecast Projection</span>
-              <ThreeTierBadge tier="MODEL_2_PREDICTION" size="sm" />
-            </div>
-            <p className="text-[11px] text-purple-200/90 leading-relaxed">{task.impact}</p>
-          </div>
-
-          <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 space-y-1.5">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-emerald-400 uppercase tracking-wider font-bold">4. Estimated Benefit</span>
-              <span className="text-[10px] text-emerald-400 font-semibold">Value Added</span>
-            </div>
-            <p className="text-[11px] text-emerald-300 font-bold leading-relaxed">{task.estimatedBenefit}</p>
-          </div>
-        </div>
-
-        {/* Action Controls & Direct Navigation */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between pt-2 border-t border-border/40 gap-3">
-          <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 flex-wrap">
-            <span className="font-semibold text-foreground">5. Recommended Action:</span>
-            <span className="text-foreground/90 font-medium">{task.recommendation}</span>
-          </div>
-
+        {/* Action Controls & Direct Navigation: All 4 buttons intact */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-end pt-2 border-t border-border/30 gap-2">
           <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end flex-wrap">
             <Button
               size="sm"
               variant="ghost"
               onClick={() => router.push(destination.route)}
-              className="rounded-xl text-xs h-8 border border-border/50 hover:bg-secondary text-muted-foreground hover:text-foreground font-medium px-2.5 gap-1"
+              className="rounded-xl text-xs h-8 border border-border/40 hover:bg-secondary text-muted-foreground hover:text-foreground font-medium px-3 gap-1.5"
               title={`View product/records in ${destination.label}`}
             >
               <span>Go to {destination.label}</span>
-              <ExternalLink className="w-3 h-3 text-muted-foreground" />
+              <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
             </Button>
+
 
             <Button
               size="sm"
               variant="outline"
               onClick={() => markTaskCompleted(task.id, task.title, task.recommendation)}
-              className="rounded-xl text-xs h-8 border-border/60 hover:bg-secondary text-muted-foreground hover:text-foreground font-medium px-3 gap-1"
+              className="rounded-xl text-xs h-8 border-border/50 hover:bg-secondary text-muted-foreground hover:text-foreground font-medium px-3 gap-1.5"
               title="Mark this task as done for today"
             >
               <Check className="w-3.5 h-3.5" />
-              Mark Done
+              <span>Mark Done</span>
             </Button>
 
             <Button
               size="sm"
               onClick={() => handleExecuteAction(task)}
-              className="rounded-xl text-xs h-8 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shadow-md shadow-emerald-600/20 gap-1.5 px-4"
+              className="rounded-xl text-xs h-8 bg-emerald-600 hover:bg-emerald-500 text-white font-medium shadow-xs gap-1.5 px-4"
             >
-              Execute Action
+              <span>Execute Action</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Button>
           </div>
@@ -521,6 +654,16 @@ export function AIActionCenter() {
                 <Check className="w-3.5 h-3.5" /> {completedTasks.length} Done Today
               </Badge>
             )}
+
+            {!isLearning && cancelledTasks.length > 0 && (
+              <Badge
+                variant="outline"
+                onClick={() => setActiveTab(activeTab === 'done' ? 'all' : 'done')}
+                className="text-rose-400 border-rose-500/30 text-xs gap-1 font-semibold cursor-pointer hover:bg-rose-500/10 transition-colors py-1 px-2.5"
+              >
+                <X className="w-3.5 h-3.5" /> {cancelledTasks.length} Cancelled
+              </Badge>
+            )}
           </div>
         </CardHeader>
 
@@ -560,7 +703,7 @@ export function AIActionCenter() {
                 Other Actions ({otherTasks.length})
               </button>
             )}
-            {completedTasks.length > 0 && (
+            {(completedTasks.length > 0 || cancelledTasks.length > 0) && (
               <button
                 onClick={() => setActiveTab('done')}
                 className={`px-3 py-1.5 rounded-xl transition-all flex items-center gap-1 ${
@@ -570,7 +713,7 @@ export function AIActionCenter() {
                 }`}
               >
                 <Check className="w-3 h-3" />
-                Done Today ({completedTasks.length})
+                Done & Dismissed ({completedTasks.length + cancelledTasks.length})
               </button>
             )}
           </div>
@@ -793,6 +936,64 @@ export function AIActionCenter() {
                   );
                 })
               )}
+
+              {cancelledTasks.length > 0 && (
+                <div className="pt-4 space-y-3 border-t border-border/40">
+                  <div className="flex items-center gap-2">
+                    <X className="w-4 h-4 text-rose-400" />
+                    <span className="text-xs font-bold text-foreground uppercase tracking-wider">
+                      Cancelled Actions ({cancelledTasks.length})
+                    </span>
+                  </div>
+
+                  {cancelledTasks.map((task) => {
+                    const dest = getActionDestination(task);
+                    return (
+                      <div
+                        key={task.id}
+                        className="p-3.5 rounded-2xl bg-rose-500/5 border border-rose-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="p-1.5 rounded-full bg-rose-500/15 text-rose-400 shrink-0">
+                            <X className="w-3.5 h-3.5" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-foreground line-through opacity-70">{task.title}</p>
+                            <p className="text-[11px] text-muted-foreground">{task.recommendation}</p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => router.push(dest.route)}
+                            className="rounded-xl text-xs h-7 border border-border/50 text-muted-foreground hover:text-foreground gap-1 px-2.5"
+                            title={`View in ${dest.label}`}
+                          >
+                            <span>Go to {dest.label}</span>
+                            <ExternalLink className="w-3 h-3" />
+                          </Button>
+
+                          <Badge className="bg-rose-500/15 text-rose-400 border-rose-500/30 text-[10px]">
+                            Cancelled
+                          </Badge>
+
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => undoCancelledTask(task.id, task.title)}
+                            className="rounded-xl text-xs h-7 text-muted-foreground hover:text-foreground gap-1 px-2"
+                            title="Restore action and move back to active tasks"
+                          >
+                            <RotateCcw className="w-3 h-3" /> Restore
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           ) : (
             /* Pending Tasks View */
@@ -819,9 +1020,22 @@ export function AIActionCenter() {
                     </div>
                   </div>
 
-                  <div className="space-y-3">
-                    {topPriorityTasks.map((task, idx) => renderTaskCard(task, true, idx))}
+                  <div className="divide-y divide-border/25 rounded-2xl overflow-hidden border border-border/30">
+                    {topPriorityTasks.map((task, idx) => (
+                      <div key={task.id}>
+                        {renderTaskCard(task, true, idx)}
+                      </div>
+                    ))}
                   </div>
+                </div>
+              )}
+
+              {/* Section divider between Top Priorities and Other Actions */}
+              {activeTab === 'all' && topPriorityTasks.length > 0 && otherTasks.length > 0 && (
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 border-t border-border/30" />
+                  <span className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider shrink-0">More Actions</span>
+                  <div className="flex-1 border-t border-border/30" />
                 </div>
               )}
 
@@ -864,8 +1078,12 @@ export function AIActionCenter() {
                   </div>
 
                   {!isOtherCollapsed && (
-                    <div className="space-y-3">
-                      {otherTasks.map((task) => renderTaskCard(task, false))}
+                    <div className="divide-y divide-border/25 rounded-2xl overflow-hidden border border-border/30">
+                      {otherTasks.map((task) => (
+                        <div key={task.id}>
+                          {renderTaskCard(task, false)}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
@@ -933,6 +1151,81 @@ export function AIActionCenter() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Cancellation Confirmation Dialog */}
+      <AlertDialog
+        open={taskToCancel !== null}
+        onOpenChange={(open) => {
+          if (!open) setTaskToCancel(null);
+        }}
+      >
+        <AlertDialogContent className="max-w-md bg-zinc-950/95 border border-rose-500/25 rounded-3xl ios-glass text-white shadow-2xl p-6">
+          <AlertDialogHeader className="space-y-3 text-left">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-xl bg-rose-500/15 text-rose-400 border border-rose-500/20 shrink-0">
+                <AlertTriangle className="w-5 h-5 text-rose-400" />
+              </div>
+              <div>
+                <AlertDialogTitle className="text-base font-bold text-white">
+                  Cancel Action Recommendation?
+                </AlertDialogTitle>
+                <p className="text-[11px] text-zinc-400">
+                  This will dismiss this task from your active list today
+                </p>
+              </div>
+            </div>
+
+            <AlertDialogDescription asChild>
+              <div className="py-2 text-xs space-y-3">
+                <div className="p-3.5 rounded-2xl bg-zinc-900/90 border border-zinc-800 space-y-1.5">
+                  <div className="text-rose-200 font-semibold text-xs flex items-center gap-1.5">
+                    <X className="w-3.5 h-3.5 text-rose-400" />
+                    <span>{taskToCancel?.title}</span>
+                  </div>
+                  {taskToCancel?.recommendation && (
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">
+                      {taskToCancel.recommendation}
+                    </p>
+                  )}
+                </div>
+
+                <p className="text-[12px] text-zinc-300 leading-relaxed">
+                  Are you sure you want to dismiss this recommended action?
+                </p>
+
+                <div className="p-2.5 rounded-xl bg-secondary/30 border border-border/40 text-[11px] text-zinc-400 flex items-start gap-2">
+                  <RotateCcw className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                  <span>
+                    You can review or restore dismissed actions anytime in the{' '}
+                    <strong className="text-zinc-200">Done & Dismissed</strong> tab.
+                  </span>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter className="flex flex-row items-center justify-end gap-2 pt-4 border-t border-zinc-800/40 mt-1">
+            <AlertDialogCancel
+              onClick={() => setTaskToCancel(null)}
+              className="rounded-xl text-xs hover:bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white px-3 h-8"
+            >
+              Keep Action
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (taskToCancel) {
+                  cancelTask(taskToCancel.id, taskToCancel.title);
+                  setTaskToCancel(null);
+                }
+              }}
+              className="bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-xl text-xs px-4 h-8 gap-1.5 shadow-sm"
+            >
+              <X className="w-3.5 h-3.5" />
+              Yes, Cancel Action
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ImportDialog open={isImportModalOpen} onOpenChange={setIsImportModalOpen} />
     </>

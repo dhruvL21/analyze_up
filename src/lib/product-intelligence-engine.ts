@@ -279,10 +279,9 @@ export function computeProductIntelligence(
   if (isBestSeller && healthStatus !== 'Dead Stock') tags.push('Best Seller');
   if (isTrending && healthStatus !== 'Dead Stock' && !tags.includes('Best Seller')) tags.push('Trending');
   if (profitMarginPercent >= 45) tags.push('High Margin');
-  if (profitMarginPercent < 20) tags.push('Low Margin');
-  if (healthStatus === 'Dead Stock' && isDeadStockEnabled) tags.push('Dead Stock');
-  if (isReorderNeeded) tags.push('Reorder Soon');
-  if (healthStatus === 'Overstocked') tags.push('Overstock');
+  // Health status (Dead Stock, Overstocked, etc.) is already displayed in the Health Status column.
+  // We only include complementary intelligence badges here (e.g. High Margin, Reorder Soon, Price Up Candidate)
+  if (isReorderNeeded && healthStatus !== 'Out of Stock') tags.push('Reorder Soon');
   if (opportunityAdvice.type === 'price_increase' && totalSoldQty >= 5) tags.push('Price Up Candidate');
 
   // Executive Summary with robust product name resolution
@@ -483,6 +482,20 @@ export function filterProductsByNaturalLanguage(
     return products.filter(p => (p.averageDailySales || 0) >= 0.8);
   }
 
+  // Query 7: "slow moving" | "slow mover" | "sluggish"
+  if (
+    q.includes('slow moving') ||
+    q.includes('slow mover') ||
+    q.includes('sluggish')
+  ) {
+    return products.filter(p => {
+      if (!p) return false;
+      const isSold = p.id ? saleProductIds.has(p.id) : false;
+      const ads = p.averageDailySales || 0;
+      return (p.stock || 0) > 0 && ((ads > 0 && ads < 0.8) || isSold);
+    });
+  }
+
   // Standard Keyword Match (Name, SKU, Brand, Category, Supplier)
   return products.filter(p => {
     if (!p) return false;
@@ -493,4 +506,43 @@ export function filterProductsByNaturalLanguage(
     const categoryMatch = p.categoryId ? p.categoryId.toLowerCase().includes(q) : false;
     return nameMatch || skuMatch || brandMatch || supplierMatch || categoryMatch;
   });
+}
+
+// 3. Movement Velocity Classifier (Fast Moving, Slow Moving, Dead Products)
+export type ProductMovementCategory = 'fast_moving' | 'slow_moving' | 'dead_stock';
+
+export function classifyProductMovement(
+  product: Product,
+  salesMap: Map<string, number>,
+  hasTransactions: boolean
+): ProductMovementCategory {
+  const soldQty =
+    salesMap.get(product.id) ||
+    (product.sku ? salesMap.get(product.sku.toLowerCase()) : 0) ||
+    (product.name ? salesMap.get(product.name.toLowerCase()) : 0) ||
+    0;
+
+  if (hasTransactions) {
+    if (soldQty === 0) {
+      return 'dead_stock';
+    }
+    const velocity = (product.averageDailySales && product.averageDailySales > 0)
+      ? product.averageDailySales
+      : (soldQty / 30);
+
+    if (velocity >= 1.0 || soldQty >= 10 || (product.salesVelocity || 0) >= 1.0) {
+      return 'fast_moving';
+    }
+    return 'slow_moving';
+  } else {
+    // When no sales transactions have been loaded, evaluate catalog velocity attributes
+    const velocity = product.averageDailySales ?? product.salesVelocity ?? 0;
+    if (velocity === 0) {
+      return 'dead_stock';
+    } else if (velocity >= 1.0) {
+      return 'fast_moving';
+    } else {
+      return 'slow_moving';
+    }
+  }
 }

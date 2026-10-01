@@ -521,21 +521,26 @@ export function getBusinessBuddyCalibration(
   const ONE_DAY_MS = 24 * 60 * 60 * 1000;
   const daysElapsed = Math.floor(elapsedMs / ONE_DAY_MS);
   const targetDays = Number(profile?.buddyCalibrationTargetDays || 3);
-  const isTimeCalibrated = daysElapsed >= targetDays;
+  const isOrdersThresholdMet = transactions.length >= 50 || Boolean(profile?.totalOrders && profile.totalOrders >= 50);
+  const isTimeCalibrated =
+    daysElapsed >= targetDays ||
+    isOrdersThresholdMet ||
+    Boolean(profile?.buddyCalibrationOverridden) ||
+    profile?.calibrationStatus === 'CALIBRATED';
 
-  const currentDay = Math.min(targetDays, daysElapsed + 1);
+  const currentDay = isTimeCalibrated ? targetDays : Math.min(targetDays, daysElapsed + 1);
 
   return {
     status: isTimeCalibrated ? 'CALIBRATED' : 'LEARNING',
     startDate: startIso,
     targetDays,
-    daysElapsed,
+    daysElapsed: isTimeCalibrated ? Math.max(targetDays, daysElapsed) : daysElapsed,
     currentDayNumber: currentDay,
     isCalibrated: isTimeCalibrated,
-    isOverridden: false,
+    isOverridden: Boolean(profile?.buddyCalibrationOverridden),
     milestones: {
       catalogIngested: products.length > 0,
-      orderVelocityObserved: currentDay >= 2 || transactions.length > 10,
+      orderVelocityObserved: currentDay >= 2 || transactions.length > 10 || isOrdersThresholdMet,
       marketResearched: true,
       thresholdsCalibrated: isTimeCalibrated,
     },

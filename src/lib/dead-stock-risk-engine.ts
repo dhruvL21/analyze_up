@@ -148,10 +148,21 @@ export function analyzeDeadStockRisk(
     const velocity30 = stats.units30Days / 30;
     const dailyVelocity = parseFloat(velocity30.toFixed(2));
 
-    // Inventory coverage calculation (days of stock remaining at current velocity)
-    const stockCoverageDays = dailyVelocity > 0
-      ? Math.round(stock / dailyVelocity)
-      : (daysSinceLastSale !== null ? Math.max(daysSinceLastSale * 4, 365) : 365);
+    // Inventory coverage calculation (days of stock remaining at actual velocity run-rate)
+    let stockCoverageDays: number;
+    if (dailyVelocity > 0) {
+      stockCoverageDays = Math.round(stock / dailyVelocity);
+    } else if (stats.units60Days > 0) {
+      const vel60 = stats.units60Days / 60;
+      stockCoverageDays = Math.round(stock / vel60);
+    } else if (stats.totalUnits > 0) {
+      const velTotal = stats.totalUnits / Math.max(30, productAgeDays);
+      stockCoverageDays = Math.round(stock / velTotal);
+    } else if (daysSinceLastSale !== null) {
+      stockCoverageDays = Math.max(daysSinceLastSale * 3, 90);
+    } else {
+      stockCoverageDays = Math.max(365, productAgeDays * 4);
+    }
 
     // Multi-factor Risk Level Classification
     let riskLevel: DeadStockRiskLevel = 'LOW';

@@ -82,10 +82,32 @@ export function DeadStockSection() {
     return evaluateSalesHistory(products, transactions);
   }, [products, transactions]);
 
-  // Dead stock capability status
-  const isDeadStockActive = capabilities
-    ? capabilities.deadStockDetection
-    : (businessBuddyCalibration?.status !== 'LEARNING' && salesHistory.hasMinimumHistory);
+  const currentOrders = dataReadiness?.totalOrders ?? (transactions.filter(t => t.type === 'Sale' || !t.type).length);
+  const currentDayNumber = dataReadiness?.historicalDays || salesHistory.historyDays || businessBuddyCalibration?.currentDayNumber || 1;
+  const targetDays = 30;
+  const targetOrders = 80;
+  const readinessScore = dataReadiness?.score ?? 20;
+
+  // Criteria to unlock:
+  // 1. Current orders >= 80 (or 50 with history), OR
+  // 2. Historical days >= 30, OR
+  // 3. Data readiness score >= 60 or level !== 'LEARNING' (Early Insights, Predictive, Optimization), OR
+  // 4. Dead stock capability active, OR
+  // 5. Business buddy calibration overridden/calibrated
+  const isThresholdMet =
+    currentOrders >= targetOrders ||
+    currentDayNumber >= targetDays ||
+    readinessScore >= 60 ||
+    Boolean(dataReadiness?.level && dataReadiness.level !== 'LEARNING') ||
+    currentOrders >= 50;
+
+  const isDeadStockActive = Boolean(
+    isThresholdMet ||
+    capabilities?.deadStockDetection ||
+    (businessBuddyCalibration?.status !== 'LEARNING' && salesHistory.hasMinimumHistory) ||
+    businessBuddyCalibration?.isOverridden ||
+    businessBuddyCalibration?.status === 'CALIBRATED'
+  );
 
   // Multi-factor dead stock risk report
   const deadStockAnalysis = React.useMemo(() => {
@@ -186,12 +208,7 @@ export function DeadStockSection() {
     }
   };
 
-  if (!isDeadStockActive || businessBuddyCalibration?.status === 'LEARNING') {
-    const currentDayNumber = dataReadiness?.historicalDays || salesHistory.historyDays || businessBuddyCalibration?.currentDayNumber || 1;
-    const targetDays = 30;
-    const currentOrders = dataReadiness?.totalOrders ?? (transactions.filter(t => t.type === 'Sale' || !t.type).length);
-    const targetOrders = 80;
-    const readinessScore = dataReadiness?.score ?? 20;
+  if (!isDeadStockActive) {
     const levelLabel = dataReadiness?.level ? dataReadiness.level.replace('_', ' ') : 'LEARNING';
     const intelligence = businessBuddyCalibration?.intelligence || {
       detectedIndustry: 'Footwear & Retail',
@@ -278,11 +295,11 @@ export function DeadStockSection() {
 
   return (
     <>
-      <Card className="ios-glass rounded-3xl border-rose-500/25 p-5 shadow-xl space-y-4">
+      <Card className="ios-glass rounded-3xl border-border/50 p-5 shadow-xl space-y-4">
         {/* Header */}
         <CardHeader className="p-0 pb-3 border-b border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
-            <div className="p-2.5 rounded-2xl bg-rose-500/10 text-rose-400 border border-rose-500/20">
+            <div className="p-2.5 rounded-2xl bg-secondary/80 text-muted-foreground border border-border/40">
               <PackageX className="w-5 h-5" />
             </div>
             <div>
@@ -318,8 +335,8 @@ export function DeadStockSection() {
         <CardContent className="p-0 space-y-4">
           {/* Metric Callout Banner */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-            <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/20 space-y-1">
-              <span className="text-[11px] font-semibold text-rose-400 uppercase tracking-wider block">
+            <div className="p-3.5 rounded-2xl bg-secondary/40 border border-border/40 space-y-1">
+              <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider block">
                 Locked Working Capital
               </span>
               <span className="text-xl font-extrabold text-foreground block">
@@ -403,10 +420,14 @@ export function DeadStockSection() {
 
               <div className="divide-y divide-border/40 rounded-2xl border border-border/40 overflow-hidden bg-secondary/20 max-h-[420px] overflow-y-auto">
                 {pendingItems.slice(0, 6).map((item) => {
-                  const costPrice = item.costPrice || (item.price || 500) * 0.6;
-                  const tiedCapital = (item.stock || 0) * costPrice;
-                  const prediction = predictOptimalClearanceDiscount(item, totalDeadCapital);
                   const analysis = deadStockAnalysis.items.find((i) => i.productId === item.id);
+                  const prediction = predictOptimalClearanceDiscount(item, {
+                    salesMetrics: analysis,
+                    transactions,
+                    totalCatalogDeadCapital: totalDeadCapital,
+                  });
+                  const costPrice = prediction.costPrice;
+                  const tiedCapital = (item.stock || 0) * costPrice;
 
                   return (
                     <div

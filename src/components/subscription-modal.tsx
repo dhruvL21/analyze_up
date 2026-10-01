@@ -8,6 +8,7 @@ import {
   X,
   Sparkles,
   Zap,
+  Bot,
   ShieldCheck,
   RotateCcw,
   CreditCard,
@@ -317,17 +318,17 @@ export default function SubscriptionModal() {
                       <button
                         type="button"
                         onClick={() => setIsFindMyPlanOpen(true)}
-                        className="inline-flex items-center gap-1.5 text-xs font-bold text-foreground hover:text-primary transition-colors py-1.5 px-3.5 rounded-xl bg-secondary/50 hover:bg-secondary border border-border/60 shadow-sm"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground hover:text-foreground/80 transition-colors py-1.5 px-3.5 rounded-xl bg-secondary/50 hover:bg-secondary border border-border/60 shadow-sm"
                       >
-                        <Sparkles className="w-3.5 h-3.5 text-primary" />
+                        <Sparkles className="w-3.5 h-3.5 text-muted-foreground" />
                         <span>Find My Plan</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setIsAskAiOpen(true)}
-                        className="inline-flex items-center gap-1.5 text-xs font-bold text-zinc-950 transition-colors py-1.5 px-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 font-extrabold shadow-sm"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground hover:text-foreground/80 transition-colors py-1.5 px-3.5 rounded-xl bg-secondary/50 hover:bg-secondary border border-border/60 shadow-sm"
                       >
-                        <Zap className="w-3.5 h-3.5 fill-current" />
+                        <Bot className="w-3.5 h-3.5 text-muted-foreground" />
                         <span>Ask AnalyzeUp AI</span>
                       </button>
                     </div>
@@ -337,7 +338,7 @@ export default function SubscriptionModal() {
                       <button
                         type="button"
                         onClick={() => setViewMode("comparison")}
-                        className="text-xs font-bold text-primary hover:text-primary/80 hover:underline inline-flex items-center gap-1.5 transition-colors py-1 px-3 rounded-lg hover:bg-primary/5"
+                        className="text-xs font-semibold text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 transition-colors py-1 px-3 rounded-lg hover:bg-secondary/40"
                       >
                         Compare all features & limits in detail <ArrowRight className="w-3.5 h-3.5" />
                       </button>

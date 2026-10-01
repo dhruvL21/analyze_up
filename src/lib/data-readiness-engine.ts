@@ -449,10 +449,31 @@ export function evaluateDataReadiness(
     stockoutPrediction: hasInventoryData && ((historicalDays >= 7 && totalOrders >= 15) || totalOrders >= 50),
     safetyStockCalculation: hasInventoryData && ((historicalDays >= 14 && totalOrders >= 30) || totalOrders >= 50),
     reorderRecommendations: hasInventoryData && (products.some(p => p.stock <= (p.minStock || 5)) || historicalDays >= 7 || totalOrders >= 20),
-    deadStockDetection: hasInventoryData && level !== 'LEARNING' && totalScore >= 45 && ((historicalDays >= 14 && totalOrders >= 50) || totalOrders >= 150),
-    demandForecasting: (historicalDays >= 30 && totalOrders >= 80) || (totalOrders >= 400 && historicalDays >= 14),
-    discountRecommendations: hasInventoryData && level !== 'LEARNING' && ((historicalDays >= 25 && totalOrders >= 50) || (totalOrders >= 300 && historicalDays >= 14)),
-    clearancePricing: hasInventoryData && level !== 'LEARNING' && ((historicalDays >= 25 && totalOrders >= 50) || (totalOrders >= 300 && historicalDays >= 14)),
+    deadStockDetection: hasInventoryData && (
+      (level !== 'LEARNING' && totalScore >= 40) ||
+      totalOrders >= 80 ||
+      (historicalDays >= 14 && totalOrders >= 50) ||
+      totalOrders >= 150
+    ),
+    demandForecasting:
+      (historicalDays >= 30 && totalOrders >= 50) ||
+      (totalOrders >= 80 && level !== 'LEARNING') ||
+      (historicalDays >= 14 && totalOrders >= 50 && level !== 'LEARNING') ||
+      totalOrders >= 150 ||
+      level === 'PREDICTIVE' ||
+      level === 'OPTIMIZATION',
+    discountRecommendations: hasInventoryData && (
+      level !== 'LEARNING' ||
+      totalOrders >= 80 ||
+      (historicalDays >= 25 && totalOrders >= 50) ||
+      totalOrders >= 150
+    ),
+    clearancePricing: hasInventoryData && (
+      level !== 'LEARNING' ||
+      totalOrders >= 80 ||
+      (historicalDays >= 25 && totalOrders >= 50) ||
+      totalOrders >= 150
+    ),
     marginAnalysis: hasCostData,
     seasonalityAnalysis: historicalDays >= 90 && meaningfulSalesDays >= 45 && totalOrders >= 300,
     seasonalityDetection: historicalDays >= 90 && meaningfulSalesDays >= 45 && totalOrders >= 300,

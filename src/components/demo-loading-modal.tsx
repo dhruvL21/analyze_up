@@ -11,7 +11,6 @@ import {
   CheckCircle2,
   Loader2,
   Zap,
-  Layers,
   Database,
 } from 'lucide-react';
 
@@ -59,11 +58,10 @@ export function DemoLoadingModal() {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.25 }}
-        className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md"
+        className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-black/75 backdrop-blur-md"
       >
-        {/* Animated ambient background orbs */}
-        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-amber-500/15 rounded-full blur-3xl pointer-events-none animate-pulse" />
-        <div className="absolute bottom-1/4 left-1/3 w-80 h-80 bg-orange-600/10 rounded-full blur-3xl pointer-events-none" />
+        {/* Subtle ambient glow — uses primary color */}
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-primary/8 rounded-full blur-3xl pointer-events-none" />
 
         {/* Modal Card */}
         <motion.div
@@ -71,10 +69,10 @@ export function DemoLoadingModal() {
           animate={{ scale: 1, opacity: 1, y: 0 }}
           exit={{ scale: 0.94, opacity: 0, y: 10 }}
           transition={{ type: 'spring', duration: 0.45, bounce: 0.15 }}
-          className="relative w-full max-w-lg rounded-3xl border border-amber-500/30 bg-card/95 dark:bg-zinc-950/95 p-6 sm:p-7 shadow-[0_0_60px_-15px_rgba(245,158,11,0.3)] ios-glass overflow-hidden"
+          className="relative w-full max-w-lg rounded-3xl border border-border/60 bg-card/95 dark:bg-zinc-950/95 p-6 sm:p-7 shadow-2xl overflow-hidden"
         >
-          {/* Top glowing accent border line */}
-          <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-amber-500 to-transparent" />
+          {/* Top accent border line — primary color */}
+          <div className="absolute top-0 left-0 right-0 h-[1.5px] bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
 
           {/* Header section with centerpiece icon */}
           <div className="flex flex-col items-center text-center space-y-3">
@@ -84,22 +82,22 @@ export function DemoLoadingModal() {
               <motion.div
                 animate={{ rotate: 360 }}
                 transition={{ duration: 8, repeat: Infinity, ease: 'linear' }}
-                className="absolute -inset-2.5 rounded-3xl border-2 border-dashed border-amber-500/30"
+                className="absolute -inset-2.5 rounded-3xl border-2 border-dashed border-primary/20"
               />
 
               {/* Pulsating glow aura */}
               <div
                 className={`absolute inset-0 rounded-2xl blur-md transition-all duration-500 ${
-                  isComplete ? 'bg-emerald-500/30' : 'bg-amber-500/25 animate-pulse'
+                  isComplete ? 'bg-emerald-500/20' : 'bg-primary/10 animate-pulse'
                 }`}
               />
 
               {/* Central avatar container */}
               <div
-                className={`relative w-16 h-16 rounded-2xl flex items-center justify-center shadow-xl border transition-all duration-500 ${
+                className={`relative w-16 h-16 rounded-2xl flex items-center justify-center shadow-lg border transition-all duration-500 ${
                   isComplete
-                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400'
-                    : 'bg-gradient-to-br from-amber-500/20 via-orange-500/15 to-amber-600/20 border-amber-500/40 text-amber-500'
+                    ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                    : 'bg-primary/10 border-primary/25 text-primary'
                 }`}
               >
                 {isComplete ? (
@@ -118,8 +116,8 @@ export function DemoLoadingModal() {
 
             {/* Badge & Title */}
             <div className="space-y-1">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/25 text-[11px] font-semibold text-amber-400">
-                <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping inline-block" />
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/8 border border-primary/20 text-[11px] font-semibold text-primary">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary animate-ping inline-block" />
                 {isComplete ? 'Ready to Explore' : 'Provisioning Demo Business'}
               </div>
               <h3 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground pt-1">
@@ -135,28 +133,28 @@ export function DemoLoadingModal() {
           <div className="space-y-2 my-4">
             <div className="flex items-center justify-between text-xs px-0.5">
               <span className="font-semibold text-muted-foreground flex items-center gap-1.5 text-[11px]">
-                <Database className="w-3.5 h-3.5 text-amber-500" />
+                <Database className="w-3.5 h-3.5 text-primary/70" />
                 Populating Records
               </span>
-              <span className="font-mono font-bold text-amber-400 text-sm">
+              <span className="font-mono font-bold text-foreground text-sm">
                 {percent}%
               </span>
             </div>
 
-            {/* Glowing Dual-track Progress Bar */}
-            <div className="h-3 rounded-full bg-secondary/80 border border-border/40 p-0.5 relative overflow-hidden">
+            {/* Progress Bar */}
+            <div className="h-2.5 rounded-full bg-secondary/80 border border-border/40 p-0.5 relative overflow-hidden">
               <motion.div
                 className={`h-full rounded-full relative overflow-hidden transition-all ${
                   isComplete
-                    ? 'bg-gradient-to-r from-emerald-500 to-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.5)]'
-                    : 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-400 shadow-[0_0_15px_rgba(245,158,11,0.5)]'
+                    ? 'bg-emerald-500'
+                    : 'bg-primary'
                 }`}
                 initial={{ width: '0%' }}
                 animate={{ width: `${percent}%` }}
                 transition={{ type: 'spring', stiffness: 50, damping: 14 }}
               >
-                {/* Sweeping shimmer beam across the progress fill */}
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]" />
+                {/* Shimmer beam */}
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent -translate-x-full animate-[shimmer_1.5s_infinite]" />
               </motion.div>
             </div>
           </div>
@@ -173,9 +171,9 @@ export function DemoLoadingModal() {
                   key={step.id}
                   className={`flex items-center justify-between p-2.5 rounded-2xl border transition-all duration-300 ${
                     isDone
-                      ? 'bg-emerald-500/10 border-emerald-500/25 text-foreground'
+                      ? 'bg-emerald-500/8 border-emerald-500/20 text-foreground'
                       : isCurrent
-                      ? 'bg-amber-500/15 border-amber-500/40 text-foreground shadow-sm shadow-amber-500/10'
+                      ? 'bg-primary/8 border-primary/25 text-foreground'
                       : 'bg-secondary/20 border-border/30 text-muted-foreground/60'
                   }`}
                 >
@@ -183,9 +181,9 @@ export function DemoLoadingModal() {
                     <div
                       className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 border ${
                         isDone
-                          ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                          ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25'
                           : isCurrent
-                          ? 'bg-amber-500/25 text-amber-400 border-amber-500/40 animate-pulse'
+                          ? 'bg-primary/15 text-primary border-primary/25'
                           : 'bg-secondary/40 text-muted-foreground/40 border-border/30'
                       }`}
                     >
@@ -198,7 +196,7 @@ export function DemoLoadingModal() {
                           isDone
                             ? 'text-foreground'
                             : isCurrent
-                            ? 'text-amber-400'
+                            ? 'text-primary'
                             : 'text-muted-foreground'
                         }`}
                       >
@@ -217,7 +215,7 @@ export function DemoLoadingModal() {
                         <span className="hidden sm:inline">Done</span>
                       </div>
                     ) : isCurrent ? (
-                      <div className="flex items-center gap-1 text-[11px] font-medium text-amber-400">
+                      <div className="flex items-center gap-1 text-[11px] font-medium text-primary">
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         <span className="hidden sm:inline">Uploading</span>
                       </div>
@@ -233,7 +231,7 @@ export function DemoLoadingModal() {
           {/* Footer isolation security note */}
           <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between text-[11px] text-muted-foreground">
             <span className="flex items-center gap-1.5 truncate">
-              <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <Zap className="w-3.5 h-3.5 text-primary/60 shrink-0" />
               <span>Calibrating margins & cash cow metrics</span>
             </span>
             <span className="font-mono text-[10px] text-muted-foreground/70 shrink-0">

@@ -93,12 +93,13 @@ export function QuickActionsBar() {
     return hasRealProd || hasRealTx || hasRealNonDemoData;
   }, [products, transactions, isDemoLoaded]);
 
-  // Dynamically hide "Load Demo" / "Delete Demo" whenever Shopify, Google Drive, or real CSV data is connected/uploaded.
-  // As soon as the user disconnects or deletes all data, it immediately reappears.
-  const shouldHideDemoActions = isShopifyConnected || isDriveConnected || hasRealCatalog;
+  // Demo actions are always visible so the user can always load or delete demo data.
 
   const isRestockUnlocked = Boolean(
     businessBuddyCalibration?.isOverridden ||
+    (transactions.length >= 50) ||
+    (dataReadiness?.totalOrders && dataReadiness.totalOrders >= 50) ||
+    (dataReadiness?.historicalDays && dataReadiness.historicalDays >= 14) ||
     (
       (dataReadiness?.score ?? 0) >= 40 &&
       dataReadiness?.level !== 'LEARNING' &&
@@ -149,54 +150,52 @@ export function QuickActionsBar() {
             ref={scrollRef}
             className="flex items-center gap-2.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden flex-1"
           >
-            {!shouldHideDemoActions && (
-              isDemoLoaded ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setIsDeleteDemoOpen(true)}
-                  disabled={isDeletingDemo}
-                  className={cn(
-                    "rounded-xl text-xs sm:text-sm gap-2 shrink-0 border-rose-500/40 text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/60 font-bold h-10 px-3.5 sm:px-4 transition-all shadow-sm cursor-pointer",
-                    isDeletingDemo && "opacity-90 shadow-rose-500/30 animate-pulse cursor-wait"
-                  )}
-                >
-                  {isDeletingDemo ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin text-rose-400" />
-                      <span>Deleting Demo...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="w-4 h-4 text-rose-400" />
-                      <span>Delete Demo</span>
-                    </>
-                  )}
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setIsConfirmDemoOpen(true)}
-                  disabled={isLoadingDemo}
-                  className={cn(
-                    "rounded-xl text-xs sm:text-sm gap-2 shrink-0 border-amber-500/40 text-amber-500 hover:bg-amber-500/10 font-bold h-10 px-3.5 sm:px-4 transition-all shadow-sm cursor-pointer",
-                    isLoadingDemo && "opacity-90 shadow-amber-500/30 animate-pulse cursor-wait"
-                  )}
-                >
-                  {isLoadingDemo ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
-                      <span>Loading Demo...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4 text-amber-500" />
-                      <span>Load Demo</span>
-                    </>
-                  )}
-                </Button>
-              )
+            {isDemoLoaded ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setIsDeleteDemoOpen(true)}
+                disabled={isDeletingDemo}
+                className={cn(
+                  "rounded-xl text-xs sm:text-sm gap-2 shrink-0 border-rose-500/40 text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/60 font-bold h-10 px-3.5 sm:px-4 transition-all shadow-sm cursor-pointer",
+                  isDeletingDemo && "opacity-90 shadow-rose-500/30 animate-pulse cursor-wait"
+                )}
+              >
+                {isDeletingDemo ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-rose-400" />
+                    <span>Deleting Demo...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4 text-rose-400" />
+                    <span>Delete Demo</span>
+                  </>
+                )}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setIsConfirmDemoOpen(true)}
+                disabled={isLoadingDemo}
+                className={cn(
+                  "rounded-xl text-xs sm:text-sm gap-2 shrink-0 border-amber-500/40 text-amber-500 hover:bg-amber-500/10 font-bold h-10 px-3.5 sm:px-4 transition-all shadow-sm cursor-pointer",
+                  isLoadingDemo && "opacity-90 shadow-amber-500/30 animate-pulse cursor-wait"
+                )}
+              >
+                {isLoadingDemo ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
+                    <span>Loading Demo...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    <span>Load Demo</span>
+                  </>
+                )}
+              </Button>
             )}
 
             <Button
