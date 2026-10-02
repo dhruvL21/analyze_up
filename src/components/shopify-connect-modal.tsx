@@ -24,7 +24,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useData } from '@/context/data-context';
 import { useToast } from '@/hooks/use-toast';
 import { useUser, useFirestore } from '@/firebase';
@@ -80,7 +79,6 @@ export function ShopifyConnectModal() {
     businessProfile?.shopifyConnected || businessProfile?.shopifyStatus === 'Connected'
   );
 
-  const [activeTab, setActiveTab] = useState<'oauth' | 'token'>('oauth');
   const [storeUrl, setStoreUrl] = useState('');
   const [accessToken, setAccessToken] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -802,152 +800,56 @@ export function ShopifyConnectModal() {
             </AlertDialog>
           </div>
         ) : (
-          /* --- VIEW B: CONNECT NEW SHOPIFY STORE (DUAL TABS) --- */
+          /* --- VIEW B: CONNECT NEW SHOPIFY STORE (ONE-CLICK OAUTH) --- */
           <div className="space-y-4 pt-1">
-            <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as 'oauth' | 'token')}>
-              <TabsList className="grid grid-cols-2 w-full rounded-2xl bg-secondary/40 p-1 border border-border/40">
-                <TabsTrigger
-                  value="oauth"
-                  className="rounded-xl text-xs font-semibold gap-1.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all"
-                >
-                  <Globe className="w-3.5 h-3.5" />
-                  One-Click OAuth
-                </TabsTrigger>
-                <TabsTrigger
-                  value="token"
-                  className="rounded-xl text-xs font-semibold gap-1.5 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all"
-                >
-                  <Key className="w-3.5 h-3.5" />
-                  Admin API Token
-                </TabsTrigger>
-              </TabsList>
+            <form onSubmit={handleOAuthConnect} className="space-y-3.5">
+              <div className="space-y-1.5 text-left">
+                <Label htmlFor="oauth-store-url" className="text-xs font-semibold text-foreground">
+                  Shopify Store Domain
+                </Label>
+                <div className="relative">
+                  <Input
+                    id="oauth-store-url"
+                    placeholder="your-store-handle or store.myshopify.com"
+                    value={storeUrl}
+                    onChange={(e) => setStoreUrl(e.target.value)}
+                    className="pl-9 text-xs rounded-xl h-10 bg-secondary/30 border-border/50 focus:border-primary/50"
+                    required
+                  />
+                  <Store className="w-4 h-4 text-muted-foreground absolute left-3 top-3" />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Enter your store name, handle, or admin URL (e.g. <code>snkhed</code>, <code>14aj1c-0a</code>, or <code>admin.shopify.com/store/14aj1c-0a</code>).
+                </p>
+              </div>
 
-              {/* TAB 1: ONE-CLICK OAUTH */}
-              <TabsContent value="oauth" className="space-y-4 pt-3 mt-0">
-                <form onSubmit={handleOAuthConnect} className="space-y-3.5">
-                  <div className="space-y-1.5 text-left">
-                    <Label htmlFor="oauth-store-url" className="text-xs font-semibold text-foreground">
-                      Shopify Store Domain
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        id="oauth-store-url"
-                        placeholder="your-store-handle or store.myshopify.com"
-                        value={storeUrl}
-                        onChange={(e) => setStoreUrl(e.target.value)}
-                        className="pl-9 text-xs rounded-xl h-10 bg-secondary/30 border-border/50 focus:border-primary/50"
-                        required
-                      />
-                      <Store className="w-4 h-4 text-muted-foreground absolute left-3 top-3" />
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      Enter your store name, handle, or admin URL (e.g. <code>snkhed</code>, <code>14aj1c-0a</code>, or <code>admin.shopify.com/store/14aj1c-0a</code>).
-                    </p>
-                  </div>
+              <div className="p-3 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 text-xs space-y-1.5">
+                <div className="flex items-center gap-1.5 font-semibold text-emerald-400">
+                  <Sparkles className="w-3.5 h-3.5" /> Official Shopify Approval
+                </div>
+                <p className="text-muted-foreground text-[11px] leading-relaxed">
+                  You will be securely redirected to Shopify to review and approve these permissions.
+                </p>
+              </div>
 
-                  <div className="p-3 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 text-xs space-y-1.5">
-                    <div className="flex items-center gap-1.5 font-semibold text-emerald-400">
-                      <Sparkles className="w-3.5 h-3.5" /> Official Shopify Approval
-                    </div>
-                    <p className="text-muted-foreground text-[11px] leading-relaxed">
-                      You will be securely redirected to Shopify to review and approve these permissions.
-                    </p>
-                  </div>
-
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full rounded-xl text-xs font-bold gap-2 bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20 h-10"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        Redirecting to Shopify...
-                      </>
-                    ) : (
-                      <>
-                        Connect via Shopify OAuth
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </>
-                    )}
-                  </Button>
-                </form>
-              </TabsContent>
-
-              {/* TAB 2: CUSTOM APP ADMIN API TOKEN */}
-              <TabsContent value="token" className="space-y-4 pt-3 mt-0">
-                <form onSubmit={handleTokenConnect} className="space-y-3.5">
-                  <div className="space-y-1.5 text-left">
-                    <Label htmlFor="token-store-url" className="text-xs font-semibold text-foreground">
-                      Shopify Store Domain
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        id="token-store-url"
-                        placeholder="your-store-name.myshopify.com"
-                        value={storeUrl}
-                        onChange={(e) => setStoreUrl(e.target.value)}
-                        className="pl-9 text-xs rounded-xl h-10 bg-secondary/30 border-border/50 focus:border-primary/50"
-                        required
-                      />
-                      <Store className="w-4 h-4 text-muted-foreground absolute left-3 top-3" />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5 text-left">
-                    <Label htmlFor="access-token" className="text-xs font-semibold text-foreground">
-                      Admin API Access Token
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        id="access-token"
-                        type="password"
-                        placeholder="shpat_xxxxxxxxxxxxxxxxxxxxxxxx"
-                        value={accessToken}
-                        onChange={(e) => setAccessToken(e.target.value)}
-                        className="pl-9 text-xs rounded-xl h-10 bg-secondary/30 border-border/50 focus:border-primary/50 font-mono"
-                        required
-                      />
-                      <Key className="w-4 h-4 text-muted-foreground absolute left-3 top-3" />
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      From your store: <strong>Settings → Develop apps → API credentials</strong>.
-                    </p>
-                  </div>
-
-                  <div className="p-2.5 rounded-xl bg-secondary/30 border border-border/40 text-[11px] space-y-1 text-left">
-                    <div className="flex items-center justify-between font-semibold text-foreground">
-                      <span>Required Shopify App Scopes:</span>
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-primary/30 text-primary">Admin API</Badge>
-                    </div>
-                    <p className="text-muted-foreground text-[10.5px] leading-relaxed">
-                      • <strong>read_products</strong>, <span className="text-emerald-400 font-semibold">write_products</span> (price & catalog sync)<br />
-                      • <strong>read_orders</strong>, <strong>write_orders</strong>, <strong>read_all_orders</strong> (sales transactions)<br />
-                      • <span className="text-emerald-400 font-semibold">read_returns</span> (customer returns & refunds)<br />
-                      • <strong>read_inventory</strong> (stock tracking)
-                    </p>
-                  </div>
-
-                  <Button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="w-full rounded-xl text-xs font-bold gap-2 bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20 h-10"
-                  >
-                    {isSubmitting ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        Verifying Credentials...
-                      </>
-                    ) : (
-                      <>
-                        Verify & Connect Store
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </>
-                    )}
-                  </Button>
-                </form>
-              </TabsContent>
-            </Tabs>
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full rounded-xl text-xs font-bold gap-2 bg-emerald-600 hover:bg-emerald-500 text-white shadow-md shadow-emerald-600/20 h-10"
+              >
+                {isSubmitting ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    Redirecting to Shopify...
+                  </>
+                ) : (
+                  <>
+                    Connect via Shopify OAuth
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </>
+                )}
+              </Button>
+            </form>
           </div>
         )}
 

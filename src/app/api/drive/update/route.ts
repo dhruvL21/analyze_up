@@ -132,23 +132,65 @@ export async function POST(req: NextRequest) {
       /mrp/i,
     ]);
 
+    const variantHeader = findHeader([
+      /^(variant_?title|variant_?name|option1_?value|option2_?value|size|option1|option2|variant)$/i,
+      /variant/i,
+      /size/i,
+    ]);
+
     let updatedRowsCount = 0;
 
-    // 3. Apply updates to matching rows
+    // Helper to extract clean size/variant from a product name like "Product A - Navy (L)" or "Shoe (Size 8)"
+    const extractVariantFromName = (nameStr: string): string => {
+      const parenMatch = nameStr.match(/\(([^)]+)\)$/);
+      if (parenMatch) return parenMatch[1].trim().toLowerCase();
+      const dashParts = nameStr.split(' - ');
+      if (dashParts.length > 1) return dashParts[dashParts.length - 1].trim().toLowerCase();
+      return '';
+    };
+
+    // 3. Apply updates strictly to matching variant rows
     for (const update of updates) {
-      const targetSku = update.sku?.trim().toLowerCase();
-      const targetName = update.productName?.trim().toLowerCase();
+      const targetSku = update.sku ? update.sku.trim().toLowerCase() : '';
+      const targetName = update.productName ? update.productName.trim().toLowerCase() : '';
+      const targetVariant = (update.variantTitle || update.size || extractVariantFromName(update.productName || '')).trim().toLowerCase();
+      const updateAllVariants = Boolean(update.updateAllVariants);
 
       for (const row of parsed.data) {
         if (!row || typeof row !== 'object') continue;
 
         const rowSku = skuHeader && row[skuHeader] ? String(row[skuHeader]).trim().toLowerCase() : '';
         const rowName = nameHeader && row[nameHeader] ? String(row[nameHeader]).trim().toLowerCase() : '';
+        const rowVariant = variantHeader && row[variantHeader] ? String(row[variantHeader]).trim().toLowerCase() : '';
 
-        const isSkuMatch = Boolean(targetSku && rowSku && (rowSku === targetSku || rowSku.includes(targetSku)));
-        const isNameMatch = Boolean(targetName && rowName && (rowName === targetName || rowName.includes(targetName) || targetName.includes(rowName)));
+        let isRowMatch = false;
 
-        if (isSkuMatch || isNameMatch) {
+        // CASE 1: Precise SKU Match (Highest specificity for size/variant)
+        if (targetSku && rowSku) {
+          isRowMatch = (rowSku === targetSku);
+        }
+        // CASE 2: Name + Variant/Size Match
+        else if (targetName && rowName) {
+          const namesMatch = rowName === targetName || rowName.includes(targetName) || targetName.includes(rowName);
+
+          if (namesMatch) {
+            if (updateAllVariants) {
+              isRowMatch = true;
+            } else if (rowVariant && targetVariant) {
+              // Both have variant/size: strictly match variant
+              isRowMatch = (rowVariant === targetVariant || rowVariant.includes(targetVariant) || targetVariant.includes(rowVariant));
+            } else if (rowVariant && !targetVariant) {
+              // Row has a specific size (e.g. Size 7, Size 8) but update has no variant specified
+              // Do NOT match all variant rows unless updateAllVariants is explicitly requested
+              isRowMatch = false;
+            } else {
+              // Neither has variant column (single SKU product)
+              isRowMatch = true;
+            }
+          }
+        }
+
+        if (isRowMatch) {
           // Update Stock
           if (stockHeader) {
             if (update.newStock !== undefined) {

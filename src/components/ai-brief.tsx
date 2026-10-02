@@ -7,13 +7,117 @@ import { doc, setDoc } from 'firebase/firestore';
 import { Sparkles, AlertTriangle, Coins, Loader2, RefreshCw, Lock, ArrowRight, Clock, CheckCircle2 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { calculateDynamicBrief, type AIBriefOutput } from '@/ai/flows/ai-brief-generator';
+import { predictOptimalClearanceDiscount } from '@/lib/ml/clearance-pricing-model';
 import { serializePlainData } from '@/lib/utils';
 import type { Product, Transaction } from '@/lib/types';
 
+import { useToast } from '@/hooks/use-toast';
+import { useRouter } from 'next/navigation';
+
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+
 export function AIBrief() {
-  const { products, transactions, activePlan, setShowSubscriptionModal, returns = [], isLoading, capabilities, dataReadiness } = useData();
+  const { products, transactions, activePlan, setShowSubscriptionModal, returns = [], isLoading, capabilities, dataReadiness, updateProduct } = useData();
   const { user } = useUser();
   const firestore = useFirestore();
+  const { toast } = useToast();
+  const router = useRouter();
+
+  const [executedActions, setExecutedActions] = useState<Record<string, boolean>>({});
+  const [isActionPending, setIsActionPending] = useState<Record<string, boolean>>({});
+
+  // Permission confirmation modal state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    productName: string;
+    badge: string;
+    badgeColor: string;
+    details: { label: string; value: string; highlight?: boolean }[];
+    description: string;
+    confirmText: string;
+    confirmVariant?: 'rose' | 'amber' | 'emerald';
+    onConfirm: () => Promise<void>;
+  } | null>(null);
+
+  const openReorderConfirm = () => {
+    if (!isPaid) {
+      setShowSubscriptionModal(true);
+      return;
+    }
+    if (executedActions.reorder) {
+      router.push('/dashboard/inventory');
+      return;
+    }
+
+    const prodName = activeBrief?.stockoutItem?.name || 'Item';
+    const targetProd = products.find(p => p.name === prodName || (p as any).productName === prodName);
+    const currentStock = targetProd ? Number(targetProd.stock) || 0 : 0;
+    const reorderQty = 50;
+    const costText = activeBrief?.stockoutItem?.costText.replace('Estimated cost: ', '') || '₹0';
+
+    setConfirmDialog({
+      isOpen: true,
+      title: 'Authorize Restock Purchase Order',
+      productName: prodName,
+      badge: 'Stockout Mitigation',
+      badgeColor: 'bg-rose-500/15 border-rose-500/30 text-rose-400',
+      description: 'You are about to authorize an automated inventory replenishment purchase order. Stock will be updated across your catalog instantly.',
+      details: [
+        { label: 'Current Warehouse Stock', value: `${currentStock} units` },
+        { label: 'Replenishment Quantity', value: `+${reorderQty} units`, highlight: true },
+        { label: 'Estimated Cost', value: costText },
+      ],
+      confirmText: 'Authorize & Dispatch (+50 Units)',
+      confirmVariant: 'rose',
+      onConfirm: async () => {
+        setIsActionPending(prev => ({ ...prev, reorder: true }));
+        try {
+          if (targetProd && updateProduct) {
+            await updateProduct({
+              ...targetProd,
+              stock: currentStock + reorderQty,
+              updatedAt: new Date().toISOString(),
+            }, { forceShopifySync: true, silentToast: true });
+          }
+          setExecutedActions(prev => ({ ...prev, reorder: true }));
+          toast({
+            title: '📦 Restock PO Dispatched (+50 Units)',
+            description: `Successfully replenished stock for "${prodName}".`,
+          });
+        } catch (err) {
+          console.error(err);
+          toast({
+            variant: 'destructive',
+            title: 'Failed to dispatch reorder',
+            description: 'An error occurred while updating catalog stock.',
+          });
+        } finally {
+          setIsActionPending(prev => ({ ...prev, reorder: false }));
+        }
+      },
+    });
+  };
+
+
+
+  const handleReturnsAction = () => {
+    if (!isPaid) {
+      setShowSubscriptionModal(true);
+      return;
+    }
+    setExecutedActions(prev => ({ ...prev, returns: true }));
+    router.push('/dashboard/returns');
+  };
 
   const briefRef = useMemo(() => user && firestore ? doc(firestore, 'users', user.uid, 'analytics', 'ai_brief') : null, [user, firestore]);
   const { data: persistedBrief } = useDoc<AIBriefOutput>(briefRef);
@@ -53,6 +157,85 @@ export function AIBrief() {
     if (isPersistedBriefValid && persistedBrief) return persistedBrief;
     return dynamicBrief;
   }, [brief, isPersistedBriefValid, persistedBrief, dynamicBrief]);
+
+  // Dynamically calculate recommended clearance discount percentage
+  const dynamicDiscountPct = useMemo(() => {
+    const actionStr = activeBrief?.slowMovingItem?.actionText || '';
+    const match = actionStr.match(/(\d+)%/);
+    if (match && match[1]) {
+      return parseInt(match[1], 10);
+    }
+    const prodName = activeBrief?.slowMovingItem?.name;
+    const targetProd = products.find(p => p.name === prodName || (p as any).productName === prodName);
+    if (targetProd) {
+      const pred = predictOptimalClearanceDiscount(targetProd, { transactions });
+      if (pred && pred.discountPercent) return pred.discountPercent;
+    }
+    return 20;
+  }, [activeBrief, products, transactions]);
+
+  const openClearanceConfirm = (actionType: 'discount' | 'velocity' = 'discount') => {
+    if (!isPaid) {
+      setShowSubscriptionModal(true);
+      return;
+    }
+    if (executedActions.clearance) {
+      router.push('/dashboard/inventory');
+      return;
+    }
+
+    const prodName = activeBrief?.slowMovingItem?.name || 'Item';
+    const targetProd = products.find(p => p.name === prodName || (p as any).productName === prodName);
+    const oldPrice = targetProd ? Number(targetProd.price) || 100 : 100;
+    const discountPct = dynamicDiscountPct || 20;
+    const newPrice = Math.round(oldPrice * (1 - discountPct / 100));
+    const lockedCapital = activeBrief?.slowMovingItem?.costText || '₹0';
+
+    setConfirmDialog({
+      isOpen: true,
+      title: actionType === 'discount' ? `Authorize ${discountPct}% Clearance Discount` : 'Authorize Velocity Discount Optimization',
+      productName: prodName,
+      badge: actionType === 'discount' ? 'Dead Stock Liquidation' : 'Velocity Acceleration',
+      badgeColor: 'bg-amber-500/15 border-amber-500/30 text-amber-400',
+      description: `Apply founder-authorized ${discountPct}% price reduction to stimulate sales velocity and recover locked capital (${lockedCapital}). Price will update across catalog instantly.`,
+      details: [
+        { label: 'Current Selling Price', value: `₹${oldPrice.toLocaleString('en-IN')}` },
+        { label: `New Price (-${discountPct}% Discount)`, value: `₹${newPrice.toLocaleString('en-IN')}`, highlight: true },
+        { label: 'Capital to Recover', value: lockedCapital },
+      ],
+      confirmText: `Authorize & Apply ₹${newPrice.toLocaleString('en-IN')} Price`,
+      confirmVariant: 'amber',
+      onConfirm: async () => {
+        setIsActionPending(prev => ({ ...prev, clearance: true }));
+        try {
+          if (targetProd && updateProduct) {
+            await updateProduct({
+              ...targetProd,
+              price: newPrice,
+              compareAtPrice: oldPrice,
+              discountPercent: discountPct,
+              liquidationStatus: 'Liquidated',
+              updatedAt: new Date().toISOString(),
+            }, { forceShopifySync: true, silentToast: true });
+          }
+          setExecutedActions(prev => ({ ...prev, clearance: true }));
+          toast({
+            title: `🏷️ ${discountPct}% Discount Applied`,
+            description: `Updated selling price to ₹${newPrice.toLocaleString('en-IN')} for "${prodName}".`,
+          });
+        } catch (err) {
+          console.error(err);
+          toast({
+            variant: 'destructive',
+            title: 'Failed to apply discount',
+            description: 'An error occurred while updating price.',
+          });
+        } finally {
+          setIsActionPending(prev => ({ ...prev, clearance: false }));
+        }
+      },
+    });
+  };
 
   // Calculate return stats in real-time with useMemo to eliminate render thrashing
   const { returnedQty, returnRate, topReturnedProduct, topReturnedQty } = useMemo(() => {
@@ -279,98 +462,285 @@ export function AIBrief() {
           ) : (
             <>
               {/* Left Column: Stockout Risk */}
-              <div className="relative group flex p-4 rounded-2xl border border-rose-500/20 bg-zinc-900/60 hover:bg-zinc-900/90 hover:border-rose-500/40 transition-all duration-200 flex-1 flex-col justify-between shadow-sm">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-1.5 pb-2 border-b border-border/30">
-                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-rose-500/15 text-rose-400">
-                      <AlertTriangle className="h-3.5 w-3.5" />
+              {executedActions.reorder || activeBrief.stockoutItem.name === 'None' || !activeBrief.stockoutItem.name ? (
+                <div className="relative group flex p-4 rounded-2xl border border-emerald-500/20 bg-zinc-900/60 hover:bg-zinc-900/80 transition-all duration-200 flex-1 flex-col justify-between shadow-sm">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5 pb-2 border-b border-border/30">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Stock Runway Healthy</span>
                     </div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-rose-400">Stockout Risk</span>
+                    <h4 className="font-bold text-sm text-zinc-100 leading-snug pt-0.5">
+                      {executedActions.reorder ? 'PO Dispatched & Replenishing' : 'All SKUs Adequately Stocked'}
+                    </h4>
+                    <div className="space-y-1 text-xs">
+                      <p className="text-emerald-400 font-semibold flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
+                        No stockout risks detected
+                      </p>
+                      <p className="text-zinc-400">All warehouse catalog items have healthy replenishment runway.</p>
+                    </div>
                   </div>
-                  <h4 className="font-bold text-sm text-zinc-100 leading-snug line-clamp-2 pt-0.5">{activeBrief.stockoutItem.name}</h4>
-                  <div className="space-y-1 text-xs">
-                    <p className="text-rose-400 font-semibold flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse shrink-0"></span>
-                      {activeBrief.stockoutItem.riskText}
-                    </p>
-                    <p className="text-zinc-400">{activeBrief.stockoutItem.reorderText}</p>
+                  <div className="pt-2.5 mt-2 border-t border-border/30 space-y-2">
+                    <div className="flex items-center justify-between text-xs gap-2 min-w-0">
+                      <span className="text-zinc-400 truncate text-[11px]">Est. Reorder Cost</span>
+                      <span className="font-bold text-emerald-400 font-mono text-xs shrink-0">₹0</span>
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={() => router.push('/dashboard/inventory')}
+                      className="w-full h-8 px-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 font-semibold text-xs flex items-center justify-between transition-all hover:bg-emerald-500/20 cursor-pointer whitespace-nowrap"
+                    >
+                      <span>Inventory Healthy</span>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    </button>
                   </div>
                 </div>
-                <div className="pt-2.5 mt-2 border-t border-border/30 flex items-center justify-between text-xs">
-                  <span className="text-zinc-400">Est. Reorder Cost</span>
-                  <span className="font-bold text-zinc-100 font-mono text-sm">{activeBrief.stockoutItem.costText.replace('Estimated cost: ', '')}</span>
+              ) : (
+                <div className="relative group flex p-4 rounded-2xl border border-rose-500/20 bg-zinc-900/60 hover:bg-zinc-900/90 hover:border-rose-500/40 transition-all duration-200 flex-1 flex-col justify-between shadow-sm">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5 pb-2 border-b border-border/30">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-rose-500/15 text-rose-400">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-rose-400">Stockout Risk</span>
+                    </div>
+                    <h4 className="font-bold text-sm text-zinc-100 leading-snug line-clamp-2 pt-0.5">{activeBrief.stockoutItem.name}</h4>
+                    <div className="space-y-1 text-xs">
+                      <p className="text-rose-400 font-semibold flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-rose-400 animate-pulse shrink-0"></span>
+                        {activeBrief.stockoutItem.riskText}
+                      </p>
+                      <p className="text-zinc-400">{activeBrief.stockoutItem.reorderText}</p>
+                    </div>
+                  </div>
+                  <div className="pt-2.5 mt-2 border-t border-border/30 space-y-2">
+                    <div className="flex items-center justify-between text-xs gap-2 min-w-0">
+                      <span className="text-zinc-400 truncate text-[11px]">Est. Reorder Cost</span>
+                      <span className="font-bold text-zinc-100 font-mono text-xs shrink-0">{activeBrief.stockoutItem.costText.replace('Estimated cost: ', '')}</span>
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={openReorderConfirm}
+                      disabled={isActionPending.reorder}
+                      className="w-full h-8 px-3 rounded-xl border font-semibold text-xs flex items-center justify-between transition-all cursor-pointer whitespace-nowrap group bg-rose-500/15 hover:bg-rose-500/25 border-rose-500/30 text-rose-300 hover:text-rose-200"
+                    >
+                      {isActionPending.reorder ? (
+                        <>
+                          <span className="flex items-center gap-1.5">
+                            <Loader2 className="w-3 h-3 animate-spin text-rose-400" />
+                            Processing PO...
+                          </span>
+                          <span className="text-[10px] opacity-75 font-mono">1-Step</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Reorder Stock</span>
+                          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Middle Column: Dead Stock / Slow Sales */}
-              <div className="relative group flex p-4 rounded-2xl border border-amber-500/20 bg-zinc-900/60 hover:bg-zinc-900/90 hover:border-amber-500/40 transition-all duration-200 flex-1 flex-col justify-between shadow-sm">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-1.5 pb-2 border-b border-border/30">
-                    <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
-                      <Coins className="h-3.5 w-3.5" />
+              {executedActions.clearance || activeBrief.slowMovingItem.name === 'None' || !activeBrief.slowMovingItem.name ? (
+                <div className="relative group flex p-4 rounded-2xl border border-emerald-500/20 bg-zinc-900/60 hover:bg-zinc-900/80 transition-all duration-200 flex-1 flex-col justify-between shadow-sm">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5 pb-2 border-b border-border/30">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Velocity Optimal</span>
                     </div>
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
-                      {Boolean((capabilities?.slowMoverDetection && dataReadiness?.level !== 'LEARNING') || isThresholdMet) ? 'Slow-Moving' : 'Capital Asset'}
-                    </span>
+                    <h4 className="font-bold text-sm text-zinc-100 leading-snug pt-0.5">
+                      {executedActions.clearance ? 'Discount Applied & Active' : 'No Stagnant Capital'}
+                    </h4>
+                    <div className="space-y-1 text-xs">
+                      <p className="text-emerald-400 font-semibold flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
+                        Catalog turnover flowing
+                      </p>
+                      <p className="text-zinc-400">No slow-moving inventory or dead stock requiring liquidation.</p>
+                    </div>
                   </div>
-                  <h4 className="font-bold text-sm text-zinc-100 leading-snug line-clamp-2 pt-0.5">{activeBrief.slowMovingItem.name}</h4>
-                  <div className="space-y-1 text-xs">
-                    <p className="text-zinc-400">{activeBrief.slowMovingItem.riskText}</p>
-                    <p className="text-amber-400 font-bold flex items-center gap-1.5">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
-                      {activeBrief.slowMovingItem.costText}
-                    </p>
+                  <div className="pt-2.5 mt-2 border-t border-border/30 space-y-2">
+                    <div className="flex items-center justify-between text-xs gap-2 min-w-0">
+                      <span className="text-zinc-400 shrink-0 text-[11px]">Action</span>
+                      <span className="text-emerald-400 font-semibold text-right text-xs shrink-0">Optimal</span>
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={() => router.push('/dashboard/inventory')}
+                      className="w-full h-8 px-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 font-semibold text-xs flex items-center justify-between transition-all hover:bg-emerald-500/20 cursor-pointer whitespace-nowrap"
+                    >
+                      <span>Catalog Optimized</span>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    </button>
                   </div>
                 </div>
-                <div className="pt-2.5 mt-2 border-t border-border/30 flex items-center justify-between text-xs gap-2">
-                  <span className="text-zinc-400 shrink-0">Action</span>
-                  <span 
-                    className="text-amber-300 font-semibold text-right"
-                    title={activeBrief.slowMovingItem.actionText}
-                  >
-                    {activeBrief.slowMovingItem.actionText
-                      .replace(/^Suggested action:\s*/i, '')
-                      .replace(/^Action:\s*/i, '')
-                      .replace(/\s*clearance discount\.?/i, ' Discount')
-                      .trim() || (Boolean((capabilities?.slowMoverDetection && dataReadiness?.level !== 'LEARNING') || isThresholdMet) ? '20% Discount' : 'Monitor Velocity')}
-                  </span>
+              ) : (
+                <div className="relative group flex p-4 rounded-2xl border border-amber-500/20 bg-zinc-900/60 hover:bg-zinc-900/90 hover:border-amber-500/40 transition-all duration-200 flex-1 flex-col justify-between shadow-sm">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-1.5 pb-2 border-b border-border/30">
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-amber-500/15 text-amber-400">
+                        <Coins className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">
+                        {Boolean((capabilities?.slowMoverDetection && dataReadiness?.level !== 'LEARNING') || isThresholdMet) ? 'Slow-Moving' : 'Capital Asset'}
+                      </span>
+                    </div>
+                    <h4 className="font-bold text-sm text-zinc-100 leading-snug line-clamp-2 pt-0.5">{activeBrief.slowMovingItem.name}</h4>
+                    <div className="space-y-1 text-xs">
+                      <p className="text-zinc-400">{activeBrief.slowMovingItem.riskText}</p>
+                      <p className="text-amber-400 font-bold flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0"></span>
+                        {activeBrief.slowMovingItem.costText}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="pt-2.5 mt-2 border-t border-border/30 space-y-2">
+                    <div className="flex items-center justify-between text-xs gap-2 min-w-0">
+                      <span className="text-zinc-400 shrink-0 text-[11px]">Action</span>
+                      <span 
+                        className="text-amber-300 font-semibold text-right text-xs shrink-0"
+                        title={activeBrief.slowMovingItem.actionText}
+                      >
+                        {activeBrief.slowMovingItem.actionText
+                          .replace(/^Suggested action:\s*/i, '')
+                          .replace(/^Action:\s*/i, '')
+                          .replace(/\s*clearance discount\.?/i, ' Discount')
+                          .trim() || (Boolean((capabilities?.slowMoverDetection && dataReadiness?.level !== 'LEARNING') || isThresholdMet) ? `${dynamicDiscountPct}% Discount` : 'Monitor Velocity')}
+                      </span>
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={() => {
+                        const isClearance = activeBrief.slowMovingItem.actionText.toLowerCase().includes('discount') || activeBrief.slowMovingItem.actionText.toLowerCase().includes('clearance');
+                        openClearanceConfirm(isClearance ? 'discount' : 'velocity');
+                      }}
+                      disabled={isActionPending.clearance}
+                      className="w-full h-8 px-3 rounded-xl border font-semibold text-xs flex items-center justify-between transition-all cursor-pointer whitespace-nowrap group bg-amber-500/15 hover:bg-amber-500/25 border-amber-500/30 text-amber-300 hover:text-amber-200"
+                    >
+                      {isActionPending.clearance ? (
+                        <>
+                          <span className="flex items-center gap-1.5">
+                            <Loader2 className="w-3 h-3 animate-spin text-amber-400" />
+                            Applying Discount...
+                          </span>
+                          <span className="text-[10px] opacity-75 font-mono">1-Step</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>
+                            {activeBrief.slowMovingItem.actionText.toLowerCase().includes('discount') || activeBrief.slowMovingItem.actionText.toLowerCase().includes('clearance')
+                              ? `Apply -${dynamicDiscountPct}% Discount`
+                              : 'Optimize Velocity'}
+                          </span>
+                          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </>
           )}
 
           {/* Right Column: Customer Returns */}
-          <div className="relative group flex p-4 rounded-2xl border border-emerald-500/20 bg-zinc-900/60 hover:bg-zinc-900/90 hover:border-emerald-500/40 transition-all duration-200 flex-1 flex-col justify-between shadow-sm">
-            <div className="space-y-2">
-              <div className="flex items-center gap-1.5 pb-2 border-b border-border/30">
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
-                  <RefreshCw className="h-3.5 w-3.5 text-emerald-400" />
+          {returnedQty === 0 ? (
+            <div className="relative group flex p-4 rounded-2xl border border-emerald-500/20 bg-zinc-900/60 hover:bg-zinc-900/80 transition-all duration-200 flex-1 flex-col justify-between shadow-sm">
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 pb-2 border-b border-border/30">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Returns Optimal</span>
                 </div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Returns</span>
+                <h4 className="font-bold text-sm text-zinc-100 leading-snug pt-0.5">
+                  Zero Recent Returns
+                </h4>
+                <div className="space-y-1 text-xs">
+                  <p className="text-emerald-400 font-bold flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
+                    Return Rate: 0.0%
+                  </p>
+                  <p className="text-zinc-400">No return claims or defective product issues reported.</p>
+                </div>
               </div>
-              <h4 className="font-bold text-sm text-zinc-100 leading-snug line-clamp-2 pt-0.5">
-                {returnedQty > 0 ? `${returnedQty} Items Returned` : 'No Recent Returns'}
-              </h4>
-              <div className="space-y-1 text-xs">
-                <p className="text-emerald-400 font-bold flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
-                  Return Rate: {returnRate.toFixed(1)}%
-                </p>
-                <p className="text-zinc-400 line-clamp-1">
-                  {topReturnedQty > 0 ? `Highest: ${topReturnedProduct} (${topReturnedQty} units)` : '0 return transactions logged.'}
-                </p>
+              <div className="pt-2.5 mt-2 border-t border-border/30 space-y-2">
+                <div className="flex items-center justify-between text-xs gap-2 min-w-0">
+                  <span className="text-zinc-400 truncate text-[11px]">Total Returned</span>
+                  <span className="font-bold text-emerald-400 font-mono text-xs shrink-0">0 units</span>
+                </div>
+                <button 
+                  type="button"
+                  onClick={handleReturnsAction}
+                  className="w-full h-8 px-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 font-semibold text-xs flex items-center justify-between transition-all hover:bg-emerald-500/20 cursor-pointer whitespace-nowrap"
+                >
+                  <span>Returns Clean</span>
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                </button>
               </div>
             </div>
-            <div className="pt-2.5 mt-2 border-t border-border/30 flex items-center justify-between text-xs">
-              <a 
-                href="/dashboard/returns"
-                className="text-emerald-400 hover:text-emerald-300 font-semibold inline-flex items-center gap-1 hover:underline group"
-              >
-                <span>Manage Returns Hub</span>
-                <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-              </a>
+          ) : (
+            <div className="relative group flex p-4 rounded-2xl border border-emerald-500/20 bg-zinc-900/60 hover:bg-zinc-900/90 hover:border-emerald-500/40 transition-all duration-200 flex-1 flex-col justify-between shadow-sm">
+              <div className="space-y-2">
+                <div className="flex items-center gap-1.5 pb-2 border-b border-border/30">
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-400">
+                    <RefreshCw className="h-3.5 w-3.5 text-emerald-400" />
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Returns</span>
+                </div>
+                <h4 className="font-bold text-sm text-zinc-100 leading-snug line-clamp-2 pt-0.5">
+                  {returnedQty} Items Returned
+                </h4>
+                <div className="space-y-1 text-xs">
+                  <p className="text-emerald-400 font-bold flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
+                    Return Rate: {returnRate.toFixed(1)}%
+                  </p>
+                  <p className="text-zinc-400 line-clamp-1">
+                    {topReturnedQty > 0 ? `Highest: ${topReturnedProduct} (${topReturnedQty} units)` : '0 return transactions logged.'}
+                  </p>
+                </div>
+              </div>
+              <div className="pt-2.5 mt-2 border-t border-border/30 space-y-2">
+                <div className="flex items-center justify-between text-xs gap-2 min-w-0">
+                  <span className="text-zinc-400 truncate text-[11px]">Total Returned</span>
+                  <span className="font-bold text-emerald-400 font-mono text-xs shrink-0">
+                    {returnedQty} units
+                  </span>
+                </div>
+                <button 
+                  type="button"
+                  onClick={handleReturnsAction}
+                  className={`w-full h-8 px-3 rounded-xl border font-semibold text-xs flex items-center justify-between transition-all cursor-pointer whitespace-nowrap group ${
+                    executedActions.returns
+                      ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                      : 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/30 text-emerald-300 hover:text-emerald-200'
+                  }`}
+                >
+                  {executedActions.returns ? (
+                    <>
+                      <span className="flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        Returns Hub Open
+                      </span>
+                      <ArrowRight className="w-3.5 h-3.5 text-emerald-400" />
+                    </>
+                  ) : (
+                    <>
+                      <span>Manage Returns</span>
+                      <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Footer Banner - Cash Locked in Inventory (Shown only when everything is unlocked) */}
@@ -409,6 +779,68 @@ export function AIBrief() {
           </div>
         )}
       </div>
+
+      {/* Founder Permission Authorization Modal */}
+      {confirmDialog && (
+        <AlertDialog open={confirmDialog.isOpen} onOpenChange={(open) => !open && setConfirmDialog(null)}>
+          <AlertDialogContent className="bg-zinc-950/95 border-zinc-800 text-zinc-100 max-w-md backdrop-blur-xl shadow-2xl p-6">
+            <AlertDialogHeader className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold border ${confirmDialog.badgeColor}`}>
+                  {confirmDialog.badge}
+                </span>
+                <span className="text-[11px] text-zinc-400 font-mono">1-Step Action</span>
+              </div>
+              <AlertDialogTitle className="text-lg font-bold text-zinc-100 text-left">
+                {confirmDialog.title}
+              </AlertDialogTitle>
+              <div className="p-3 rounded-xl bg-zinc-900/80 border border-zinc-800/80 space-y-1.5 text-left">
+                <p className="text-xs text-zinc-400">Target Product</p>
+                <p className="text-sm font-bold text-white">{confirmDialog.productName}</p>
+              </div>
+              <AlertDialogDescription className="text-xs text-zinc-400 text-left leading-relaxed">
+                {confirmDialog.description}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+
+            {/* Change breakdown table */}
+            <div className="my-3 space-y-2 rounded-xl bg-secondary/30 p-3 border border-border/40 text-xs">
+              {confirmDialog.details.map((d, i) => (
+                <div key={i} className="flex items-center justify-between">
+                  <span className="text-zinc-400">{d.label}</span>
+                  <span className={`font-mono font-bold ${d.highlight ? (confirmDialog.confirmVariant === 'rose' ? 'text-rose-400' : 'text-amber-400') : 'text-zinc-100'}`}>
+                    {d.value}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <AlertDialogFooter className="flex-row items-center justify-end gap-2 pt-2">
+              <AlertDialogCancel 
+                onClick={() => setConfirmDialog(null)}
+                className="bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-700 h-9 px-4 rounded-xl text-xs font-semibold"
+              >
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={async (e) => {
+                  e.preventDefault();
+                  const action = confirmDialog.onConfirm;
+                  setConfirmDialog(null);
+                  await action();
+                }}
+                className={`h-9 px-4 rounded-xl text-xs font-bold text-white shadow-lg transition-all ${
+                  confirmDialog.confirmVariant === 'rose'
+                    ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/20'
+                    : 'bg-amber-600 hover:bg-amber-500 shadow-amber-600/20'
+                }`}
+              >
+                {confirmDialog.confirmText}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   );
 }

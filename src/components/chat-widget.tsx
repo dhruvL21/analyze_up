@@ -4,7 +4,7 @@ import { useState, useRef, useEffect, useTransition } from 'react';
 import { useData } from '@/context/data-context';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { X, Send, Bot, Sparkles, Loader2, Lock, FileText, Database } from 'lucide-react';
+import { X, Send, Bot, Sparkles, Loader2, Lock, FileText } from 'lucide-react';
 import type { ChatMessage } from '@/ai/flows/chat';
 import type { Citation, RAGResponse } from '@/ai/rag/types';
 import { Badge } from '@/components/ui/badge';
@@ -175,12 +175,6 @@ export function ChatWidget() {
                       <h4 className="font-extrabold text-sm text-foreground tracking-tight">
                         AnalyzeUp AI
                       </h4>
-                    </div>
-                    <div className="flex items-center gap-1.5 mt-0.5">
-                      <Database className="w-3 h-3 text-muted-foreground/70" />
-                      <span className="text-[10.5px] text-muted-foreground font-medium">
-                        {totalIndexedRecords.toLocaleString()} records connected
-                      </span>
                     </div>
                   </div>
                 </div>

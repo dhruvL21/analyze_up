@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Product, Transaction } from '@/lib/types';
 import type { IntelligenceCapabilities, DataReadiness } from '@/lib/data-readiness-engine';
+import { predictOptimalClearanceDiscount } from '@/lib/ml/clearance-pricing-model';
 
 /* ------------------ SCHEMAS ------------------ */
 
@@ -183,11 +184,14 @@ export function calculateDynamicBrief(
         ? Math.max(1, Math.round((now - latestSaleDate) / (1000 * 60 * 60 * 24)))
         : Math.min(30, options?.dataReadiness?.historicalDays || 30);
 
+      const pred = predictOptimalClearanceDiscount(worstSlowMovingItem, { transactions });
+      const dynamicDiscount = pred?.discountPercent || 20;
+
       slowMovingItem = {
         name: worstSlowMovingItem.name || 'Unnamed Product',
         riskText: `Low velocity (${daysSinceLastSale} days).`,
         costText: `₹${blockedCapital.toLocaleString('en-IN')} blocked.`,
-        actionText: isDiscountEligible ? 'Suggested action: 20% Discount' : 'Action: Monitor Velocity'
+        actionText: isDiscountEligible ? `Suggested action: ${dynamicDiscount}% Discount` : 'Action: Monitor Velocity'
       };
     }
   }

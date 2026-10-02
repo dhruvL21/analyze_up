@@ -11,6 +11,7 @@ import { logBusinessAction } from '@/lib/audit-store';
 import { AuditLogModal } from '@/components/audit-log-modal';
 import { Sparkles, ArrowRight, CheckCircle2, TrendingUp, PackagePlus, Tag, ShieldCheck, RefreshCw, History, AlertTriangle, Clock } from 'lucide-react';
 import { evaluateSalesHistory } from '@/lib/sales-history-helper';
+import { predictOptimalClearanceDiscount } from '@/lib/ml/clearance-pricing-model';
 import {
   Dialog,
   DialogContent,
@@ -128,6 +129,11 @@ export function InventoryRecommendationsPanel() {
       p => p && p.stock > 0 && salesHistory.isProductEligibleForDeadStock(p) && !appliedIds.has(`${p.id}:clearance`)
     );
   }, [products, capabilities, salesHistory, appliedIds]);
+
+  const deadStockPrediction = React.useMemo(() => {
+    if (!deadStockProd) return null;
+    return predictOptimalClearanceDiscount(deadStockProd, { transactions });
+  }, [deadStockProd, transactions]);
 
   // Candidate 3: Price Increase Optimization
   // Centralized Capability Gate: Only unlocks when demandForecasting capability is enabled
@@ -287,9 +293,8 @@ export function InventoryRecommendationsPanel() {
           });
 
           setTimeout(() => {
-            markApplied(key);
             setAnimatingId(null);
-          }, 800);
+          }, 1000);
 
           toast({
             title: channel === 'SHOPIFY' ? '📦 Reorder Logged & Shopify Synced!' : channel === 'GOOGLE_DRIVE' ? '📦 Reorder Logged & Drive Synced!' : '📦 Reorder PO Logged & Saved in History!',
@@ -297,6 +302,11 @@ export function InventoryRecommendationsPanel() {
           });
         } catch (err) {
           console.error(err);
+          setAppliedIds(prev => {
+            const next = new Set(prev);
+            next.delete(key);
+            return next;
+          });
           setAnimatingId(null);
         }
       }
@@ -306,7 +316,9 @@ export function InventoryRecommendationsPanel() {
   const handleClearance = (prod: any) => {
     const key = `${prod.id}:clearance`;
     const oldPrice = prod.price || 500;
-    const newPrice = Math.round(oldPrice * 0.8);
+    const pred = predictOptimalClearanceDiscount(prod, { transactions });
+    const discountPct = pred?.discountPercent || 20;
+    const newPrice = pred?.newPrice || Math.round(oldPrice * (1 - discountPct / 100));
     const pName = prod.name || prod.productName || 'Product';
     const channel = getRecommendationChannel(prod, businessProfile, driveConnection);
 
@@ -317,9 +329,10 @@ export function InventoryRecommendationsPanel() {
       : '';
 
     setConfirmData({
-      title: 'Apply 20% Clearance Discount',
-      description: `Reduce the selling price of "${pName}" from ${currencySymbol}${oldPrice} to ${currencySymbol}${newPrice} (-20%) to liquidate dead stock. This will modify catalog pricing.${channelDesc}`,
+      title: `Apply ${discountPct}% Clearance Discount`,
+      description: `Reduce the selling price of "${pName}" from ${currencySymbol}${oldPrice} to ${currencySymbol}${newPrice} (-${discountPct}%) to liquidate dead stock. This will modify catalog pricing.${channelDesc}`,
       onConfirm: async () => {
+        markApplied(key);
         setAnimatingId(key);
         try {
           await updateProduct(
@@ -327,7 +340,7 @@ export function InventoryRecommendationsPanel() {
               ...prod,
               price: newPrice,
               compareAtPrice: oldPrice,
-              discountPercent: 20,
+              discountPercent: discountPct,
               liquidationStatus: 'Liquidated',
               updatedAt: new Date().toISOString(),
             },
@@ -373,6 +386,7 @@ export function InventoryRecommendationsPanel() {
                       productId: prod.id,
                       newPrice: newPrice,
                       compareAtPrice: oldPrice,
+                      updateAllVariants: false,
                     },
                   ],
                 }),
@@ -391,17 +405,16 @@ export function InventoryRecommendationsPanel() {
           }
 
           logBusinessAction({
-            title: 'Applied 20% Clearance Promo',
+            title: `Applied ${discountPct}% Clearance Promo`,
             productName: pName,
             actionType: 'discount',
-            changeDetails: `Reduced selling price from ${currencySymbol}${oldPrice} to ${currencySymbol}${newPrice} (-20%). Unlocked tied cash flow.${channelDesc}`,
-            impactValue: `-20% Price Clearance`,
+            changeDetails: `Reduced selling price from ${currencySymbol}${oldPrice} to ${currencySymbol}${newPrice} (-${discountPct}%). Unlocked tied cash flow.${channelDesc}`,
+            impactValue: `-${discountPct}% Price Clearance`,
           });
 
           setTimeout(() => {
-            markApplied(key);
             setAnimatingId(null);
-          }, 800);
+          }, 1000);
 
           toast({
             title: channel === 'SHOPIFY' ? '🏷️ Clearance Applied & Shopify Synced!' : channel === 'GOOGLE_DRIVE' ? '🏷️ Clearance Applied & Drive Synced!' : '🏷️ Clearance Promo Applied & Saved in History!',
@@ -409,6 +422,11 @@ export function InventoryRecommendationsPanel() {
           });
         } catch (err) {
           console.error(err);
+          setAppliedIds(prev => {
+            const next = new Set(prev);
+            next.delete(key);
+            return next;
+          });
           setAnimatingId(null);
         }
       }
@@ -432,6 +450,7 @@ export function InventoryRecommendationsPanel() {
       title: 'Optimize Price (+8%)',
       description: `Increase the selling price of "${pName}" from ${currencySymbol}${oldPrice} to ${currencySymbol}${newPrice} (+8%) for margin optimization. This will modify catalog pricing.${channelDesc}`,
       onConfirm: async () => {
+        markApplied(key);
         setAnimatingId(key);
         try {
           await updateProduct(
@@ -482,6 +501,7 @@ export function InventoryRecommendationsPanel() {
                       productId: prod.id,
                       newPrice: newPrice,
                       compareAtPrice: oldPrice,
+                      updateAllVariants: false,
                     },
                   ],
                 }),
@@ -508,9 +528,8 @@ export function InventoryRecommendationsPanel() {
           });
 
           setTimeout(() => {
-            markApplied(key);
             setAnimatingId(null);
-          }, 800);
+          }, 1000);
 
           toast({
             title: channel === 'SHOPIFY' ? '⚡ Price Optimized & Shopify Synced!' : channel === 'GOOGLE_DRIVE' ? '⚡ Price Optimized & Drive Synced!' : '📈 Selling Price Optimized & Saved in History!',
@@ -518,6 +537,11 @@ export function InventoryRecommendationsPanel() {
           });
         } catch (err) {
           console.error(err);
+          setAppliedIds(prev => {
+            const next = new Set(prev);
+            next.delete(key);
+            return next;
+          });
           setAnimatingId(null);
         }
       }
@@ -528,10 +552,10 @@ export function InventoryRecommendationsPanel() {
 
   return (
     <>
-      <Card className="ios-glass rounded-3xl border-emerald-500/20 p-5 shadow-xl space-y-3">
+      <Card className="ios-glass rounded-3xl border-border/50 p-5 shadow-xl space-y-3">
         <CardHeader className="p-0 pb-3 border-b border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
               <Sparkles className="w-5 h-5 animate-pulse" />
             </div>
             <div>
@@ -556,7 +580,7 @@ export function InventoryRecommendationsPanel() {
 
         <CardContent className="p-0 text-xs pt-1">
           {isAllOptimized ? (
-            <div className="p-6 text-center space-y-2.5 bg-emerald-500/5 rounded-2xl border border-emerald-500/20">
+            <div className="p-6 text-center space-y-2.5 bg-card/60 rounded-2xl border border-border/50">
               <div className="p-3 rounded-full bg-emerald-500/10 text-emerald-400 w-12 h-12 mx-auto flex items-center justify-center border border-emerald-500/20">
                 <ShieldCheck className="w-6 h-6" />
               </div>
@@ -576,37 +600,25 @@ export function InventoryRecommendationsPanel() {
               </div>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5 items-stretch">
               {/* Column 1: Reorder / Stock Buffer */}
               {lowStockProd ? (
-                <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex flex-col justify-between space-y-2">
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-foreground flex items-center gap-1 text-xs">
+                <div className="p-4 rounded-2xl bg-card/75 border border-border/50 hover:border-border/80 flex flex-col justify-between h-full transition-all shadow-xs space-y-3">
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-bold text-foreground flex items-center gap-1.5 text-xs shrink-0">
                         <PackagePlus className="w-3.5 h-3.5 text-amber-400" /> Restock Urgently
                       </span>
-                      <div className="flex items-center gap-1.5">
-                        {lowStockChannel === 'SHOPIFY' && (
-                          <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 bg-emerald-500/10 text-[9px] font-mono">
-                            Shopify Sync
-                          </Badge>
-                        )}
-                        {lowStockChannel === 'GOOGLE_DRIVE' && (
-                          <Badge variant="outline" className="text-blue-400 border-blue-500/30 bg-blue-500/10 text-[9px] font-mono">
-                            Drive CSV Sync
-                          </Badge>
-                        )}
-                        <Badge variant="outline" className="text-amber-400 border-amber-500/30 text-[10px]">High Priority</Badge>
-                      </div>
+                      <Badge variant="outline" className="text-amber-400 border-amber-500/30 bg-amber-500/10 text-[10px] shrink-0 font-medium whitespace-nowrap">High Priority</Badge>
                     </div>
-                    <p className="font-semibold text-foreground text-xs">{lowStockProd.name || lowStockProd.productName}</p>
-                    <p className="text-muted-foreground text-[11px]">Current stock: {lowStockProd.stock} units. Reorder 50 units immediately to avoid stockout.</p>
+                    <p className="font-semibold text-foreground text-xs truncate" title={lowStockProd.name || lowStockProd.productName}>{lowStockProd.name || lowStockProd.productName}</p>
+                    <p className="text-muted-foreground text-[11px] leading-relaxed line-clamp-2">Current stock: {lowStockProd.stock} units. Reorder 50 units immediately to avoid stockout.</p>
                   </div>
                   <Button
                     size="sm"
                     onClick={() => handleReorder(lowStockProd)}
                     disabled={animatingId === `${lowStockProd.id}:reorder`}
-                    className="w-full rounded-xl text-xs gap-1 bg-amber-600 hover:bg-amber-500 text-white shadow-sm h-8 cursor-pointer"
+                    className="w-full rounded-xl text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm h-9 cursor-pointer transition-all"
                   >
                     {animatingId === `${lowStockProd.id}:reorder` ? (
                       <>
@@ -625,18 +637,18 @@ export function InventoryRecommendationsPanel() {
                   </Button>
                 </div>
               ) : (
-                <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex flex-col justify-between space-y-2">
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-foreground flex items-center gap-1 text-xs">
+                <div className="p-4 rounded-2xl bg-card/75 border border-border/50 hover:border-border/80 flex flex-col justify-between h-full transition-all shadow-xs space-y-3">
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-bold text-foreground flex items-center gap-1.5 text-xs shrink-0">
                         <PackagePlus className="w-3.5 h-3.5 text-emerald-400" /> Restock Urgently
                       </span>
-                      <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 text-[10px]">Optimal Buffer</Badge>
+                      <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 bg-emerald-500/10 text-[10px] shrink-0 font-medium whitespace-nowrap">Optimal Buffer</Badge>
                     </div>
                     <p className="font-semibold text-foreground text-xs">Stock Levels Healthy</p>
-                    <p className="text-muted-foreground text-[11px]">All catalog items maintain stock above supplier lead-time reorder thresholds.</p>
+                    <p className="text-muted-foreground text-[11px] leading-relaxed line-clamp-2">All catalog items maintain stock above supplier lead-time reorder thresholds.</p>
                   </div>
-                  <div className="h-8 w-full rounded-xl text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center justify-center gap-1.5">
+                  <div className="h-9 w-full rounded-xl text-xs font-medium bg-secondary/50 text-emerald-400 border border-border/40 flex items-center justify-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Buffer Maintained
                   </div>
                 </div>
@@ -644,34 +656,24 @@ export function InventoryRecommendationsPanel() {
 
               {/* Column 2: Clearance & Dead Stock */}
               {deadStockProd ? (
-                <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/25 flex flex-col justify-between space-y-2">
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-foreground flex items-center gap-1 text-xs">
+                <div className="p-4 rounded-2xl bg-card/75 border border-border/50 hover:border-border/80 flex flex-col justify-between h-full transition-all shadow-xs space-y-3">
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-bold text-foreground flex items-center gap-1.5 text-xs shrink-0">
                         <Tag className="w-3.5 h-3.5 text-rose-400" /> Liquidate Dead Stock
                       </span>
-                      <div className="flex items-center gap-1.5">
-                        {deadStockChannel === 'SHOPIFY' && (
-                          <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 bg-emerald-500/10 text-[9px] font-mono">
-                            Shopify Sync
-                          </Badge>
-                        )}
-                        {deadStockChannel === 'GOOGLE_DRIVE' && (
-                          <Badge variant="outline" className="text-blue-400 border-blue-500/30 bg-blue-500/10 text-[9px] font-mono">
-                            Drive CSV Sync
-                          </Badge>
-                        )}
-                        <Badge variant="outline" className="text-rose-400 border-rose-500/30 text-[10px]">Clear Capital</Badge>
-                      </div>
+                      <Badge variant="outline" className="text-rose-400 border-rose-500/30 bg-rose-500/10 text-[10px] shrink-0 font-medium whitespace-nowrap">Clear Capital</Badge>
                     </div>
-                    <p className="font-semibold text-foreground text-xs">{deadStockProd.name || deadStockProd.productName}</p>
-                    <p className="text-muted-foreground text-[11px]">{deadStockProd.stock} units sitting unsold for 30+ days. Launch 20% discount to unlock cash flow.</p>
+                    <p className="font-semibold text-foreground text-xs truncate" title={deadStockProd.name || deadStockProd.productName}>{deadStockProd.name || deadStockProd.productName}</p>
+                    <p className="text-muted-foreground text-[11px] leading-relaxed line-clamp-2">
+                      {deadStockProd.stock} units sitting unsold for 30+ days. Launch {deadStockPrediction?.discountPercent || 20}% discount to unlock cash flow.
+                    </p>
                   </div>
                   <Button
                     size="sm"
                     onClick={() => handleClearance(deadStockProd)}
                     disabled={animatingId === `${deadStockProd.id}:clearance`}
-                    className="w-full rounded-xl text-xs gap-1 bg-rose-600 hover:bg-rose-500 text-white shadow-sm h-8 cursor-pointer"
+                    className="w-full rounded-xl text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm h-9 cursor-pointer transition-all"
                   >
                     {animatingId === `${deadStockProd.id}:clearance` ? (
                       <>
@@ -683,29 +685,29 @@ export function InventoryRecommendationsPanel() {
                           ? 'Apply Clearance (Push to Shopify)'
                           : deadStockChannel === 'GOOGLE_DRIVE'
                           ? 'Apply Clearance (Update Drive CSV)'
-                          : 'Apply 20% Clearance'}{' '}
+                          : `Apply ${deadStockPrediction?.discountPercent || 20}% Clearance`}{' '}
                         <ArrowRight className="w-3.5 h-3.5" />
                       </>
                     )}
                   </Button>
                 </div>
               ) : !salesHistory.hasMinimumHistory ? (
-                <div className="p-3.5 rounded-2xl bg-blue-500/10 border border-blue-500/25 flex flex-col justify-between space-y-2">
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-foreground flex items-center gap-1 text-xs">
+                <div className="p-4 rounded-2xl bg-card/75 border border-border/50 hover:border-border/80 flex flex-col justify-between h-full transition-all shadow-xs space-y-3">
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-bold text-foreground flex items-center gap-1.5 text-xs shrink-0">
                         <Tag className="w-3.5 h-3.5 text-blue-400" /> Liquidate Dead Stock
                       </span>
-                      <Badge variant="outline" className="text-blue-400 border-blue-500/30 text-[10px] font-mono font-bold">
+                      <Badge variant="outline" className="text-blue-400 border-blue-500/30 bg-blue-500/10 text-[10px] shrink-0 font-mono font-bold whitespace-nowrap">
                         Day {salesHistory.historyDays}/14 • AI Learning
                       </Badge>
                     </div>
                     <p className="font-semibold text-foreground text-xs">Calibrating Velocity Curves</p>
-                    <p className="text-muted-foreground text-[11px]">
+                    <p className="text-muted-foreground text-[11px] leading-relaxed line-clamp-2">
                       Daily AI Learning is actively evaluating tokenized order velocity to calibrate dead-stock holding periods without premature markdowns.
                     </p>
                   </div>
-                  <div className="h-8 w-full rounded-xl text-[11px] font-medium bg-blue-500/15 text-blue-300 border border-blue-500/30 flex items-center justify-between px-3">
+                  <div className="h-9 w-full rounded-xl text-xs font-medium bg-secondary/50 text-blue-300 border border-border/40 flex items-center justify-between px-3">
                     <span className="flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5 text-blue-400" />
                       <span>{Math.max(0, 14 - salesHistory.historyDays)} days to Level 2</span>
@@ -716,20 +718,20 @@ export function InventoryRecommendationsPanel() {
                   </div>
                 </div>
               ) : (
-                <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex flex-col justify-between space-y-2">
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-foreground flex items-center gap-1 text-xs">
+                <div className="p-4 rounded-2xl bg-card/75 border border-border/50 hover:border-border/80 flex flex-col justify-between h-full transition-all shadow-xs space-y-3">
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-bold text-foreground flex items-center gap-1.5 text-xs shrink-0">
                         <Tag className="w-3.5 h-3.5 text-emerald-400" /> Liquidate Dead Stock
                       </span>
-                      <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 text-[10px]">Catalog Active</Badge>
+                      <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 bg-emerald-500/10 text-[10px] shrink-0 font-medium whitespace-nowrap">Catalog Active</Badge>
                     </div>
                     <p className="font-semibold text-foreground text-xs">Zero Dead Stock Detected</p>
-                    <p className="text-muted-foreground text-[11px]">
+                    <p className="text-muted-foreground text-[11px] leading-relaxed line-clamp-2">
                       All active catalog SKUs have recorded sales transactions within the observation cycle. No clearance required.
                     </p>
                   </div>
-                  <div className="h-8 w-full rounded-xl text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center justify-center gap-1.5">
+                  <div className="h-9 w-full rounded-xl text-xs font-medium bg-secondary/50 text-emerald-400 border border-border/40 flex items-center justify-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Healthy Turnover
                   </div>
                 </div>
@@ -737,34 +739,22 @@ export function InventoryRecommendationsPanel() {
 
               {/* Column 3: Margin & Price Boost */}
               {priceUpProd ? (
-                <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex flex-col justify-between space-y-2">
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-foreground flex items-center gap-1 text-xs">
+                <div className="p-4 rounded-2xl bg-card/75 border border-border/50 hover:border-border/80 flex flex-col justify-between h-full transition-all shadow-xs space-y-3">
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-bold text-foreground flex items-center gap-1.5 text-xs shrink-0">
                         <TrendingUp className="w-3.5 h-3.5 text-emerald-400" /> Optimize Margin (+8%)
                       </span>
-                      <div className="flex items-center gap-1.5">
-                        {priceUpChannel === 'SHOPIFY' && (
-                          <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 bg-emerald-500/10 text-[9px] font-mono">
-                            Shopify Sync
-                          </Badge>
-                        )}
-                        {priceUpChannel === 'GOOGLE_DRIVE' && (
-                          <Badge variant="outline" className="text-blue-400 border-blue-500/30 bg-blue-500/10 text-[9px] font-mono">
-                            Drive CSV Sync
-                          </Badge>
-                        )}
-                        <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 text-[10px]">High Demand</Badge>
-                      </div>
+                      <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 bg-emerald-500/10 text-[10px] shrink-0 font-medium whitespace-nowrap">High Demand</Badge>
                     </div>
-                    <p className="font-semibold text-foreground text-xs">{priceUpProd.name || priceUpProd.productName}</p>
-                    <p className="text-muted-foreground text-[11px]">Strong velocity. Increase selling price to {currencySymbol}{Math.round((priceUpProd.price || 500) * 1.08)} for margin expansion.</p>
+                    <p className="font-semibold text-foreground text-xs truncate" title={priceUpProd.name || priceUpProd.productName}>{priceUpProd.name || priceUpProd.productName}</p>
+                    <p className="text-muted-foreground text-[11px] leading-relaxed line-clamp-2">Strong velocity. Increase selling price to {currencySymbol}{Math.round((priceUpProd.price || 500) * 1.08)} for margin expansion.</p>
                   </div>
                   <Button
                     size="sm"
                     onClick={() => handlePriceUp(priceUpProd)}
                     disabled={animatingId === `${priceUpProd.id}:price_up`}
-                    className="w-full rounded-xl text-xs gap-1 bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm h-8 cursor-pointer"
+                    className="w-full rounded-xl text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm h-9 cursor-pointer transition-all"
                   >
                     {animatingId === `${priceUpProd.id}:price_up` ? (
                       <>
@@ -783,22 +773,22 @@ export function InventoryRecommendationsPanel() {
                   </Button>
                 </div>
               ) : !salesHistory.hasMinimumHistory ? (
-                <div className="p-3.5 rounded-2xl bg-purple-500/10 border border-purple-500/25 flex flex-col justify-between space-y-2">
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-foreground flex items-center gap-1 text-xs">
+                <div className="p-4 rounded-2xl bg-card/75 border border-border/50 hover:border-border/80 flex flex-col justify-between h-full transition-all shadow-xs space-y-3">
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-bold text-foreground flex items-center gap-1.5 text-xs shrink-0">
                         <TrendingUp className="w-3.5 h-3.5 text-purple-400" /> Optimize Margin (+8%)
                       </span>
-                      <Badge variant="outline" className="text-purple-400 border-purple-500/30 text-[10px] font-mono font-bold">
+                      <Badge variant="outline" className="text-purple-400 border-purple-500/30 bg-purple-500/10 text-[10px] shrink-0 font-mono font-bold whitespace-nowrap">
                         Day {salesHistory.historyDays}/14 • AI Learning
                       </Badge>
                     </div>
                     <p className="font-semibold text-foreground text-xs">Calibrating Elasticity</p>
-                    <p className="text-muted-foreground text-[11px]">
+                    <p className="text-muted-foreground text-[11px] leading-relaxed line-clamp-2">
                       AI continuously models price sensitivity on tokenized order streams to ensure margin bumps do not dampen conversions.
                     </p>
                   </div>
-                  <div className="h-8 w-full rounded-xl text-[11px] font-medium bg-purple-500/15 text-purple-300 border border-purple-500/30 flex items-center justify-between px-3">
+                  <div className="h-9 w-full rounded-xl text-xs font-medium bg-secondary/50 text-purple-300 border border-border/40 flex items-center justify-between px-3">
                     <span className="flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5 text-purple-400" />
                       <span>{Math.max(0, 14 - salesHistory.historyDays)} days to Level 2</span>
@@ -809,20 +799,20 @@ export function InventoryRecommendationsPanel() {
                   </div>
                 </div>
               ) : (
-                <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 flex flex-col justify-between space-y-2">
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-foreground flex items-center gap-1 text-xs">
+                <div className="p-4 rounded-2xl bg-card/75 border border-border/50 hover:border-border/80 flex flex-col justify-between h-full transition-all shadow-xs space-y-3">
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-bold text-foreground flex items-center gap-1.5 text-xs shrink-0">
                         <TrendingUp className="w-3.5 h-3.5 text-emerald-400" /> Optimize Margin (+8%)
                       </span>
-                      <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 text-[10px]">Margins Balanced</Badge>
+                      <Badge variant="outline" className="text-emerald-400 border-emerald-500/30 bg-emerald-500/10 text-[10px] shrink-0 font-medium whitespace-nowrap">Margins Balanced</Badge>
                     </div>
                     <p className="font-semibold text-foreground text-xs">Optimal Pricing Across Catalog</p>
-                    <p className="text-muted-foreground text-[11px]">
+                    <p className="text-muted-foreground text-[11px] leading-relaxed line-clamp-2">
                       Current catalog prices match category velocity. No product candidates need immediate price hikes.
                     </p>
                   </div>
-                  <div className="h-8 w-full rounded-xl text-[11px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 flex items-center justify-center gap-1.5">
+                  <div className="h-9 w-full rounded-xl text-xs font-medium bg-secondary/50 text-emerald-400 border border-border/40 flex items-center justify-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Margins Optimized
                   </div>
                 </div>

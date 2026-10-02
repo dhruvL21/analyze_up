@@ -209,7 +209,7 @@ export function NotificationCenterDrawer({ open, onOpenChange }: NotificationCen
                 <span className="truncate">Business Alerts</span>
               </SheetTitle>
               {activeCount > 0 && (
-                <Badge className="bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs whitespace-nowrap shrink-0 px-2.5 py-0.5 rounded-full shadow-sm">
+                <Badge className="bg-primary text-primary-foreground font-bold text-xs whitespace-nowrap shrink-0 px-2.5 py-0.5 rounded-full shadow-sm">
                   {activeCount} Active Alerts
                 </Badge>
               )}
@@ -221,7 +221,7 @@ export function NotificationCenterDrawer({ open, onOpenChange }: NotificationCen
               {activeCount > 0 && (
                 <button
                   onClick={handleDismissAll}
-                  className="text-[11px] text-rose-400 hover:text-rose-300 font-bold underline shrink-0 cursor-pointer"
+                  className="text-[11px] text-muted-foreground hover:text-foreground font-semibold underline shrink-0 cursor-pointer"
                 >
                   Clear All
                 </button>
@@ -270,23 +270,18 @@ export function NotificationCenterDrawer({ open, onOpenChange }: NotificationCen
                 return (
                   <div
                     key={event.id}
-                    className={`p-3.5 rounded-2xl border space-y-2.5 transition-all text-xs ${
-                      event.severity === 'CRITICAL'
-                        ? 'bg-rose-500/10 border-rose-500/30'
-                        : event.severity === 'HIGH'
-                        ? 'bg-amber-500/10 border-amber-500/30'
-                        : 'bg-secondary/30 border-border/40'
-                    }`}
+                    className="p-3.5 rounded-2xl bg-card/75 border border-border/50 hover:border-border/80 space-y-2.5 transition-all text-xs shadow-xs"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <Badge
-                          className={`text-[10px] font-bold uppercase mb-1 ${
+                          variant="outline"
+                          className={`text-[10px] font-bold uppercase mb-1 px-2 py-0.5 rounded-md ${
                             event.severity === 'CRITICAL'
-                              ? 'bg-rose-500 text-white'
+                              ? 'border-rose-500/40 text-rose-400 bg-rose-500/10'
                               : event.severity === 'HIGH'
-                              ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                              : 'bg-secondary text-muted-foreground'
+                              ? 'border-amber-500/40 text-amber-400 bg-amber-500/10'
+                              : 'border-border/60 text-muted-foreground bg-secondary/40'
                           }`}
                         >
                           {event.severity} • {event.category}
@@ -294,7 +289,7 @@ export function NotificationCenterDrawer({ open, onOpenChange }: NotificationCen
                         <h4 className="font-bold text-foreground text-sm leading-snug">{event.title}</h4>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-md">
+                        <span className="text-[10px] font-bold text-primary bg-primary/10 border border-primary/20 px-2 py-0.5 rounded-md">
                           Impact: {event.impactScore}/100
                         </span>
                         <button

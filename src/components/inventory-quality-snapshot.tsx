@@ -51,7 +51,7 @@ export function InventoryQualitySnapshot() {
             >
               <div className="flex items-center gap-1 min-w-0">
                 <PackageCheck className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                <span className="text-[11px] font-semibold text-muted-foreground truncate">Healthy</span>
+                <span className="text-[11px] font-bold text-foreground truncate">Healthy</span>
               </div>
               <p className="text-2xl sm:text-3xl font-black text-emerald-400 my-0.5 tracking-tight font-mono">{quality.healthyCount}</p>
               <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-medium">
@@ -67,7 +67,7 @@ export function InventoryQualitySnapshot() {
             >
               <div className="flex items-center gap-1 min-w-0">
                 <AlertTriangle className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                <span className="text-[11px] font-semibold text-muted-foreground truncate">Low Stock</span>
+                <span className="text-[11px] font-bold text-foreground truncate">Low Stock</span>
               </div>
               <p className="text-2xl sm:text-3xl font-black text-amber-400 my-0.5 tracking-tight font-mono">{quality.lowStockCount}</p>
               <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-medium">
@@ -83,7 +83,7 @@ export function InventoryQualitySnapshot() {
             >
               <div className="flex items-center gap-1 min-w-0">
                 <XCircle className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                <span className="text-[11px] font-semibold text-muted-foreground truncate">Out of Stock</span>
+                <span className="text-[11px] font-bold text-foreground truncate">Out of Stock</span>
               </div>
               <p className="text-2xl sm:text-3xl font-black text-rose-400 my-0.5 tracking-tight font-mono">{quality.criticalStockCount}</p>
               <div className="flex items-center gap-1 text-[10px] text-muted-foreground font-medium">
@@ -99,7 +99,7 @@ export function InventoryQualitySnapshot() {
             >
               <div className="flex items-center gap-1 min-w-0">
                 <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                <span className="text-[11px] font-semibold text-muted-foreground truncate">Dead Stock</span>
+                <span className="text-[11px] font-bold text-foreground truncate">Dead Stock</span>
               </div>
               <p className="text-2xl sm:text-3xl font-black text-foreground my-0.5 tracking-tight font-mono">
                 {isDeadStockActive ? quality.deadStockCount : 0}

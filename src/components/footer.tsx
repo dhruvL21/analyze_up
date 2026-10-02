@@ -167,7 +167,7 @@ export function Footer() {
                   rel="noopener noreferrer"
                   className="hover:text-primary transition-colors flex items-center gap-1.5 text-left group"
                 >
-                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> Privacy Policy
+                  <ShieldCheck className="w-3.5 h-3.5 text-primary" /> Privacy Policy
                   <ExternalLink className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100" />
                 </Link>
               </li>
@@ -178,7 +178,7 @@ export function Footer() {
                   rel="noopener noreferrer"
                   className="hover:text-primary transition-colors flex items-center gap-1.5 text-left group"
                 >
-                  <CreditCard className="w-3.5 h-3.5 text-amber-400" /> Subscription Terms
+                  <CreditCard className="w-3.5 h-3.5 text-primary" /> Subscription Terms
                   <ExternalLink className="w-2.5 h-2.5 opacity-60 group-hover:opacity-100" />
                 </Link>
               </li>

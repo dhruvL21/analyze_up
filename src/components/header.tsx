@@ -159,7 +159,7 @@ export function Header() {
               >
                 <Bell className="h-5 w-5" />
                 {activeAlertCount > 0 && (
-                  <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[10px] font-bold text-white shadow-sm">
+                  <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground shadow-sm">
                     {activeAlertCount}
                   </span>
                 )}

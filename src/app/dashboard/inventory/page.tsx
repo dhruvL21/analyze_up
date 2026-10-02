@@ -60,8 +60,6 @@ import { ImportDialog } from '@/components/import-dialog';
 import { AddProductModal } from '@/components/add-product-modal';
 import { useToast } from '@/hooks/use-toast';
 import { computeProductIntelligence, filterProductsByNaturalLanguage, classifyProductMovement, type ProductMovementCategory } from '@/lib/product-intelligence-engine';
-import { InventoryInsightsTicker } from '@/components/inventory-insights-ticker';
-import { InventoryRecommendationsPanel } from '@/components/inventory-recommendations-panel';
 import { ProductIntelligenceDrawer } from '@/components/product-intelligence-drawer';
 import { ProductComparisonModal } from '@/components/product-comparison-modal';
 
@@ -483,12 +481,6 @@ function InventoryPageContent() {
             </p>
           </Card>
         </div>
-
-        {/* FEATURE 16: Live Inventory Insights Feed */}
-        <InventoryInsightsTicker />
-
-        {/* FEATURE 18: Proactive AI Inventory Recommendations Panel */}
-        <InventoryRecommendationsPanel />
 
         {/* Main Table Card */}
         <Card className="ios-glass rounded-3xl border-border/50 shadow-xl overflow-hidden">

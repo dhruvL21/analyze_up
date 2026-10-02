@@ -288,12 +288,13 @@ export function AIActionCenter() {
   const handleExecuteAction = (task: ActionTask) => {
     const currencySymbol = businessProfile?.currency?.includes('USD') ? '$' : '₹';
     const destination = getActionDestination(task);
-    const targetProd = products.find(
-      (p) =>
-        (task.targetId && p.id === task.targetId) ||
-        (p.name && task.targetName && p.name.toLowerCase() === task.targetName.toLowerCase()) ||
-        (p.sku && task.title.includes(p.sku))
-    );
+    const targetProd =
+      products.find((p) => p.id === task.targetId) ||
+      products.find((p) => task.sku && p.sku && p.sku.trim().toUpperCase() === task.sku.trim().toUpperCase()) ||
+      products.find((p) => task.targetVariantId && p.shopifyVariantId === task.targetVariantId) ||
+      products.find((p) => task.targetId && (p.id === task.targetId || p.sku === task.targetId)) ||
+      products.find((p) => p.sku && task.title.includes(p.sku)) ||
+      products.find((p) => p.name && task.targetName && p.name.trim().toLowerCase() === task.targetName.trim().toLowerCase());
     const pName = targetProd?.name || task.targetName || 'Product';
 
     setConfirmData({
@@ -342,36 +343,88 @@ export function AIActionCenter() {
           } else if (task.actionType === 'discount') {
             if (targetProd) {
               const oldPrice = targetProd.price || 500;
-              const newPrice = Math.round(oldPrice * 0.8);
+              const discountPct = task.discountPercent || (targetProd.price && task.newPrice ? Math.round(((targetProd.price - task.newPrice) / targetProd.price) * 100) : 20);
+              const newPrice = task.newPrice !== undefined ? task.newPrice : Math.round(oldPrice * (1 - discountPct / 100));
+
               await updateProduct(
                 {
                   ...targetProd,
                   price: newPrice,
                   compareAtPrice: oldPrice,
-                  discountPercent: 20,
+                  discountPercent: discountPct,
                   liquidationStatus: 'Liquidated',
                   updatedAt: new Date().toISOString(),
                 },
                 { forceShopifySync: true, silentToast: false }
               );
 
+              // If item belongs to a connected Google Drive spreadsheet/CSV, push exact variant update
+              if (driveConnection?.accessToken || targetProd.driveFileId) {
+                let driveFileId = targetProd.driveFileId;
+                if (!driveFileId && typeof getGoogleDriveFiles === 'function') {
+                  try {
+                    const files = await getGoogleDriveFiles();
+                    const inventoryFile = files.find(
+                      (f: any) =>
+                        f.type === 'inventory' ||
+                        f.name?.toLowerCase().includes('inventory') ||
+                        f.name?.toLowerCase().includes('catalog') ||
+                        f.name?.toLowerCase().includes('product')
+                    ) || files[0];
+                    if (inventoryFile) {
+                      driveFileId = inventoryFile.id || inventoryFile.fileId;
+                    }
+                  } catch (e) {
+                    console.warn('[Drive Files Lookup Error]:', e);
+                  }
+                }
+
+                if (driveFileId) {
+                  const token = driveConnection?.accessToken;
+                  fetch('/api/drive/update', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      ...(token ? { 'x-drive-token': token } : {}),
+                      ...(user?.uid ? { 'x-user-uid': user.uid } : {}),
+                    },
+                    body: JSON.stringify({
+                      fileId: driveFileId,
+                      fileName: targetProd.driveFileName || 'Inventory_Catalog.csv',
+                      updates: [
+                        {
+                          sku: targetProd.sku,
+                          productName: targetProd.name || pName,
+                          productId: targetProd.id,
+                          newPrice: newPrice,
+                          compareAtPrice: oldPrice,
+                          updateAllVariants: false,
+                        },
+                      ],
+                    }),
+                  }).catch(console.warn);
+                }
+              }
+
               logBusinessAction({
-                title: 'Liquidated Dead Stock (20% Clearance)',
+                title: `Liquidated Dead Stock (${discountPct}% Clearance)`,
                 productName: pName,
                 actionType: 'discount',
-                changeDetails: `Reduced price from ${currencySymbol}${oldPrice} to ${currencySymbol}${newPrice} (-20%). Unlocked working capital.`,
-                impactValue: `-20% Clearance`,
+                changeDetails: `Reduced price of ${pName} from ${currencySymbol}${oldPrice} to ${currencySymbol}${newPrice} (-${discountPct}%). Unlocked working capital without altering sibling sizes.`,
+                impactValue: `-${discountPct}% Clearance`,
               });
 
               toast({
                 title: '🏷️ Clearance Promo Applied & Saved to Audit!',
-                description: `Reduced price of "${pName}" to ${currencySymbol}${newPrice}. Changes pushed to Shopify and ${destination.label}.`,
+                description: `Reduced price of "${pName}" to ${currencySymbol}${newPrice}. Only this specific item/variant was updated.`,
               });
             }
           } else if (task.actionType === 'price_up') {
             if (targetProd) {
               const oldPrice = targetProd.price || 500;
-              const newPrice = Math.round(oldPrice * 1.08);
+              const newPrice = task.newPrice !== undefined ? task.newPrice : Math.round(oldPrice * 1.08);
+              const hikePct = Math.round(((newPrice - oldPrice) / oldPrice) * 100);
+
               await updateProduct(
                 {
                   ...targetProd,
@@ -381,12 +434,59 @@ export function AIActionCenter() {
                 { forceShopifySync: true, silentToast: false }
               );
 
+              // If item belongs to a connected Google Drive spreadsheet/CSV, push exact variant update
+              if (driveConnection?.accessToken || targetProd.driveFileId) {
+                let driveFileId = targetProd.driveFileId;
+                if (!driveFileId && typeof getGoogleDriveFiles === 'function') {
+                  try {
+                    const files = await getGoogleDriveFiles();
+                    const inventoryFile = files.find(
+                      (f: any) =>
+                        f.type === 'inventory' ||
+                        f.name?.toLowerCase().includes('inventory') ||
+                        f.name?.toLowerCase().includes('catalog') ||
+                        f.name?.toLowerCase().includes('product')
+                    ) || files[0];
+                    if (inventoryFile) {
+                      driveFileId = inventoryFile.id || inventoryFile.fileId;
+                    }
+                  } catch (e) {
+                    console.warn('[Drive Files Lookup Error]:', e);
+                  }
+                }
+
+                if (driveFileId) {
+                  const token = driveConnection?.accessToken;
+                  fetch('/api/drive/update', {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      ...(token ? { 'x-drive-token': token } : {}),
+                      ...(user?.uid ? { 'x-user-uid': user.uid } : {}),
+                    },
+                    body: JSON.stringify({
+                      fileId: driveFileId,
+                      fileName: targetProd.driveFileName || 'Inventory_Catalog.csv',
+                      updates: [
+                        {
+                          sku: targetProd.sku,
+                          productName: targetProd.name || pName,
+                          productId: targetProd.id,
+                          newPrice: newPrice,
+                          updateAllVariants: false,
+                        },
+                      ],
+                    }),
+                  }).catch(console.warn);
+                }
+              }
+
               logBusinessAction({
-                title: 'Optimized Price (+8%)',
+                title: `Optimized Price (+${hikePct}%)`,
                 productName: pName,
                 actionType: 'price_up',
-                changeDetails: `Adjusted price from ${currencySymbol}${oldPrice} to ${currencySymbol}${newPrice} (+8%) for margin expansion.`,
-                impactValue: `+8% Price Boost`,
+                changeDetails: `Adjusted price from ${currencySymbol}${oldPrice} to ${currencySymbol}${newPrice} (+${hikePct}%) for margin expansion.`,
+                impactValue: `+${hikePct}% Price Boost`,
               });
 
               toast({
@@ -451,7 +551,7 @@ export function AIActionCenter() {
     return (
       <div
         key={task.id}
-        className="p-4 sm:p-5 transition-all space-y-3.5 bg-card/40 hover:bg-card/60"
+        className="p-4 sm:p-5 transition-all space-y-3.5"
       >
         {/* Top Header line of the task: single clean priority badge and title */}
         <div className="flex items-center justify-between gap-2.5">
@@ -1020,11 +1120,22 @@ export function AIActionCenter() {
                     </div>
                   </div>
 
-                  <div className="divide-y divide-border/25 rounded-2xl overflow-hidden border border-border/30">
+                  <div className="space-y-4">
                     {topPriorityTasks.map((task, idx) => (
-                      <div key={task.id}>
-                        {renderTaskCard(task, true, idx)}
-                      </div>
+                      <React.Fragment key={task.id}>
+                        {idx > 0 && (
+                          <div className="flex items-center gap-3 py-2">
+                            <div className="flex-1 border-t border-white/70" />
+                            <span className="text-[10px] font-bold text-white uppercase tracking-wider shrink-0 flex items-center gap-1.5 px-3 py-1 rounded-full bg-secondary/80 border border-white/40 shadow-xs">
+                              <Target className="w-3 h-3 text-amber-400" /> Action Priority #{idx + 1}
+                            </span>
+                            <div className="flex-1 border-t border-white/70" />
+                          </div>
+                        )}
+                        <div className="rounded-2xl border border-border/50 bg-card/60 hover:bg-card/75 transition-all shadow-sm overflow-hidden">
+                          {renderTaskCard(task, true, idx)}
+                        </div>
+                      </React.Fragment>
                     ))}
                   </div>
                 </div>
@@ -1032,10 +1143,12 @@ export function AIActionCenter() {
 
               {/* Section divider between Top Priorities and Other Actions */}
               {activeTab === 'all' && topPriorityTasks.length > 0 && otherTasks.length > 0 && (
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 border-t border-border/30" />
-                  <span className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider shrink-0">More Actions</span>
-                  <div className="flex-1 border-t border-border/30" />
+                <div className="flex items-center gap-3 py-2">
+                  <div className="flex-1 border-t border-white/70" />
+                  <span className="text-[10px] font-semibold text-white/90 uppercase tracking-wider shrink-0 px-2.5 py-0.5 rounded-full bg-secondary/70 border border-white/30">
+                    More Actions
+                  </span>
+                  <div className="flex-1 border-t border-white/70" />
                 </div>
               )}
 
@@ -1078,11 +1191,22 @@ export function AIActionCenter() {
                   </div>
 
                   {!isOtherCollapsed && (
-                    <div className="divide-y divide-border/25 rounded-2xl overflow-hidden border border-border/30">
-                      {otherTasks.map((task) => (
-                        <div key={task.id}>
-                          {renderTaskCard(task, false)}
-                        </div>
+                    <div className="space-y-4">
+                      {otherTasks.map((task, idx) => (
+                        <React.Fragment key={task.id}>
+                          {idx > 0 && (
+                            <div className="flex items-center gap-3 py-2">
+                              <div className="flex-1 border-t border-white/70" />
+                              <span className="text-[10px] font-semibold text-white uppercase tracking-wider shrink-0 px-2.5 py-0.5 rounded-full bg-secondary/80 border border-white/40">
+                                Action #{idx + 1}
+                              </span>
+                              <div className="flex-1 border-t border-white/70" />
+                            </div>
+                          )}
+                          <div className="rounded-2xl border border-border/40 bg-card/60 hover:bg-card/75 transition-all shadow-sm overflow-hidden">
+                            {renderTaskCard(task, false)}
+                          </div>
+                        </React.Fragment>
                       ))}
                     </div>
                   )}

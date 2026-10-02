@@ -43,6 +43,12 @@ export interface ActionTask {
   actionType: 'reorder' | 'discount' | 'price_up' | 'supplier' | 'audit' | 'review_returns' | 'promote';
   targetId?: string;
   targetName?: string;
+  targetProductId?: string;
+  targetVariantId?: string;
+  sku?: string;
+  newPrice?: number;
+  discountPercent?: number;
+  updateAllVariants?: boolean;
 }
 
 export interface KPICardItem {
@@ -427,8 +433,11 @@ export function generateActionTasks(
       priority: topLow.stock === 0 ? 'High' : 'High',
       estimatedBenefit: `Protect ${formatCurrency(estimatedLoss)} revenue runway`,
       actionType: 'reorder',
-      targetId: targetSlug,
+      targetId: topLow.id || targetSlug,
       targetName: pName,
+      targetProductId: topLow.shopifyProductId,
+      targetVariantId: topLow.shopifyVariantId,
+      sku: topLow.sku,
     });
   });
 
@@ -459,8 +468,14 @@ export function generateActionTasks(
       priority: 'High',
       estimatedBenefit: `Unlock ${formatCurrency(pred.estimatedCashUnlocked)} cash flow`,
       actionType: 'discount',
-      targetId: targetSlug,
+      targetId: topDead.id || targetSlug,
       targetName: pName,
+      targetProductId: topDead.shopifyProductId,
+      targetVariantId: topDead.shopifyVariantId,
+      sku: topDead.sku,
+      newPrice: pred.newPrice,
+      discountPercent: pred.discountPercent,
+      updateAllVariants: false,
     });
   });
 
@@ -494,8 +509,13 @@ export function generateActionTasks(
       priority: 'Medium',
       estimatedBenefit: `+${formatCurrency(addedProfit)} net profit expansion`,
       actionType: 'price_up',
-      targetId: targetSlug,
+      targetId: topDemand.id || targetSlug,
       targetName: pName,
+      targetProductId: topDemand.shopifyProductId,
+      targetVariantId: topDemand.shopifyVariantId,
+      sku: topDemand.sku,
+      newPrice: newPrice,
+      updateAllVariants: false,
     });
   });
 
