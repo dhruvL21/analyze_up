@@ -115,12 +115,6 @@ const navItems: NavItem[] = [
         icon: TrendingUp,
       },
       {
-        href: "/dashboard/executive?tab=simulation",
-        label: "AI Strategy Lab",
-        description: "Model price adjustments, bulk POs & risk-free scenarios",
-        icon: FlaskConical,
-      },
-      {
         href: "/dashboard/executive?tab=team",
         label: "Team & Governance",
         description: "Manage workspace members, roles & permissions",

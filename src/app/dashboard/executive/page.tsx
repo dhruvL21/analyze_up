@@ -74,10 +74,6 @@ import {
   Trash2,
   Key,
   Check,
-  FlaskConical,
-  Sliders,
-  Save,
-  BookmarkCheck,
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
@@ -97,13 +93,6 @@ import {
   evaluateScenario,
   ScenarioType,
 } from '@/lib/forecasting-engine';
-import {
-  runBusinessSimulation,
-  saveScenario,
-  getSavedScenarios,
-  deleteSavedScenario,
-} from '@/lib/simulation-engine';
-import { SimulationType } from '@/lib/types';
 import {
   PLAN_CONFIGS,
   PlanType,
@@ -154,7 +143,7 @@ function ExecutiveIntelligencePageContent() {
   }, [dataReadiness?.totalOrders, transactions]);
 
   // Unified Navigation Tab State
-  const [activeTab, setActiveTab] = useState<'overview' | 'forecasting' | 'simulation' | 'billing' | 'team'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'forecasting' | 'billing' | 'team'>('overview');
   const tabsContainerRef = useRef<HTMLDivElement>(null);
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [canScrollTabsLeft, setCanScrollTabsLeft] = useState(false);
@@ -175,7 +164,7 @@ function ExecutiveIntelligencePageContent() {
 
   useEffect(() => {
     const tab = searchParams?.get('tab');
-    if (tab && ['overview', 'forecasting', 'simulation', 'billing', 'team'].includes(tab)) {
+    if (tab && ['overview', 'forecasting', 'billing', 'team'].includes(tab)) {
       setActiveTab(tab as any);
     }
   }, [searchParams]);
@@ -207,46 +196,16 @@ function ExecutiveIntelligencePageContent() {
     onConfirm: () => void;
   } | null>(null);
 
-  // Simulation State
-  const [simType, setSimType] = useState<SimulationType>('PRICE_CHANGE');
-  const [simTargetProductId, setSimTargetProductId] = useState<string>('');
-  const [simValue, setSimValue] = useState<number>(10);
-  const [scenarioNameInput, setScenarioNameInput] = useState<string>('');
-  const [savedSimTick, setSavedSimTick] = useState(0);
   const [snapshotTick, setSnapshotTick] = useState(0);
 
-  // Sync simulation updates & snapshot updates
+  // Sync snapshot updates
   React.useEffect(() => {
-    const syncSims = () => setSavedSimTick(t => t + 1);
     const syncSnaps = () => setSnapshotTick(t => t + 1);
-    window.addEventListener('analyzeup_simulations_updated', syncSims);
     window.addEventListener('analyzeup_snapshots_updated', syncSnaps);
     return () => {
-      window.removeEventListener('analyzeup_simulations_updated', syncSims);
       window.removeEventListener('analyzeup_snapshots_updated', syncSnaps);
     };
   }, []);
-
-  // Simulation Engine (computed only when simulation tab is active)
-  const activeSimulation = useMemo(() => {
-    if (activeTab !== 'simulation') {
-      return null as any;
-    }
-    const pId = simTargetProductId || products[0]?.id || '';
-    const params: Record<string, any> = {};
-    if (simType === 'PRICE_CHANGE') params.priceChangePercent = simValue;
-    else if (simType === 'DISCOUNT_PROMOTION') params.discountPercent = simValue;
-    else if (simType === 'INVENTORY_PURCHASE') params.purchaseQty = simValue;
-    else if (simType === 'DEMAND_CHANGE') params.demandShiftPercent = simValue;
-
-    return runBusinessSimulation(simType, pId, params, products, transactions, suppliers, orders, businessProfile);
-  }, [simType, simTargetProductId, simValue, products, transactions, suppliers, orders, businessProfile, activeTab]);
-
-  const savedScenarios = useMemo(() => {
-    if (activeTab !== 'simulation') return [];
-    void savedSimTick;
-    return getSavedScenarios();
-  }, [savedSimTick, activeTab]);
 
   // Forecasting State
   const [activeScenario, setActiveScenario] = useState<ScenarioType>('BASE');
@@ -562,18 +521,6 @@ function ExecutiveIntelligencePageContent() {
                 Learning
               </span>
             )}
-          </button>
-
-          <button
-            ref={(el) => { tabRefs.current['simulation'] = el; }}
-            onClick={(e) => handleTabClick('simulation', e)}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all shrink-0 ${
-              activeTab === 'simulation'
-                ? 'bg-primary text-primary-foreground shadow-md'
-                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
-            }`}
-          >
-            <FlaskConical className="w-4.5 h-4.5" /> AI Strategy Lab
           </button>
 
           <button
@@ -1377,464 +1324,6 @@ function ExecutiveIntelligencePageContent() {
           </Card>
         </div>
       )}
-
-      {/* ========================================================================= */}
-      {/* TAB: AI STRATEGY & BUSINESS SIMULATION LAB */}
-      {/* ========================================================================= */}
-      {activeTab === 'simulation' && (
-        <div className="space-y-6">
-          {products.length === 0 ? (
-            <Card className="ios-glass rounded-3xl border-border/40 p-12 text-center">
-              <div className="max-w-md mx-auto space-y-4">
-                <div className="w-16 h-16 rounded-3xl bg-primary/10 border border-primary/20 text-primary flex items-center justify-center mx-auto shadow-inner">
-                  <FlaskConical className="w-8 h-8" />
-                </div>
-                <div className="space-y-2">
-                  <h3 className="text-lg font-bold text-foreground">AI Strategy & Business Simulation Lab</h3>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    No products found in workspace. Once you import your inventory or upload your 22-column CSV database, you can test price adjustments, bulk reorder ROI, and supplier switches before taking real action.
-                  </p>
-                </div>
-                <div className="pt-2">
-                  <Link href="/dashboard/inventory">
-                    <Button className="rounded-xl text-xs font-bold gap-2 bg-primary text-primary-foreground">
-                      <Boxes className="w-4 h-4" /> Go to Inventory & Import Data
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            </Card>
-          ) : (
-            <>
-              {/* Header & What-If Templates Quick Selector */}
-              <Card className="ios-glass rounded-2xl border-primary/30">
-                <CardHeader className="pb-3 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                  <div>
-                    <CardTitle className="text-lg font-bold flex items-center gap-2">
-                      <FlaskConical className="w-5 h-5 text-primary" /> AI Strategy & Business Simulation Lab
-                    </CardTitle>
-                    <CardDescription className="text-sm">
-                      Test "What-If" business decisions before taking real action. Simulations carry zero risk and never mutate real data.
-                    </CardDescription>
-                  </div>
-                  <Badge variant="outline" className="text-xs border-primary/30 text-primary font-bold w-fit">
-                    Deterministic Engine • Read-Only
-                  </Badge>
-                </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Quick Template Pills */}
-              <div className="space-y-1.5">
-                <span className="text-xs font-semibold text-muted-foreground block">Predefined What-If Templates:</span>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant={simType === 'PRICE_CHANGE' && simValue === 10 ? 'default' : 'outline'}
-                    className="h-8 text-xs rounded-xl gap-1.5 border-border/40"
-                    onClick={() => {
-                      setSimType('PRICE_CHANGE');
-                      setSimValue(10);
-                    }}
-                  >
-                    <TrendingUp className="w-3.5 h-3.5" /> Price Increase (+10%)
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    variant={simType === 'DISCOUNT_PROMOTION' && simValue === 20 ? 'default' : 'outline'}
-                    className="h-8 text-xs rounded-xl gap-1.5 border-border/40"
-                    onClick={() => {
-                      setSimType('DISCOUNT_PROMOTION');
-                      setSimValue(20);
-                    }}
-                  >
-                    Clearance Discount (-20%)
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    variant={simType === 'INVENTORY_PURCHASE' && simValue === 300 ? 'default' : 'outline'}
-                    className="h-8 text-xs rounded-xl gap-1.5 border-border/40"
-                    onClick={() => {
-                      setSimType('INVENTORY_PURCHASE');
-                      setSimValue(300);
-                    }}
-                  >
-                    <Boxes className="w-3.5 h-3.5" /> Bulk Order (300 Units)
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    variant={simType === 'SUPPLIER_SWITCH' ? 'default' : 'outline'}
-                    className="h-8 text-xs rounded-xl gap-1.5 border-border/40"
-                    onClick={() => {
-                      setSimType('SUPPLIER_SWITCH');
-                    }}
-                  >
-                    <RefreshCw className="w-3.5 h-3.5" /> Switch Supplier
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    variant={simType === 'DEMAND_CHANGE' && simValue === 20 ? 'default' : 'outline'}
-                    className="h-8 text-xs rounded-xl gap-1.5 border-border/40"
-                    onClick={() => {
-                      setSimType('DEMAND_CHANGE');
-                      setSimValue(20);
-                    }}
-                  >
-                    <Zap className="w-3.5 h-3.5" /> Demand Surge (+20%)
-                  </Button>
-                </div>
-              </div>
-
-              {/* Simulation Builder Controls */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2 border-t border-border/30">
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold">Target Product SKU</Label>
-                  <Select
-                    value={simTargetProductId || products[0]?.id}
-                    onValueChange={v => setSimTargetProductId(v)}
-                  >
-                    <SelectTrigger className="h-9 text-xs rounded-xl">
-                      <SelectValue placeholder="Select Product" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {products.map(p => (
-                        <SelectItem key={p.id} value={p.id} className="text-xs">
-                          {p.name} ({formatCur(p.price)})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold">Simulation Scenario Lever</Label>
-                  <Select
-                    value={simType}
-                    onValueChange={(v: any) => setSimType(v)}
-                  >
-                    <SelectTrigger className="h-9 text-xs rounded-xl">
-                      <SelectValue placeholder="Select Lever" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="PRICE_CHANGE" className="text-xs">Price Shift (% Change)</SelectItem>
-                      <SelectItem value="DISCOUNT_PROMOTION" className="text-xs">Promotional Discount (%)</SelectItem>
-                      <SelectItem value="INVENTORY_PURCHASE" className="text-xs">Bulk Restock (Order Units)</SelectItem>
-                      <SelectItem value="SUPPLIER_SWITCH" className="text-xs">Supplier Alternative Switch</SelectItem>
-                      <SelectItem value="DEMAND_CHANGE" className="text-xs">Demand Market Shift (%)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {simType !== 'SUPPLIER_SWITCH' && (
-                  <div className="space-y-1">
-                    <Label className="text-xs font-semibold">
-                      {simType === 'INVENTORY_PURCHASE' ? 'Purchase Quantity (Units)' : 'Shift Percentage (%)'}
-                    </Label>
-                    <Input
-                      type="number"
-                      value={simValue}
-                      onChange={e => setSimValue(Number(e.target.value))}
-                      className="h-9 text-xs rounded-xl"
-                    />
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Side-by-Side Comparison Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* BASELINE CARD */}
-            <Card className="ios-glass rounded-2xl border-border/40">
-              <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                <CardTitle className="text-sm font-bold flex items-center gap-2">
-                  <Boxes className="w-4 h-4 text-muted-foreground" /> Current Baseline State
-                </CardTitle>
-                <Badge variant="secondary" className="text-[10px] font-bold">
-                  ACTUAL DATA
-                </Badge>
-              </CardHeader>
-              <CardContent className="space-y-3 text-xs">
-                <div className="flex justify-between items-center py-1.5 border-b border-border/30">
-                  <span className="text-muted-foreground">Product Price</span>
-                  <span className="font-bold text-foreground">{formatCur(activeSimulation.baseline.productPrice)}</span>
-                </div>
-                <div className="flex justify-between items-center py-1.5 border-b border-border/30">
-                  <span className="text-muted-foreground">Unit Cost</span>
-                  <span className="font-bold text-foreground">{formatCur(activeSimulation.baseline.productCost)}</span>
-                </div>
-                <div className="flex justify-between items-center py-1.5 border-b border-border/30">
-                  <span className="text-muted-foreground">Monthly Revenue</span>
-                  <span className="font-bold text-foreground">{formatCur(activeSimulation.baseline.revenue)}</span>
-                </div>
-                <div className="flex justify-between items-center py-1.5 border-b border-border/30">
-                  <span className="text-muted-foreground">Monthly Gross Profit</span>
-                  <span className="font-bold text-foreground">{formatCur(activeSimulation.baseline.grossProfit)}</span>
-                </div>
-                <div className="flex justify-between items-center py-1.5 border-b border-border/30">
-                  <span className="text-muted-foreground">Profit Margin</span>
-                  <span className="font-bold text-foreground">{activeSimulation.baseline.profitMarginPercent}%</span>
-                </div>
-                <div className="flex justify-between items-center py-1.5">
-                  <span className="text-muted-foreground">Stock Coverage</span>
-                  <span className="font-bold text-foreground">{activeSimulation.baseline.stock} units ({activeSimulation.baseline.daysOfStock} days)</span>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* SIMULATED CARD */}
-            <Card className="ios-glass rounded-2xl border-primary/40 bg-primary/5">
-              <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                <CardTitle className="text-sm font-bold flex items-center gap-2 text-primary">
-                  <Sparkles className="w-4 h-4 text-primary" /> Simulated Scenario Result
-                </CardTitle>
-                <Badge className="bg-primary text-primary-foreground text-[10px] font-bold">
-                  SIMULATED ESTIMATE
-                </Badge>
-              </CardHeader>
-              <CardContent className="space-y-3 text-xs">
-                <div className="flex justify-between items-center py-1.5 border-b border-border/30">
-                  <span className="text-muted-foreground">Simulated Price</span>
-                  <span className="font-bold text-primary">{formatCur(activeSimulation.simulated.newPrice || activeSimulation.baseline.productPrice)}</span>
-                </div>
-                <div className="flex justify-between items-center py-1.5 border-b border-border/30">
-                  <span className="text-muted-foreground">Projected Monthly Revenue</span>
-                  <span className="font-bold text-emerald-400">
-                    {formatCur(activeSimulation.simulated.projectedRevenue)}
-                    <span className="text-[10px] ml-1">
-                      ({activeSimulation.simulated.projectedRevenue >= activeSimulation.baseline.revenue ? '+' : ''}
-                      {formatCur(activeSimulation.simulated.projectedRevenue - activeSimulation.baseline.revenue)})
-                    </span>
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-1.5 border-b border-border/30">
-                  <span className="text-muted-foreground">Projected Gross Profit</span>
-                  <span className="font-bold text-foreground">
-                    {formatCur(activeSimulation.simulated.projectedProfit)}
-                    <span className="text-[10px] ml-1">
-                      ({activeSimulation.simulated.projectedProfit >= activeSimulation.baseline.grossProfit ? '+' : ''}
-                      {formatCur(activeSimulation.simulated.projectedProfit - activeSimulation.baseline.grossProfit)})
-                    </span>
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-1.5 border-b border-border/30">
-                  <span className="text-muted-foreground">Margin Shift</span>
-                  <span className="font-bold text-foreground">
-                    {activeSimulation.simulated.marginChangePercentagePoints >= 0 ? '+' : ''}
-                    {activeSimulation.simulated.marginChangePercentagePoints} pts
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-1.5 border-b border-border/30">
-                  <span className="text-muted-foreground">Working Capital Required/Recovered</span>
-                  <span className="font-bold text-amber-400">
-                    {activeSimulation.simulated.capitalRequired > 0
-                      ? `-${formatCur(activeSimulation.simulated.capitalRequired)} (Required)`
-                      : activeSimulation.simulated.capitalRecovered > 0
-                      ? `+${formatCur(activeSimulation.simulated.capitalRecovered)} (Recovered)`
-                      : '₹0'}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center py-1.5">
-                  <span className="text-muted-foreground">Projected Stock Runway</span>
-                  <span className="font-bold text-foreground">
-                    {activeSimulation.simulated.daysOfStockRemaining} days remaining
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Strategic Diagnostics & Action Bridge */}
-          <Card className="ios-glass rounded-2xl border-border/50">
-            <CardHeader className="pb-2 flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div>
-                <CardTitle className="text-base font-bold flex items-center gap-2">
-                  <Sliders className="w-5 h-5 text-primary" /> Strategic Diagnostics & Assumptions
-                </CardTitle>
-              </div>
-              <div className="flex items-center gap-2">
-                <Badge className="bg-primary/20 text-primary text-xs font-bold">
-                  Opp Score: {activeSimulation.opportunityScore}/100
-                </Badge>
-                <Badge variant="outline" className="text-xs font-bold">
-                  Risk Score: {activeSimulation.riskScore}/100
-                </Badge>
-                <Badge className="bg-emerald-500/20 text-emerald-300 text-xs font-bold">
-                  Confidence: {activeSimulation.confidence}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Assumptions & Risks */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                <div className="space-y-2 p-3 rounded-xl bg-secondary/30 border border-border/30">
-                  <span className="font-bold text-foreground block">Simulation Model Assumptions:</span>
-                  {activeSimulation.assumptions.map((a: any, i: number) => (
-                    <div key={i} className="flex items-start gap-1.5 text-muted-foreground">
-                      <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                      <span>{a}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="space-y-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-200">
-                  <span className="font-bold text-amber-300 block">Identified Operational Risks:</span>
-                  {activeSimulation.risks.map((r: any, i: number) => (
-                    <div key={i} className="flex items-start gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                      <span>{r}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* AI Strategic Recommendation Box */}
-              <div className="p-3.5 rounded-xl bg-primary/10 border border-primary/30 flex items-start gap-3">
-                <Sparkles className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-                <div className="space-y-1 text-xs">
-                  <span className="font-bold text-foreground block">AI Strategic Executive Summary</span>
-                  <p className="text-muted-foreground leading-relaxed">{activeSimulation.recommendation}</p>
-                </div>
-              </div>
-
-              {/* Action Bridge & Save Scenario Bar */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-border/40">
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  <Input
-                    placeholder="Name this scenario (e.g. Q4 Price Increase)"
-                    value={scenarioNameInput}
-                    onChange={e => setScenarioNameInput(e.target.value)}
-                    className="h-8 text-xs rounded-xl w-full sm:w-64"
-                  />
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8 text-xs rounded-xl gap-1.5 shrink-0"
-                    onClick={() => {
-                      saveScenario(scenarioNameInput || activeSimulation.title, activeSimulation, { simType, simValue });
-                      toast({ title: '💾 Scenario Saved', description: 'Scenario saved to historical strategic simulations.' });
-                      setScenarioNameInput('');
-                    }}
-                  >
-                    <Save className="w-3.5 h-3.5" /> Save Scenario
-                  </Button>
-                </div>
-
-                <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="h-8 text-xs rounded-xl gap-1.5"
-                    onClick={() => {
-                      handleAskCopilot(`Explain the simulation results for: ${activeSimulation.title}`);
-                    }}
-                  >
-                    <Bot className="w-3.5 h-3.5 text-primary" /> Ask Copilot
-                  </Button>
-
-                  {activeSimulation.suggestedActionPayload?.actionType === 'create_po' && (
-                    <Button
-                      size="sm"
-                      className="h-8 text-xs rounded-xl gap-1.5 bg-primary text-primary-foreground font-bold"
-                      onClick={() => {
-                        setSelectedReorderProductId(activeSimulation.suggestedActionPayload?.targetId);
-                        setReorderModalOpen(true);
-                      }}
-                    >
-                      <Boxes className="w-3.5 h-3.5" /> Create Purchase Order
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Saved Scenarios History */}
-          <Card className="ios-glass rounded-2xl border-border/40">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-bold flex items-center gap-2">
-                <BookmarkCheck className="w-4 h-4 text-primary" /> Saved Strategic Simulations ({savedScenarios.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent className={savedScenarios.length === 0 ? "p-6" : "p-0 overflow-x-auto scrollbar-none"}>
-              {savedScenarios.length === 0 ? (
-                <p className="text-xs text-muted-foreground py-4 text-center">
-                  No saved scenarios yet. Use the simulation controls above and click "Save Scenario" to store decisions.
-                </p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-xs">Date</TableHead>
-                      <TableHead className="text-xs">Scenario Name</TableHead>
-                      <TableHead className="text-xs">Target SKU</TableHead>
-                      <TableHead className="text-xs">Opp Score</TableHead>
-                      <TableHead className="text-xs">Confidence</TableHead>
-                      <TableHead className="text-xs text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {savedScenarios.map(sc => (
-                      <TableRow key={sc.id} className="hover:bg-secondary/30 transition-colors">
-                        <TableCell className="text-xs text-muted-foreground">{sc.createdDate}</TableCell>
-                        <TableCell className="font-bold text-foreground text-xs">{sc.name}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{sc.targetEntityName}</TableCell>
-                        <TableCell>
-                          <Badge className="bg-primary/20 text-primary text-[10px]">
-                            {sc.result.opportunityScore}/100
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-[10px]">
-                            {sc.result.confidence}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1.5">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 text-[11px] rounded-lg"
-                              onClick={() => {
-                                setSimType(sc.type);
-                                if (sc.inputs?.simValue) setSimValue(sc.inputs.simValue);
-                                toast({ title: 'Scenario Loaded', description: `Loaded parameters for ${sc.name}` });
-                              }}
-                            >
-                              Load
-                            </Button>
-                            <Button
-                               size="sm"
-                               variant="ghost"
-                               className="h-7 w-7 p-0 text-rose-400 hover:text-rose-300"
-                               onClick={() => {
-                                 setConfirmData({
-                                   title: `Delete Saved Scenario: ${sc.name}`,
-                                   description: `Are you sure you want to permanently delete this saved simulation scenario? This action cannot be undone.`,
-                                   onConfirm: () => {
-                                     deleteSavedScenario(sc.id);
-                                     toast({ title: 'Deleted Scenario', description: 'Removed from saved simulations.' });
-                                   }
-                                 });
-                               }}
-                             >
-                               <Trash2 className="w-3.5 h-3.5" />
-                             </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </>
-      )}
-    </div>
-  )}
 
       {/* Report History Drawer */}
       <Sheet open={historyDrawerOpen} onOpenChange={setHistoryDrawerOpen}>
