@@ -30,8 +30,30 @@ function evaluateDemoVisibility({
 
   const isDemoLoaded = Boolean(
     hasDemoData ||
-    (products.length > 0 && products.every((p: any) => p?.isDemo === true || p?.source === 'DEMO' || p?.source === 'demo' || String(p?.id || '').startsWith('prod-'))) ||
-    products.some((p: any) => p?.isDemo === true || p?.source === 'DEMO' || p?.source === 'demo')
+    (products.length > 0 && products.some((p: any) =>
+      p?.isDemo === true ||
+      p?.source === 'DEMO' ||
+      p?.source === 'demo' ||
+      /^prod-\d+$/.test(String(p?.id || '')) ||
+      String(p?.id || '').startsWith('prod-fashion-') ||
+      String(p?.id || '').startsWith('prod-electronics-') ||
+      String(p?.id || '').startsWith('prod-beauty-') ||
+      String(p?.id || '').startsWith('prod-home-') ||
+      String(p?.id || '').startsWith('prod-sports-') ||
+      String(p?.id || '').startsWith('prod-food-')
+    )) ||
+    (transactions.length > 0 && transactions.some((t: any) =>
+      t?.isDemo === true ||
+      t?.source === 'DEMO' ||
+      t?.source === 'demo' ||
+      /^tx-\d+$/.test(String(t?.id || ''))
+    )) ||
+    (suppliers.length > 0 && suppliers.some((s: any) =>
+      s?.isDemo === true ||
+      s?.source === 'DEMO' ||
+      s?.source === 'demo' ||
+      /^sup-\d+$/.test(String(s?.id || ''))
+    ))
   );
 
   const hasRealProd = products.some((p: any) => {
@@ -63,7 +85,7 @@ function evaluateDemoVisibility({
     if (!s) return false;
     if (s.isDemo === true || s.source === 'DEMO' || s.source === 'demo') return false;
     const sid = String(s.id || '');
-    if (sid.startsWith('demo_') || sid.startsWith('sup-demo')) return false;
+    if (sid.startsWith('demo_') || sid.startsWith('sup-') || sid.startsWith('sup-demo')) return false;
     return true;
   });
 
@@ -71,22 +93,17 @@ function evaluateDemoVisibility({
     if (!o) return false;
     if (o.isDemo === true || o.source === 'DEMO' || o.source === 'demo') return false;
     const oid = String(o.id || '');
-    if (oid.startsWith('demo_') || oid.startsWith('order-demo')) return false;
+    if (oid.startsWith('demo_') || oid.startsWith('order-demo') || oid.startsWith('ord-') || oid.startsWith('po-')) return false;
     return true;
   });
 
-  const hasRealNonDemoData =
-    (products.length > 0 || transactions.length > 0 || suppliers.length > 0 || orders.length > 0) &&
-    !isDemoLoaded;
-
-  const hasRealCatalog = hasRealProd || hasRealTx || hasRealSuppliers || hasRealOrders || hasRealNonDemoData;
-
+  const hasRealCatalog = hasRealProd || hasRealTx || hasRealSuppliers || hasRealOrders;
   const shouldHideDemoActions = isShopifyConnected || isDriveConnected || hasRealCatalog;
 
   return {
     isDemoLoaded,
     shouldHideDemoActions,
-    displayedButton: shouldHideDemoActions ? null : (isDemoLoaded ? 'Delete Demo' : 'Load Demo'),
+    displayedButton: isDemoLoaded ? 'Delete Demo' : (!shouldHideDemoActions ? 'Load Demo' : null),
   };
 }
 
@@ -97,12 +114,23 @@ describe('Founder Quick Actions: Dynamic Demo Data Visibility', () => {
     expect(state.displayedButton).toBe('Load Demo');
   });
 
-  it('shows "Delete Demo" when demo data is loaded', () => {
+  it('shows "Delete Demo" when demo data is loaded with demo products, suppliers, and orders', () => {
     const state = evaluateDemoVisibility({
       hasDemoData: true,
       products: [{ id: 'prod-1', isDemo: true, source: 'DEMO' }],
+      suppliers: [{ id: 'sup-1', isDemo: true, source: 'DEMO' }],
+      orders: [{ id: 'ord-123', isDemo: true, source: 'DEMO' }],
     });
-    expect(state.shouldHideDemoActions).toBe(false);
+    expect(state.isDemoLoaded).toBe(true);
+    expect(state.displayedButton).toBe('Delete Demo');
+  });
+
+  it('shows "Delete Demo" even if demo suppliers have sup-1 id format without sup-demo prefix', () => {
+    const state = evaluateDemoVisibility({
+      products: [{ id: 'prod-10', name: 'Heavyweight Fleece Oversized Hoodie', isDemo: true, source: 'DEMO' }],
+      suppliers: [{ id: 'sup-1', name: 'Apex Apparel Global' }],
+    });
+    expect(state.isDemoLoaded).toBe(true);
     expect(state.displayedButton).toBe('Delete Demo');
   });
 

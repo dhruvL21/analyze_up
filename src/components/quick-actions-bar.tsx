@@ -59,8 +59,30 @@ export function QuickActionsBar() {
   // Determine whether demo data is currently loaded in the workspace
   const isDemoLoaded = Boolean(
     hasDemoData ||
-    (products.length > 0 && products.every((p: any) => p?.isDemo === true || p?.source === 'DEMO' || p?.source === 'demo' || String(p?.id || '').startsWith('prod-'))) ||
-    products.some((p: any) => p?.isDemo === true || p?.source === 'DEMO' || p?.source === 'demo')
+    (products.length > 0 && products.some((p: any) =>
+      p?.isDemo === true ||
+      p?.source === 'DEMO' ||
+      p?.source === 'demo' ||
+      /^prod-\d+$/.test(String(p?.id || '')) ||
+      String(p?.id || '').startsWith('prod-fashion-') ||
+      String(p?.id || '').startsWith('prod-electronics-') ||
+      String(p?.id || '').startsWith('prod-beauty-') ||
+      String(p?.id || '').startsWith('prod-home-') ||
+      String(p?.id || '').startsWith('prod-sports-') ||
+      String(p?.id || '').startsWith('prod-food-')
+    )) ||
+    (transactions.length > 0 && transactions.some((t: any) =>
+      t?.isDemo === true ||
+      t?.source === 'DEMO' ||
+      t?.source === 'demo' ||
+      /^tx-\d+$/.test(String(t?.id || ''))
+    )) ||
+    (suppliers.length > 0 && suppliers.some((s: any) =>
+      s?.isDemo === true ||
+      s?.source === 'DEMO' ||
+      s?.source === 'demo' ||
+      /^sup-\d+$/.test(String(s?.id || ''))
+    ))
   );
 
   // Determine whether any real (non-demo) catalog products, sales transactions, suppliers, or orders are present
@@ -94,7 +116,7 @@ export function QuickActionsBar() {
       if (!s) return false;
       if (s.isDemo === true || s.source === 'DEMO' || s.source === 'demo') return false;
       const sid = String(s.id || '');
-      if (sid.startsWith('demo_') || sid.startsWith('sup-demo')) return false;
+      if (sid.startsWith('demo_') || sid.startsWith('sup-') || sid.startsWith('sup-demo')) return false;
       return true;
     });
 
@@ -102,18 +124,14 @@ export function QuickActionsBar() {
       if (!o) return false;
       if (o.isDemo === true || o.source === 'DEMO' || o.source === 'demo') return false;
       const oid = String(o.id || '');
-      if (oid.startsWith('demo_') || oid.startsWith('order-demo')) return false;
+      if (oid.startsWith('demo_') || oid.startsWith('order-demo') || oid.startsWith('ord-') || oid.startsWith('po-')) return false;
       return true;
     });
 
-    const hasRealNonDemoData =
-      (products.length > 0 || transactions.length > 0 || suppliers.length > 0 || orders.length > 0) &&
-      !isDemoLoaded;
+    return hasRealProd || hasRealTx || hasRealSuppliers || hasRealOrders;
+  }, [products, transactions, suppliers, orders]);
 
-    return hasRealProd || hasRealTx || hasRealSuppliers || hasRealOrders || hasRealNonDemoData;
-  }, [products, transactions, suppliers, orders, isDemoLoaded]);
-
-  // Dynamically hide "Load Demo" / "Delete Demo" whenever real data is added, imported, or connected
+  // Dynamically hide "Load Demo" whenever real data is added, imported, or connected
   const shouldHideDemoActions = isShopifyConnected || isDriveConnected || hasRealCatalog;
 
   const isRestockUnlocked = Boolean(
@@ -171,55 +189,53 @@ export function QuickActionsBar() {
             ref={scrollRef}
             className="flex items-center gap-2.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden flex-1"
           >
-            {!shouldHideDemoActions && (
-              isDemoLoaded ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setIsDeleteDemoOpen(true)}
-                  disabled={isDeletingDemo}
-                  className={cn(
-                    "rounded-xl text-xs sm:text-sm gap-2 shrink-0 border-rose-500/40 text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/60 font-bold h-10 px-3.5 sm:px-4 transition-all shadow-sm cursor-pointer",
-                    isDeletingDemo && "opacity-90 shadow-rose-500/30 animate-pulse cursor-wait"
-                  )}
-                >
-                  {isDeletingDemo ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin text-rose-400" />
-                      <span>Deleting Demo...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Trash2 className="w-4 h-4 text-rose-400" />
-                      <span>Delete Demo</span>
-                    </>
-                  )}
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setIsConfirmDemoOpen(true)}
-                  disabled={isLoadingDemo}
-                  className={cn(
-                    "rounded-xl text-xs sm:text-sm gap-2 shrink-0 border-amber-500/40 text-amber-500 hover:bg-amber-500/10 font-bold h-10 px-3.5 sm:px-4 transition-all shadow-sm cursor-pointer",
-                    isLoadingDemo && "opacity-90 shadow-amber-500/30 animate-pulse cursor-wait"
-                  )}
-                >
-                  {isLoadingDemo ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
-                      <span>Loading Demo...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-4 h-4 text-amber-500" />
-                      <span>Load Demo</span>
-                    </>
-                  )}
-                </Button>
-              )
-            )}
+            {isDemoLoaded ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setIsDeleteDemoOpen(true)}
+                disabled={isDeletingDemo}
+                className={cn(
+                  "rounded-xl text-xs sm:text-sm gap-2 shrink-0 border-rose-500/40 text-rose-400 hover:bg-rose-500/10 hover:border-rose-500/60 font-bold h-10 px-3.5 sm:px-4 transition-all shadow-sm cursor-pointer",
+                  isDeletingDemo && "opacity-90 shadow-rose-500/30 animate-pulse cursor-wait"
+                )}
+              >
+                {isDeletingDemo ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-rose-400" />
+                    <span>Deleting Demo...</span>
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4 text-rose-400" />
+                    <span>Delete Demo</span>
+                  </>
+                )}
+              </Button>
+            ) : !shouldHideDemoActions ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setIsConfirmDemoOpen(true)}
+                disabled={isLoadingDemo}
+                className={cn(
+                  "rounded-xl text-xs sm:text-sm gap-2 shrink-0 border-amber-500/40 text-amber-500 hover:bg-amber-500/10 font-bold h-10 px-3.5 sm:px-4 transition-all shadow-sm cursor-pointer",
+                  isLoadingDemo && "opacity-90 shadow-amber-500/30 animate-pulse cursor-wait"
+                )}
+              >
+                {isLoadingDemo ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
+                    <span>Loading Demo...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    <span>Load Demo</span>
+                  </>
+                )}
+              </Button>
+            ) : null}
 
             <Button
               size="sm"

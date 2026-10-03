@@ -534,15 +534,15 @@ export function DeadStockSection() {
           if (!open && !applyingId) setConfirmItem(null);
         }}
       >
-        <DialogContent className="max-w-md bg-zinc-950/95 border border-emerald-500/30 rounded-3xl ios-glass text-white shadow-2xl p-6">
-          <DialogHeader className="space-y-2">
+        <DialogContent className="max-w-lg w-[95vw] max-h-[85vh] flex flex-col bg-zinc-950/95 border border-emerald-500/30 rounded-3xl ios-glass text-white shadow-2xl p-5 sm:p-6 overflow-hidden">
+          <DialogHeader className="space-y-2 shrink-0">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30">
+              <div className="p-2 rounded-xl bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">
                 <AlertTriangle className="w-5 h-5 text-amber-400" />
               </div>
-              <div>
-                <DialogTitle className="text-base font-bold text-white">Confirm Price Change & Clearance</DialogTitle>
-                <DialogDescription className="text-xs text-zinc-400">
+              <div className="min-w-0 flex-1 text-left">
+                <DialogTitle className="text-base font-bold text-white truncate">Confirm Price Change & Clearance</DialogTitle>
+                <DialogDescription className="text-xs text-zinc-400 truncate">
                   Please review and confirm before modifying your database and Shopify store.
                 </DialogDescription>
               </div>
@@ -550,9 +550,9 @@ export function DeadStockSection() {
           </DialogHeader>
 
           {confirmItem && (
-            <div className="py-2 text-xs space-y-3">
+            <div className="py-2 text-xs space-y-3 overflow-y-auto flex-1 pr-1.5 [scrollbar-width:thin] [-ms-overflow-style:none]">
               <div className="p-3.5 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <span className="text-zinc-200 font-bold text-sm truncate">{confirmItem.product.name}</span>
                   <Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-bold shrink-0">
                     -{confirmItem.prediction.discountPercent}% Clearance
@@ -612,12 +612,12 @@ export function DeadStockSection() {
             </div>
           )}
 
-          <DialogFooter className="flex flex-row items-center justify-end gap-2 pt-4 border-t border-zinc-800/40">
+          <DialogFooter className="flex flex-row items-center justify-end gap-2 pt-3 border-t border-zinc-800/40 shrink-0 mt-2">
             <Button
               variant="ghost"
               disabled={Boolean(applyingId)}
               onClick={() => setConfirmItem(null)}
-              className="rounded-xl text-xs hover:bg-zinc-900 text-zinc-400 hover:text-white px-4"
+              className="rounded-xl text-xs hover:bg-zinc-900 text-zinc-400 hover:text-white px-4 cursor-pointer"
             >
               Cancel
             </Button>
@@ -628,7 +628,7 @@ export function DeadStockSection() {
                   executeApplyClearance(confirmItem.product, confirmItem.prediction);
                 }
               }}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs px-4 flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs px-4 flex items-center gap-1.5 shadow-md shadow-emerald-600/20 cursor-pointer"
             >
               {confirmItem && applyingId === confirmItem.product.id ? (
                 <>
@@ -653,15 +653,15 @@ export function DeadStockSection() {
           if (!open && !applyingId) setConfirmPushItem(null);
         }}
       >
-        <DialogContent className="max-w-md bg-zinc-950/95 border border-emerald-500/30 rounded-3xl ios-glass text-white shadow-2xl p-6">
-          <DialogHeader className="space-y-2">
+        <DialogContent className="max-w-md w-[95vw] max-h-[85vh] flex flex-col bg-zinc-950/95 border border-emerald-500/30 rounded-3xl ios-glass text-white shadow-2xl p-5 sm:p-6 overflow-hidden">
+          <DialogHeader className="space-y-2 shrink-0">
             <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+              <div className="p-2 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">
                 <RefreshCw className="w-5 h-5 text-emerald-400" />
               </div>
-              <div>
-                <DialogTitle className="text-base font-bold text-white">Confirm Shopify Price Push</DialogTitle>
-                <DialogDescription className="text-xs text-zinc-400">
+              <div className="min-w-0 flex-1 text-left">
+                <DialogTitle className="text-base font-bold text-white truncate">Confirm Shopify Price Push</DialogTitle>
+                <DialogDescription className="text-xs text-zinc-400 truncate">
                   Verify the price before pushing live to your storefront.
                 </DialogDescription>
               </div>
@@ -669,7 +669,7 @@ export function DeadStockSection() {
           </DialogHeader>
 
           {confirmPushItem && (
-            <div className="py-2 text-xs space-y-3">
+            <div className="py-2 text-xs space-y-3 overflow-y-auto flex-1 pr-1.5 [scrollbar-width:thin] [-ms-overflow-style:none]">
               <div className="p-3.5 rounded-2xl bg-zinc-900 border border-zinc-800 space-y-2.5">
                 <span className="text-zinc-200 font-bold text-sm block truncate">{confirmPushItem.name}</span>
                 <div className="text-xs text-zinc-300">
@@ -687,12 +687,12 @@ export function DeadStockSection() {
             </div>
           )}
 
-          <DialogFooter className="flex flex-row items-center justify-end gap-2 pt-4 border-t border-zinc-800/40">
+          <DialogFooter className="flex flex-row items-center justify-end gap-2 pt-3 border-t border-zinc-800/40 shrink-0 mt-2">
             <Button
               variant="ghost"
               disabled={Boolean(applyingId)}
               onClick={() => setConfirmPushItem(null)}
-              className="rounded-xl text-xs hover:bg-zinc-900 text-zinc-400 hover:text-white px-4"
+              className="rounded-xl text-xs hover:bg-zinc-900 text-zinc-400 hover:text-white px-4 cursor-pointer"
             >
               Cancel
             </Button>
@@ -708,7 +708,7 @@ export function DeadStockSection() {
                   setApplyingId(null);
                 }
               }}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs px-4 flex items-center gap-1.5"
+              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-xl text-xs px-4 flex items-center gap-1.5 cursor-pointer"
             >
               {confirmPushItem && applyingId === confirmPushItem.id ? (
                 <>

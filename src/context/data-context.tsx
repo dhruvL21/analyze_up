@@ -608,7 +608,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
   const [showOnboardingWizard, setShowOnboardingWizard] = useState<boolean>(false);
   const [showWelcomeModal, setShowWelcomeModal] = useState<boolean>(false);
   const [showShopifyModal, setShowShopifyModal] = useState<boolean>(false);
-  const [hasDemoData, setHasDemoData] = useState<boolean>(false);
+  const [hasDemoDataOverride, setHasDemoDataOverride] = useState<boolean | null>(null);
   const [isLoadingDemo, setIsLoadingDemo] = useState<boolean>(false);
   const [isDeletingDemo, setIsDeletingDemo] = useState<boolean>(false);
   const [demoProgress, setDemoProgress] = useState<{
@@ -623,20 +623,66 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     details: '',
   });
 
+  // Dynamically evaluate whether demo dataset or demo profile is present
+  const hasDemoData = useMemo(() => {
+    if (hasDemoDataOverride !== null) return hasDemoDataOverride;
+    if (isLoadingDemo) return true;
+    if (businessProfile?.inventorySetupMethod === 'demo') return true;
+    if (
+      businessProfile?.businessName === DEMO_BUSINESS_NAME ||
+      (businessProfile?.businessName && businessProfile.businessName.startsWith('Apex ')) ||
+      businessProfile?.logoUrl === DEMO_BUSINESS_LOGO
+    ) return true;
+    if (
+      products.length > 0 &&
+      products.some((p: any) =>
+        p?.isDemo === true ||
+        p?.source === 'DEMO' ||
+        p?.source === 'demo' ||
+        /^prod-\d+$/.test(String(p?.id || '')) ||
+        String(p?.id || '').startsWith('prod-fashion-') ||
+        String(p?.id || '').startsWith('prod-electronics-') ||
+        String(p?.id || '').startsWith('prod-beauty-') ||
+        String(p?.id || '').startsWith('prod-home-') ||
+        String(p?.id || '').startsWith('prod-sports-') ||
+        String(p?.id || '').startsWith('prod-food-')
+      )
+    ) return true;
+    if (
+      transactions.length > 0 &&
+      transactions.some((t: any) =>
+        t?.isDemo === true ||
+        t?.source === 'DEMO' ||
+        t?.source === 'demo' ||
+        /^tx-\d+$/.test(String(t?.id || ''))
+      )
+    ) return true;
+    if (
+      suppliers.length > 0 &&
+      suppliers.some((s: any) =>
+        s?.isDemo === true ||
+        s?.source === 'DEMO' ||
+        s?.source === 'demo' ||
+        /^sup-\d+$/.test(String(s?.id || ''))
+      )
+    ) return true;
+    return false;
+  }, [hasDemoDataOverride, isLoadingDemo, businessProfile, products, transactions, suppliers]);
+
   // Load business profile from localStorage & Cloud Firestore
   useEffect(() => {
     // If not authenticated or on logout, immediately clear all profile memory state
     if (!user) {
       setBusinessProfile(null);
       businessProfileRef.current = null;
-      setHasDemoData(false);
+      setHasDemoDataOverride(null);
       return;
     }
 
     // Switched user or fresh login: Reset previous in-memory profile immediately to avoid state bleeding
     setBusinessProfile(null);
     businessProfileRef.current = null;
-    setHasDemoData(false);
+    setHasDemoDataOverride(null);
 
     const localProfile = localStorage.getItem(`analyzeup_profile_${user.uid}`);
     if (localProfile) {
@@ -647,9 +693,6 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         businessProfileRef.current = sanitized;
         if (sanitized && JSON.stringify(sanitized) !== localProfile) {
           localStorage.setItem(`analyzeup_profile_${user.uid}`, JSON.stringify(sanitized));
-        }
-        if (sanitized?.inventorySetupMethod === 'demo') {
-          setHasDemoData(true);
         }
       } catch (e) {
         console.error("Error parsing business profile:", e);
@@ -1168,7 +1211,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         returns: demo.returns,
       }).catch(console.error);
 
-      setHasDemoData(true);
+      setHasDemoDataOverride(true);
 
       const targetType = customType || businessProfile?.businessType || 'Retail';
       const demoBizName = customType === 'Fashion'
@@ -2976,7 +3019,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       }
     }
 
-    setHasDemoData(false);
+    setHasDemoDataOverride(false);
     setDriveConnection(null);
 
     if (typeof window !== 'undefined') {
@@ -2997,6 +3040,7 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
     if (!firestore || !user?.uid) return;
     const uid = user.uid;
     setIsDeletingDemo(true);
+    setHasDemoDataOverride(false);
 
     try {
       console.log('[DataContext] Deleting all demo data only...');
@@ -3065,9 +3109,15 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         await b.commit();
       }
 
-      setHasDemoData(false);
+      const isDemoBizProfile =
+        businessProfile?.inventorySetupMethod === 'demo' ||
+        businessProfile?.businessName === DEMO_BUSINESS_NAME ||
+        (businessProfile?.businessName && businessProfile.businessName.startsWith('Apex ')) ||
+        businessProfile?.companyName === DEMO_BUSINESS_NAME ||
+        (businessProfile?.companyName && businessProfile.companyName.startsWith('Apex ')) ||
+        businessProfile?.logoUrl === DEMO_BUSINESS_LOGO;
 
-      if (businessProfile?.inventorySetupMethod === 'demo') {
+      if (isDemoBizProfile) {
         const profileUpdate = {
           inventorySetupMethod: 'manual',
           businessName: 'My Business',
@@ -3124,12 +3174,14 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       });
     } finally {
       setIsDeletingDemo(false);
+      setHasDemoDataOverride(null);
     }
   }, [firestore, user, businessProfile, products, transactions, suppliers, orders, returns, toast]);
 
   const purgeDemoDataOnly = useCallback(async () => {
     if (!firestore || !user?.uid) return;
     const uid = user.uid;
+    setHasDemoDataOverride(false);
 
     try {
       console.log('[DataContext] Automatically purging demo loaded data to make way for real business data...');
@@ -3179,15 +3231,24 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
         await b.commit();
       }
 
-      setHasDemoData(false);
+      const isDemoBizProfile =
+        businessProfile?.inventorySetupMethod === 'demo' ||
+        businessProfile?.businessName === DEMO_BUSINESS_NAME ||
+        (businessProfile?.businessName && businessProfile.businessName.startsWith('Apex ')) ||
+        businessProfile?.companyName === DEMO_BUSINESS_NAME ||
+        (businessProfile?.companyName && businessProfile.companyName.startsWith('Apex ')) ||
+        businessProfile?.logoUrl === DEMO_BUSINESS_LOGO;
 
-      if (businessProfile?.inventorySetupMethod === 'demo') {
+      if (isDemoBizProfile) {
         const profileUpdate = {
           inventorySetupMethod: 'manual',
+          businessName: 'My Business',
+          companyName: 'My Business',
+          logoUrl: '',
           updatedAt: new Date().toISOString(),
         };
         await setDoc(doc(firestore, 'users', uid, 'settings', 'business_profile'), profileUpdate, { merge: true }).catch(() => {});
-        setBusinessProfile(prev => prev ? { ...prev, inventorySetupMethod: 'manual' } : null);
+        setBusinessProfile(prev => prev ? { ...prev, inventorySetupMethod: 'manual', businessName: 'My Business', companyName: 'My Business', logoUrl: '' } : null);
       }
 
       if (totalPurged > 0) {
@@ -3199,6 +3260,8 @@ export const DataProvider = ({ children }: { children: ReactNode }) => {
       }
     } catch (err) {
       console.warn('[DataContext] Error auto-purging demo data:', err);
+    } finally {
+      setHasDemoDataOverride(null);
     }
   }, [firestore, user, businessProfile, toast]);
 
