@@ -106,6 +106,8 @@ export function AIActionCenter() {
     activateRecommendationsNow,
     updateProduct,
     addOrder,
+    driveConnection,
+    getGoogleDriveFiles,
     capabilities,
     dataReadiness,
   } = useData();

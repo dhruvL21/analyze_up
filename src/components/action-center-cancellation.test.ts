@@ -118,4 +118,27 @@ describe('AI Action Center Task Cancellation Suite', () => {
     expect(cancelledTaskIds).toContain(targetTask.id);
     expect(taskToCancel).toBeNull();
   });
+
+  it('generates price optimization tasks and validates parameter calculations', () => {
+    const highDemandProd: Product = {
+      id: 'prod-anc-navy',
+      name: 'ANC Wireless Noise Cancelling Headphones - Navy (XL)',
+      sku: 'ANC-NAVY-XL',
+      price: 5039,
+      costPrice: 3000,
+      stock: 45,
+      minStock: 10,
+      leadTimeDays: 5,
+      averageDailySales: 2.5,
+      supplier: 'AudioTech',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    const tasks = generateActionTasks([highDemandProd], [], mockSuppliers, [], mockProfile);
+    const priceTask = tasks.find((t) => t.actionType === 'price_up');
+    expect(priceTask).toBeDefined();
+    expect(priceTask?.title).toContain('ANC Wireless Noise Cancelling Headphones - Navy (XL)');
+    expect(priceTask?.newPrice).toBeGreaterThan(5039);
+  });
 });
